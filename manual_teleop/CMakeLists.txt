@@ -14,16 +14,8 @@ find_package(tier4_external_api_msgs REQUIRED)
 find_package(tier4_control_msgs REQUIRED)
 find_package(autoware_control_msgs REQUIRED)
 find_package(autoware_universe_utils REQUIRED)
-
-add_executable(
-  keyboard_side
-  src/keyboard_side.cpp
-)
-ament_target_dependencies(
-  keyboard_side
-  rclcpp
-  std_msgs
-)
+find_package(autoware_vehicle_msgs REQUIRED)
+find_package(sensor_msgs REQUIRED)
 
 add_executable(
   manual_teleop 
@@ -41,11 +33,40 @@ ament_target_dependencies(
   autoware_vehicle_msgs 
 )
 
+add_executable(
+  teleop_g923_node
+  src/teleop_g923_node.cpp
+)
+
+ament_target_dependencies(
+  teleop_g923_node
+  rclcpp
+  std_msgs
+  sensor_msgs
+)
+
+add_executable(
+  g923_debug
+  src/g923_debug.cpp
+)
+
+ament_target_dependencies(
+  g923_debug
+  rclcpp
+  std_msgs
+  sensor_msgs
+)
+
+
+
 install(TARGETS
   manual_teleop
-  keyboard_side
+  teleop_g923_node
+  g923_debug
   DESTINATION lib/${PROJECT_NAME}
 )
+
+install(DIRECTORY launch DESTINATION share/${PROJECT_NAME})
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
