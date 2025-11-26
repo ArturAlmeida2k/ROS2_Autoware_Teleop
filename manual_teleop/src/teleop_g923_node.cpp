@@ -2,12 +2,14 @@
 #include "sensor_msgs/msg/joy.hpp"
 #include "std_msgs/msg/float32.hpp"
 #include "std_msgs/msg/bool.hpp"
+#include "std_msgs/msg/int32.hpp"
 #include <algorithm>
 #include <memory>
 
 using Joy = sensor_msgs::msg::Joy;
 using Float32 = std_msgs::msg::Float32;
 using Bool = std_msgs::msg::Bool;
+using Int32 = std_msgs::msg::Int32;
 
 class G923TeleopNode : public rclcpp::Node
 {
@@ -19,6 +21,7 @@ public:
         pub_brake_factor_ = this->create_publisher<Float32>("/teleop/brake_factor", 10);
         pub_steering_ = this->create_publisher<Float32>("/teleop/target_steering_angle", 10);
         pub_engage_ = this->create_publisher<Bool>("/teleop/engage_command", 1);
+        pub_gear_ = this->create_publisher<Int32>("/teleop/gear_change", 1);
 
         // Sub to the Joystick
         sub_joy_ = this->create_subscription<Joy>(
@@ -38,9 +41,12 @@ private:
     
     const int BUTTON_ENGAGE_1 = 6; // Engage Button 1 -> R2
     const int BUTTON_ENGAGE_2 = 7; // Engage Button 2 -> L2
+
+    const int GEAR_DRIVE = 4; // Drive_Button -> Right padle
+    const int GEAR_REVERSE = 5; // Reverse Button -> Left padle
     
     // --- Constants ---
-    const float MAX_VLC = 5.0f; // Maximum Velocity in m/s, 5m/s -> 18Km/h
+    const float MAX_VLC = 10.0f; // Maximum Velocity in m/s, 5m/s -> 18Km/h
     const float MAX_STEERING_RAD = 0.5f; // Maximum steering angle (~28.6 graus)
     
     // --- ROS 2 ---
@@ -48,6 +54,7 @@ private:
     rclcpp::Publisher<Float32>::SharedPtr pub_brake_factor_; 
     rclcpp::Publisher<Float32>::SharedPtr pub_steering_;
     rclcpp::Publisher<Bool>::SharedPtr pub_engage_;
+    rclcpp::Publisher<Int32>::SharedPtr pub_gear_;
     rclcpp::Subscription<Joy>::SharedPtr sub_joy_;
 
   
@@ -60,6 +67,8 @@ private:
     float last_brake_factor_ = 0.0f;
     // --- For Steering ---
     float last_steering_target_ = 0.0f; 
+    // --- For Gear ---
+    int current_gear_ = 2;
 
     // --- Engage Publisher function ---
     void publish_engage(bool state)
@@ -101,6 +110,14 @@ private:
             pub_steering_->publish(std::move(msg));
             last_steering_target_ = angle;
         }
+    }
+
+    // -- Gear Publisher function --
+    void publish_gear(int gear)
+    {
+        auto msg = std::make_unique<Int32>();
+        msg->data = gear;
+        pub_gear_->publish(std::move(msg));    
     }
 
     void joy_callback(const Joy::SharedPtr msg)
@@ -157,6 +174,23 @@ private:
         float steering_input = msg->axes[AXIS_STEERING];
         float target_steering_angle = steering_input * MAX_STEERING_RAD;
         publish_steering(target_steering_angle);
+
+        // --- 4. GEAR CONTROL ---
+        bool drive_button = msg->buttons[GEAR_DRIVE];
+        bool reverse_button = msg->buttons[GEAR_REVERSE];
+
+        if (drive_button && !reverse_button && current_gear_ != 1){
+            publish_gear(1);
+            current_gear_ = 1;
+        }
+        else if (!drive_button && reverse_button && current_gear_ != 0){
+            publish_gear(0);
+            current_gear_ = 0;
+        }
+        else if (drive_button && reverse_button) {
+            RCLCPP_WARN(this->get_logger(), "Don't press both padles at same time");
+        }
+
     }
 };
 

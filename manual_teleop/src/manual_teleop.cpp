@@ -1,6 +1,7 @@
 #include "rclcpp/rclcpp.hpp"
 #include "std_msgs/msg/float32.hpp"
 #include "std_msgs/msg/bool.hpp"
+#include "std_msgs/msg/int32.hpp"
 #include "autoware_vehicle_msgs/msg/velocity_report.hpp"
 #include <algorithm>
 #include <memory>
@@ -8,12 +9,16 @@
 #include <autoware_control_msgs/msg/control.hpp>
 #include <tier4_control_msgs/msg/gate_mode.hpp>
 #include <tier4_external_api_msgs/srv/engage.hpp>
+#include <autoware_vehicle_msgs/msg/gear_command.hpp>
+
 
 using Control = autoware_control_msgs::msg::Control;
 using GateMode = tier4_control_msgs::msg::GateMode;
 using EngageSrv = tier4_external_api_msgs::srv::Engage;
+using GearCommand = autoware_vehicle_msgs::msg::GearCommand;
 using Float32 = std_msgs::msg::Float32;
 using Bool = std_msgs::msg::Bool;
+using Int32 = std_msgs::msg::Int32;
 using VelocityReport = autoware_vehicle_msgs::msg::VelocityReport;
 
 class AutowareControllerNode : public rclcpp::Node
@@ -38,6 +43,11 @@ public:
             "/teleop/brake_factor", 10,
             std::bind(&AutowareControllerNode::brake_factor_callback, this, std::placeholders::_1));
 
+        sub_gear_change_ = this->create_subscription<Int32>(
+            "/teleop/gear_change", 10,
+            std::bind(&AutowareControllerNode::gear_change_callback, this, std::placeholders::_1));
+
+
         // --- Vehicle status subscription ---
         sub_vlc_current_ = this->create_subscription<VelocityReport>(
             "/vehicle/status/velocity_status", 10,
@@ -47,6 +57,8 @@ public:
         client_engage_ = this->create_client<EngageSrv>("/api/autoware/set/engage");
         pub_gate_mode_ = this->create_publisher<GateMode>("/control/gate_mode_cmd", rclcpp::QoS(1));
         pub_control_cmd_ = this->create_publisher<Control>("/external/selected/control_cmd", rclcpp::QoS(1));
+        pub_gear_cmd_ = this->create_publisher<GearCommand>("/external/selected/gear_cmd", 1);
+
 
         // --- Control loop timer (10 Hz) ---
         control_timer_ = this->create_wall_timer(
@@ -63,6 +75,7 @@ private:
     float steering_angle_target_ = 0.0f;
     bool engage_target_ = false;
     float brake_factor_ = 0.0f;
+    int gear_change_ = 2;
 
     // --- Control constants ---
     const double BASE_KP_GAIN = 0.5;   // Base proportional gain
@@ -74,11 +87,13 @@ private:
     rclcpp::Client<EngageSrv>::SharedPtr client_engage_;
     rclcpp::Publisher<GateMode>::SharedPtr pub_gate_mode_;
     rclcpp::Publisher<Control>::SharedPtr pub_control_cmd_;
+    rclcpp::Publisher<GearCommand>::SharedPtr pub_gear_cmd_;
     rclcpp::Subscription<Float32>::SharedPtr sub_vlc_target_;
     rclcpp::Subscription<Float32>::SharedPtr sub_steering_target_;
     rclcpp::Subscription<Bool>::SharedPtr sub_engage_target_;
     rclcpp::Subscription<Float32>::SharedPtr sub_brake_factor_;
     rclcpp::Subscription<VelocityReport>::SharedPtr sub_vlc_current_;
+    rclcpp::Subscription<Int32>::SharedPtr sub_gear_change_;
     rclcpp::TimerBase::SharedPtr control_timer_;
 
     // --- Teleop Callbacks ---
@@ -101,6 +116,25 @@ private:
     {
         brake_factor_ = msg->data;
     }
+
+    // --- Gear change handling ---
+    void gear_change_callback(const Int32::SharedPtr msg){
+        GearCommand gear_cmd;
+        gear_cmd.stamp = this->now();
+        gear_change_ = msg->data;
+        switch (gear_change_)
+        {
+            case 0:
+                gear_cmd.command = GearCommand::REVERSE;
+                break;
+            case 1:
+                gear_cmd.command = GearCommand::DRIVE;
+                break;
+        }
+        pub_gear_cmd_->publish(gear_cmd);
+    }
+
+
 
     // --- Engage command handling ---
     void set_autoware_engage(bool engage)
