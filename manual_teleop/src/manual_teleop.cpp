@@ -5,6 +5,7 @@
 #include "autoware_vehicle_msgs/msg/velocity_report.hpp"
 #include <algorithm>
 #include <memory>
+#include <cmath>
 
 #include <autoware_control_msgs/msg/control.hpp>
 #include <tier4_control_msgs/msg/gate_mode.hpp>
@@ -172,7 +173,7 @@ private:
         control_cmd->longitudinal.velocity = vlc_target_;
 
         // Compute velocity error
-        double velocity_error = static_cast<double>(vlc_target_) - vlc_current_;
+        double velocity_error = static_cast<double>(vlc_target_) - abs(vlc_current_);
         double acceleration_cmd = 0.0;
 
         // --- Brake control logic ---
@@ -193,7 +194,12 @@ private:
             // Clamp acceleration
             acceleration_cmd = std::clamp(acceleration_cmd, -MAX_ACCEL, MAX_ACCEL);
         }
-
+        if (acceleration_cmd < 0.0001 && acceleration_cmd > -0.0001){
+            acceleration_cmd = 0;
+        }
+        if (steering_angle_target_ < 0.0001 && steering_angle_target_ > -0.0001){
+            steering_angle_target_ = 0;
+        }
         // Assign acceleration command
         control_cmd->longitudinal.acceleration = acceleration_cmd;
 
