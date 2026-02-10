@@ -57,6 +57,11 @@ ament_target_dependencies(
   sensor_msgs
 )
 
+install(PROGRAMS
+  src/PCB_encoder.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME PCB_encoder
+)
 
 
 install(TARGETS
