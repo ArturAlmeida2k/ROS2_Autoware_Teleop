@@ -6,7 +6,7 @@ import socket
 import struct
 
 class TeleopGatewayRX(Node):
-    def __init__(self):
+    def __init__(self): # Corrigido: __init__
         super().__init__('teleop_gateway_rx')
         self.pub_vlc = self.create_publisher(Float32, '/teleop/target_velocity', 10)
         self.pub_steer = self.create_publisher(Float32, '/teleop/target_steering_angle', 10)
@@ -19,13 +19,15 @@ class TeleopGatewayRX(Node):
         self.sock.setblocking(False)
         
         self.create_timer(0.01, self.receive_packet)
+        self.get_logger().info("Nó Decoder iniciado e a ouvir na porta 5005!")
 
     def receive_packet(self):
         try:
             data, _ = self.sock.recvfrom(1024)
             vlc, steer, brake, gear, engage = struct.unpack('fffi?', data)
             
-            # Republica internamente no PC A
+            self.get_logger().info(f"Recebido: V={vlc:.2f}, S={steer:.2f}")
+            
             self.pub_vlc.publish(Float32(data=vlc))
             self.pub_steer.publish(Float32(data=steer))
             self.pub_brake.publish(Float32(data=brake))
@@ -33,6 +35,8 @@ class TeleopGatewayRX(Node):
             self.pub_engage.publish(Bool(data=engage))
         except BlockingIOError:
             pass
+        except Exception as e:
+            self.get_logger().error(f"Erro ao processar pacote: {e}")
 
 def main(args=None):
     rclpy.init(args=args)
@@ -45,5 +49,5 @@ def main(args=None):
         node.destroy_node()
         rclpy.shutdown()
 
-if __name__ == '__main__':
+if __name__ == '__main__': 
     main()
