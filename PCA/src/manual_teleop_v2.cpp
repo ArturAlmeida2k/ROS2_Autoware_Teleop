@@ -2,6 +2,7 @@
 #include "std_msgs/msg/float32.hpp"
 #include "std_msgs/msg/bool.hpp"
 #include "std_msgs/msg/int32.hpp"
+#include "std_msgs/msg/string.hpp"
 #include "autoware_vehicle_msgs/msg/velocity_report.hpp"
 #include <algorithm>
 #include <memory>
