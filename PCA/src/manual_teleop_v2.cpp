@@ -11,7 +11,8 @@
 #include <tier4_control_msgs/msg/gate_mode.hpp>
 #include <tier4_external_api_msgs/srv/engage.hpp>
 #include <autoware_vehicle_msgs/msg/gear_command.hpp>
-
+#include "autoware_adapi_v1_msgs/srv/set_operation_mode.hpp"
+#include "autoware_adapi_v1_msgs/msg/operation_mode_state.hpp"
 
 using Control = autoware_control_msgs::msg::Control;
 using GateMode = tier4_control_msgs::msg::GateMode;
@@ -21,6 +22,9 @@ using Float32 = std_msgs::msg::Float32;
 using Bool = std_msgs::msg::Bool;
 using Int32 = std_msgs::msg::Int32;
 using VelocityReport = autoware_vehicle_msgs::msg::VelocityReport;
+using OperationModeState = autoware_adapi_v1_msgs::msg::OperationModeState;
+using SetOperationMode = autoware_adapi_v1_msgs::srv::SetOperationMode;
+
 
 class AutowareControllerNode : public rclcpp::Node
 {
@@ -59,11 +63,13 @@ public:
         pub_gate_mode_ = this->create_publisher<GateMode>("/control/gate_mode_cmd", rclcpp::QoS(1));
         pub_control_cmd_ = this->create_publisher<Control>("/external/selected/control_cmd", rclcpp::QoS(1));
         pub_gear_cmd_ = this->create_publisher<GearCommand>("/external/selected/gear_cmd", 1);
+        pub_operation_mode_ = this->create_publisher<OperationModeCommand>("/system/operation_mode/operation_mode_cmd", 1);
+        client_operation_mode_ = this->create_client<autoware_adapi_v1_msgs::srv::SetOperationMode>("/api/operation_mode/set_operation_mode");
 
 
-        // --- Control loop timer (10 Hz) ---
+        // --- Control loop timer (50 Hz) ---
         control_timer_ = this->create_wall_timer(
-            std::chrono::milliseconds(100),
+            std::chrono::milliseconds(20),
             std::bind(&AutowareControllerNode::publish_control_command, this));
 
         RCLCPP_INFO(this->get_logger(), "Autoware Controller Node started. Waiting for /teleop commands...");
@@ -75,6 +81,7 @@ private:
     float vlc_current_ = 0.0f;
     float steering_angle_target_ = 0.0f;
     bool engage_target_ = false;
+    bool last_engage_target = false;
     float brake_factor_ = 0.0f;
     int gear_change_ = 2;
 
@@ -85,7 +92,6 @@ private:
     const double MAX_DECEL = 5.0;      // Max allowed deceleration (m/s²)
 
     // --- ROS 2 interfaces ---
-    rclcpp::Client<EngageSrv>::SharedPtr client_engage_;
     rclcpp::Publisher<GateMode>::SharedPtr pub_gate_mode_;
     rclcpp::Publisher<Control>::SharedPtr pub_control_cmd_;
     rclcpp::Publisher<GearCommand>::SharedPtr pub_gear_cmd_;
@@ -96,6 +102,8 @@ private:
     rclcpp::Subscription<VelocityReport>::SharedPtr sub_vlc_current_;
     rclcpp::Subscription<Int32>::SharedPtr sub_gear_change_;
     rclcpp::TimerBase::SharedPtr control_timer_;
+    rclcpp::Client<EngageSrv>::SharedPtr client_engage_;
+    rclcpp::Client<autoware_adapi_v1_msgs::srv::SetOperationMode>::SharedPtr client_operation_mode_;
 
     // --- Teleop Callbacks ---
     void vlc_target_callback(const Float32::SharedPtr msg)
@@ -120,54 +128,66 @@ private:
 
     // --- Gear change handling ---
     void gear_change_callback(const Int32::SharedPtr msg){
-        GearCommand gear_cmd;
-        gear_cmd.stamp = this->now();
-        gear_change_ = msg->data;
-        switch (gear_change_)
-        {
-            case 0:
-                gear_cmd.command = GearCommand::PARK;
-                break;
-            case 1:
-                gear_cmd.command = GearCommand::DRIVE;
-                break;
-            case 2:
-                gear_cmd.command = GearCommand::REVERSE;
-                break;
+        if (engage_target_){
+            GearCommand gear_cmd;
+            gear_cmd.stamp = this->now();
+            gear_change_ = msg->data;
+            switch (gear_change_)
+            {
+                case 0:
+                    gear_cmd.command = GearCommand::PARK;
+                    break;
+                case 1:
+                    gear_cmd.command = GearCommand::DRIVE;
+                    break;
+                case 2:
+                    gear_cmd.command = GearCommand::REVERSE;
+                    break;
+            }
+            pub_gear_cmd_->publish(gear_cmd);
         }
-        pub_gear_cmd_->publish(gear_cmd);
     }
 
 
 
-    // --- Engage command handling ---
+    // --- Engage command handling ---    
     void set_autoware_engage(bool engage)
     {
-        // Publish gate mode and call engage service
-        pub_gate_mode_->publish(tier4_control_msgs::build<GateMode>().data(GateMode::EXTERNAL));
+        // 1. Gate Mode: EXTERNAL para ligar, AUTO para desligar
+        auto gate_msg = std::make_unique<GateMode>();
+        gate_msg->data = engage ? GateMode::EXTERNAL : GateMode::AUTO;
+        pub_gate_mode_->publish(std::move(gate_msg));
 
-        auto req = std::make_shared<EngageSrv::Request>();
-        req->engage = engage;
-
-        if (!client_engage_->service_is_ready()) {
-            RCLCPP_ERROR(this->get_logger(), "Service /api/autoware/set/engage unavailable.");
-            return;
+        // 2. Operation Mode via Serviço (AD API)
+        if (client_operation_mode_->service_is_ready()) {
+            auto req = std::make_shared<SetOperationMode::Request>();
+            req->mode = engage ? OperationModeState::REMOTE : OperationModeState::STOP;
+            client_operation_mode_->async_send_request(req);
         }
 
-        client_engage_->async_send_request(
-            req, []([[maybe_unused]] rclcpp::Client<EngageSrv>::SharedFuture result) {});
+        // 3. Engage Service
+        if (client_engage_->service_is_ready()) {
+            auto req = std::make_shared<EngageSrv::Request>();
+            req->engage = engage;
+            client_engage_->async_send_request(req, [](rclcpp::Client<EngageSrv>::SharedFuture){});
+        }
     }
 
     void engage_callback(const Bool::SharedPtr msg)
     {
         engage_target_ = msg->data;
-        RCLCPP_INFO(this->get_logger(), "Engage command received: %s", engage_target_ ? "TRUE" : "FALSE");
-        this->set_autoware_engage(engage_target_);
+        if (engage_target_ != last_engage_target){
+            RCLCPP_INFO(this->get_logger(), "Engage command received: %s", engage_target_ ? "TRUE" : "FALSE");
+            this->set_autoware_engage(engage_target_);
+            last_engage_target = engage_target_;
+        }
     }
 
     // --- Main control loop (called by timer) ---
     void publish_control_command()
-    {
+    {   
+        if (!engage_target_) return;
+
         // Create control message
         auto control_cmd = std::make_unique<Control>();
         control_cmd->stamp = this->now();

@@ -13,7 +13,7 @@ class TeleopGatewayTX(Node):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
         # Estado interno
-        self.data = {'vlc': 0.0, 'steer': 0.0, 'brake': 0.0, 'gear': 2, 'engage': False}
+        self.data = {'vlc': 0.0, 'steer': 0.0, 'brake': 0.0, 'gear': 0, 'engage': False}
 
         # Subscreve os tópicos do teu nó C++
         self.create_subscription(Float32, '/teleop/target_velocity', lambda msg: self.update('vlc', msg.data), 10)

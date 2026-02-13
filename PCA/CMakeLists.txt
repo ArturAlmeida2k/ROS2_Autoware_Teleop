@@ -14,6 +14,7 @@ find_package(tier4_control_msgs REQUIRED)
 find_package(autoware_control_msgs REQUIRED)
 find_package(autoware_universe_utils REQUIRED)
 find_package(autoware_vehicle_msgs REQUIRED)
+find_package(autoware_adapi_v1_msgs REQUIRED)
 
 # Executável: O nó que fala com o Autoware
 add_executable(manual_teleop src/manual_teleop.cpp)
@@ -25,6 +26,7 @@ ament_target_dependencies(manual_teleop
   autoware_control_msgs
   autoware_universe_utils  
   autoware_vehicle_msgs 
+  autoware_adapi_v1_msgs
 )
 
 # Instalação do Binário C++
