@@ -11,8 +11,6 @@
 #include <tier4_control_msgs/msg/gate_mode.hpp>
 #include <tier4_external_api_msgs/srv/engage.hpp>
 #include <autoware_vehicle_msgs/msg/gear_command.hpp>
-#include "autoware_adapi_v1_msgs/srv/set_operation_mode.hpp"
-#include "autoware_adapi_v1_msgs/msg/operation_mode_state.hpp"
 
 using Control = autoware_control_msgs::msg::Control;
 using GateMode = tier4_control_msgs::msg::GateMode;
@@ -21,10 +19,8 @@ using GearCommand = autoware_vehicle_msgs::msg::GearCommand;
 using Float32 = std_msgs::msg::Float32;
 using Bool = std_msgs::msg::Bool;
 using Int32 = std_msgs::msg::Int32;
+using String = std_msgs::msg::String;
 using VelocityReport = autoware_vehicle_msgs::msg::VelocityReport;
-using OperationModeState = autoware_adapi_v1_msgs::msg::OperationModeState;
-using SetOperationMode = autoware_adapi_v1_msgs::srv::SetOperationMode;
-
 
 class AutowareControllerNode : public rclcpp::Node
 {
@@ -63,9 +59,6 @@ public:
         pub_gate_mode_ = this->create_publisher<GateMode>("/control/gate_mode_cmd", rclcpp::QoS(1));
         pub_control_cmd_ = this->create_publisher<Control>("/external/selected/control_cmd", rclcpp::QoS(1));
         pub_gear_cmd_ = this->create_publisher<GearCommand>("/external/selected/gear_cmd", 1);
-        pub_operation_mode_ = this->create_publisher<OperationModeCommand>("/system/operation_mode/operation_mode_cmd", 1);
-        client_operation_mode_ = this->create_client<autoware_adapi_v1_msgs::srv::SetOperationMode>("/api/operation_mode/set_operation_mode");
-
 
         // --- Control loop timer (50 Hz) ---
         control_timer_ = this->create_wall_timer(
@@ -95,15 +88,13 @@ private:
     rclcpp::Publisher<GateMode>::SharedPtr pub_gate_mode_;
     rclcpp::Publisher<Control>::SharedPtr pub_control_cmd_;
     rclcpp::Publisher<GearCommand>::SharedPtr pub_gear_cmd_;
-    rclcpp::Subscription<Float32>::SharedPtr sub_vlc_target_;
-    rclcpp::Subscription<Float32>::SharedPtr sub_steering_target_;
+    rclcpp::Publisher<String>::SharedPtr pub_external_select_;
+    rclcpp::Subscription<Float32>::SharedPtr sub_vlc_target_, sub_steering_target_, sub_brake_factor_;
     rclcpp::Subscription<Bool>::SharedPtr sub_engage_target_;
-    rclcpp::Subscription<Float32>::SharedPtr sub_brake_factor_;
     rclcpp::Subscription<VelocityReport>::SharedPtr sub_vlc_current_;
     rclcpp::Subscription<Int32>::SharedPtr sub_gear_change_;
     rclcpp::TimerBase::SharedPtr control_timer_;
     rclcpp::Client<EngageSrv>::SharedPtr client_engage_;
-    rclcpp::Client<autoware_adapi_v1_msgs::srv::SetOperationMode>::SharedPtr client_operation_mode_;
 
     // --- Teleop Callbacks ---
     void vlc_target_callback(const Float32::SharedPtr msg)
@@ -158,11 +149,11 @@ private:
         gate_msg->data = engage ? GateMode::EXTERNAL : GateMode::AUTO;
         pub_gate_mode_->publish(std::move(gate_msg));
 
-        // 2. Operation Mode via Serviço (AD API)
-        if (client_operation_mode_->service_is_ready()) {
-            auto req = std::make_shared<SetOperationMode::Request>();
-            req->mode = engage ? OperationModeState::REMOTE : OperationModeState::STOP;
-            client_operation_mode_->async_send_request(req);
+        // 2. Seletor de Comando: Força o Autoware a ouvir a fonte "remote"
+        if (engage) {
+            auto select_msg = std::make_unique<String>();
+            select_msg->data = "remote";
+            pub_external_select_->publish(std::move(select_msg));
         }
 
         // 3. Engage Service
