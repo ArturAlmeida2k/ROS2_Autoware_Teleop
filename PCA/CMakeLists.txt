@@ -1,11 +1,11 @@
 cmake_minimum_required(VERSION 3.8)
-project(manual_teleop)
+project(pca_manual_teleop)
 
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
 
-# Dependências para integração com Autoware (PC A)
+# Dependências para integração com Autoware
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(std_msgs REQUIRED) 
@@ -14,10 +14,10 @@ find_package(tier4_control_msgs REQUIRED)
 find_package(autoware_control_msgs REQUIRED)
 find_package(autoware_universe_utils REQUIRED)
 find_package(autoware_vehicle_msgs REQUIRED)
-find_package(autoware_adapi_v1_msgs REQUIRED)
 
 # Executável: O nó que fala com o Autoware
 add_executable(manual_teleop src/manual_teleop.cpp)
+
 ament_target_dependencies(manual_teleop
   rclcpp
   std_msgs
@@ -26,7 +26,6 @@ ament_target_dependencies(manual_teleop
   autoware_control_msgs
   autoware_universe_utils  
   autoware_vehicle_msgs 
-  autoware_adapi_v1_msgs
 )
 
 # Instalação do Binário C++
