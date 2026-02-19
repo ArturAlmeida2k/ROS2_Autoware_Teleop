@@ -8,7 +8,7 @@ import struct
 class TeleopGatewayTX(Node):
     def __init__(self):
         super().__init__('teleop_gateway_tx')
-        self.target_ip = "10.0.0.1"  # IP do Túnel do PC A
+        self.target_ip = "10.0.0.1"  
         self.port = 5005
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
@@ -31,7 +31,7 @@ class TeleopGatewayTX(Node):
 
     def send_packet(self):
         try:
-            # Empacota: 3 floats (f), 1 int (i), 1 bool (?) = 17 bytes
+            #floats (f), 1 int (i), 1 bool (?) 
             packet = struct.pack('fffi?', 
                 self.data['vlc'], self.data['steer'], self.data['brake'], 
                 self.data['gear'], self.data['engage'])
@@ -50,6 +50,5 @@ def main(args=None):
         node.destroy_node()
         rclpy.shutdown()
 
-# ISTO É O QUE FALTA:
 if __name__ == '__main__':
     main()
