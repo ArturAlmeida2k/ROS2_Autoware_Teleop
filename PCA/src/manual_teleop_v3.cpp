@@ -159,24 +159,20 @@ private:
     // --- Engage command handling ---    
     void set_autoware_engage(bool engage)
     {
-        // 1. Gate Mode: EXTERNAL para ligar, AUTO para desligar
-        auto gate_msg = std::make_unique<GateMode>();
-        gate_msg->data = engage ? GateMode::EXTERNAL : GateMode::AUTO;
-        pub_gate_mode_->publish(std::move(gate_msg));
+        // Publish gate mode and call engage service
+        pub_gate_mode_->publish(tier4_control_msgs::build<GateMode>().data(GateMode::EXTERNAL));
 
-        // 2. Seletor de Comando: Força o Autoware a ouvir a fonte "remote"
-        if (engage) {
-            auto select_msg = std::make_unique<String>();
-            select_msg->data = "remote";
-            pub_external_select_->publish(std::move(select_msg));
+        auto req = std::make_shared<EngageSrv::Request>();
+        req->engage = engage;
+
+        if (!client_engage_->service_is_ready()) {
+            RCLCPP_ERROR(this->get_logger(), "Service /api/autoware/set/engage unavailable.");
+            return;
         }
 
-        // 3. Engage Service
-        if (client_engage_->service_is_ready()) {
-            auto req = std::make_shared<EngageSrv::Request>();
-            req->engage = engage;
-            client_engage_->async_send_request(req, [](rclcpp::Client<EngageSrv>::SharedFuture){});
-        }
+        client_engage_->async_send_request(
+            req, []([[maybe_unused]] rclcpp::Client<EngageSrv>::SharedFuture result) {});
+
     }
 
     void engage_callback(const Bool::SharedPtr msg)
