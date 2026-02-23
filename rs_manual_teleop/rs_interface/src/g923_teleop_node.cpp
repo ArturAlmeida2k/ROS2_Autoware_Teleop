@@ -14,7 +14,7 @@ using Int32 = std_msgs::msg::Int32;
 class G923TeleopNode : public rclcpp::Node
 {
 public:
-    G923TeleopNode() : Node("teleop_g923_node")
+    G923TeleopNode() : Node("g923_teleop_node")
     {
         // Pub to the Autoware Controller Node
         pub_vlc_ = this->create_publisher<Float32>("/teleop/target_velocity", 10);
@@ -37,13 +37,15 @@ private:
     // Axis (vals from -1.0 a 1.0)
     const int AXIS_STEERING = 0;   // Sterring Wheel, 0 repose, -1 right, 1 left
     const int AXIS_THROTTLE = 2;   // Accelaration, -1 repose
-    const int AXIS_BRAKE = 3;      // Brake -1 em repose 
+    const int AXIS_BRAKE = 3;      // Brake, -1 repose 
     
     const int BUTTON_ENGAGE_1 = 6; // Engage Button 1 -> R2
     const int BUTTON_ENGAGE_2 = 7; // Engage Button 2 -> L2
 
     const int GEAR_DRIVE = 4; // Drive_Button -> Right padle
     const int GEAR_REVERSE = 5; // Reverse Button -> Left padle
+    const int GEAR_PARKED_ENGAGE = 2; // Parking Button 1 -> Circle
+    const int GEAR_PARKED_AXIS = 5; // Parking Button 2 -> D-PAD (UP/DOWN)
     
     // --- Constants ---
     const float MAX_VLC = 10.0f; // Maximum Velocity in m/s, 5m/s -> 18Km/h
@@ -62,13 +64,9 @@ private:
     // --- For Engage ---
     bool last_engage_state = false; 
     bool current_engage_state = false; 
-    // --- For Velocity and Break ---
-    float last_vlc_target_ = 0.0f;
-    float last_brake_factor_ = 0.0f;
-    // --- For Steering ---
-    float last_steering_target_ = 0.0f; 
     // --- For Gear ---
-    int current_gear_ = 2;
+    int current_gear_ = 0;
+
 
     // --- Engage Publisher function ---
     void publish_engage(bool state)
@@ -76,40 +74,30 @@ private:
         auto msg = std::make_unique<Bool>();
         msg->data = state;
         pub_engage_->publish(std::move(msg));
-        RCLCPP_WARN(this->get_logger(), "Engage State Alterado: %s", state ? "TRUE" : "FALSE");
-    
     }
 
     // --- Velocity Publisher function ---
     void publish_vlc(float vlc)
     { 
-        if (vlc != last_vlc_target_) {
-            auto msg = std::make_unique<Float32>();
-            msg->data = vlc;
-            pub_vlc_->publish(std::move(msg));
-            last_vlc_target_ = vlc;
-        }
+        auto msg = std::make_unique<Float32>();
+        msg->data = vlc;
+        pub_vlc_->publish(std::move(msg));
     }
+
     // --- Break Publisher function ---
     void publish_brake_factor(float factor) 
     {
-        if (factor != last_brake_factor_) {
-            auto msg = std::make_unique<Float32>();
-            msg->data = factor;
-            pub_brake_factor_->publish(std::move(msg));
-            last_brake_factor_ = factor;
-        }
+        auto msg = std::make_unique<Float32>();
+        msg->data = factor;
+        pub_brake_factor_->publish(std::move(msg));
     }
 
     // --- Steering Publisher function ---
     void publish_steering(float angle)
     {
-        if (angle != last_steering_target_) {
-            auto msg = std::make_unique<Float32>();
-            msg->data = angle;
-            pub_steering_->publish(std::move(msg));
-            last_steering_target_ = angle;
-        }
+        auto msg = std::make_unique<Float32>();
+        msg->data = angle;
+        pub_steering_->publish(std::move(msg));
     }
 
     // -- Gear Publisher function --
@@ -137,15 +125,12 @@ private:
         bool change_engage_state = engage_button_1 && engage_button_2;
         
         // Logic to prevent multiple changes in the engage state
-        if (change_engage_state && last_engage_state == current_engage_state){
+        if (change_engage_state && !last_engage_state){
             current_engage_state = !current_engage_state;
-            publish_engage(current_engage_state);
+            RCLCPP_INFO(this->get_logger(), "Engage State Alterado: %s", current_engage_state ? "TRUE" : "FALSE");
         }
-        else if(!change_engage_state && last_engage_state != current_engage_state){
-            last_engage_state = current_engage_state;
-        }
+        last_engage_state = change_engage_state;
         
-
         // --- 2. VELOCITY CONTROL (ACCEL & BRAKE) ---
 
         float throttle_input = msg->axes[AXIS_THROTTLE];
@@ -158,39 +143,53 @@ private:
         float target_vlc = 0.0f;
         
         // If the brake is pressed the target velocity is 0.0
-        if (normalized_brake > 0.01) {
+        if (normalized_brake > 0.05) {
             target_vlc = 0.0f;
-        } else {
+        } 
+        else {
             // Otherwise the target velocity is controlled by the accelarator pedal.
             target_vlc = normalized_throttle * MAX_VLC;
         }
         
         target_vlc = std::clamp(target_vlc, 0.0f, MAX_VLC);
-        publish_vlc(target_vlc);
-        publish_brake_factor(normalized_brake); 
 
         // --- 3. STEERING CONTROL ---
         
         float steering_input = msg->axes[AXIS_STEERING];
         float target_steering_angle = steering_input * MAX_STEERING_RAD;
-        publish_steering(target_steering_angle);
 
         // --- 4. GEAR CONTROL ---
         bool drive_button = msg->buttons[GEAR_DRIVE];
         bool reverse_button = msg->buttons[GEAR_REVERSE];
+        bool parking_button = msg->buttons[GEAR_PARKED_ENGAGE];
+        int parking_axes = msg->axes[GEAR_PARKED_AXIS];
 
-        if (drive_button && !reverse_button && current_gear_ != 1){
-            publish_gear(1);
-            current_gear_ = 1;
-        }
-        else if (!drive_button && reverse_button && current_gear_ != 0){
-            publish_gear(0);
-            current_gear_ = 0;
-        }
-        else if (drive_button && reverse_button) {
-            RCLCPP_WARN(this->get_logger(), "Don't press both padles at same time");
+        if (current_engage_state){
+            // Lógica para sair de Parking (0) para Drive (1)
+            if (current_gear_ == 0 && parking_button && parking_axes == 1) {
+                current_gear_ = 1;
+            }
+            // Lógica para entrar em Parking (0)
+            else if (parking_button && parking_axes == -1) {
+                current_gear_ = 0;
+            }
+            // Troca entre Drive (1) e Reverse (2) - apenas se não estiver em Parking
+            else if (current_gear_ != 0) {
+                if (drive_button && !reverse_button) {
+                    current_gear_ = 1;
+                }
+                else if (!drive_button && reverse_button) {
+                    current_gear_ = 2;
+                }
+            }
         }
 
+        // --- 5. PUBLISHING ---  
+        publish_engage(current_engage_state);
+        publish_vlc(target_vlc);
+        publish_brake_factor((float)normalized_brake);
+        publish_steering(target_steering_angle);
+        publish_gear(current_gear_);
     }
 };
 

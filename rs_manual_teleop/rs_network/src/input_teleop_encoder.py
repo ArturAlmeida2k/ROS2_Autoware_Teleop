@@ -5,15 +5,15 @@ from std_msgs.msg import Float32, Bool, Int32
 import socket
 import struct
 
-class TeleopGatewayTX(Node):
+class InputTeleopEncoder(Node):
     def __init__(self):
-        super().__init__('teleop_gateway_tx')
-        self.target_ip = "10.0.0.1"  # IP do Túnel do PC A
+        super().__init__('input_teleop_encoder')
+        self.target_ip = "10.0.0.1"  
         self.port = 5005
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
         # Estado interno
-        self.data = {'vlc': 0.0, 'steer': 0.0, 'brake': 0.0, 'gear': 2, 'engage': False}
+        self.data = {'vlc': 0.0, 'steer': 0.0, 'brake': 0.0, 'gear': 0, 'engage': False}
 
         # Subscreve os tópicos do teu nó C++
         self.create_subscription(Float32, '/teleop/target_velocity', lambda msg: self.update('vlc', msg.data), 10)
@@ -31,7 +31,7 @@ class TeleopGatewayTX(Node):
 
     def send_packet(self):
         try:
-            # Empacota: 3 floats (f), 1 int (i), 1 bool (?) = 17 bytes
+            #floats (f), 1 int (i), 1 bool (?) 
             packet = struct.pack('fffi?', 
                 self.data['vlc'], self.data['steer'], self.data['brake'], 
                 self.data['gear'], self.data['engage'])
@@ -41,7 +41,7 @@ class TeleopGatewayTX(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    node = TeleopGatewayTX()
+    node = InputTeleopEncoder()
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
@@ -50,6 +50,5 @@ def main(args=None):
         node.destroy_node()
         rclpy.shutdown()
 
-# ISTO É O QUE FALTA:
 if __name__ == '__main__':
     main()

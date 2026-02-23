@@ -4,8 +4,7 @@ from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
 def generate_launch_description():
-    pkg_name = 'manual_teleop'
-    
+   
     device_id_arg = DeclareLaunchArgument(
         'device_id',
         default_value='0',
@@ -22,24 +21,24 @@ def generate_launch_description():
         output='screen',
         parameters=[
             {'deadzone': 0.001},
-            {'autorepeat_rate': 20.0},
+            {'autorepeat_rate': 50.0},
             {'device_id': device_id_config}
         ] 
     )
 
     # 2. Nó de Mapeamento: Traduz Joystick para mensagens /teleop/
     teleop_node = Node(
-        package=pkg_name,
-        executable='teleop_g923_node',
-        name='teleop_g923_node',
+        package="rs_interface",
+        executable='g923_teleop_node',
+        name='g923_teleop_node',
         output='screen'
     )
 
     # 3. Nó Encoder (Gateway): Envia os tópicos via UDP para o PC A
     encoder_node = Node(
-        package=pkg_name,
-        executable='PCB_encoder', 
-        name='PCB_encoder',
+        package="rs_network",
+        executable='input_teleop_encoder', 
+        name='input_teleop_encoder',
         output='screen'
     )
 
