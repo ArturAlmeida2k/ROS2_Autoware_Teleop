@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.8)
-project(rs_network)
+project(vh_network)
 
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
@@ -12,15 +12,15 @@ find_package(std_msgs REQUIRED)
 
 
 install(PROGRAMS
-  src/input_teleop_encoder.py
+  src/input_teleop_decoder.py
   DESTINATION lib/${PROJECT_NAME}
-  RENAME input_teleop_encoder
+  RENAME input_teleop_decoder
 )
 
 install(PROGRAMS
-  src/video_decoder.py
+  src/video_encoder.py
   DESTINATION lib/${PROJECT_NAME}
-  RENAME video_decoder
+  RENAME video_encoder
 )
 
 ament_package()
