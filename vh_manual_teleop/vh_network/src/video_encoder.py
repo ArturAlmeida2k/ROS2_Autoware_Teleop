@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import rclpy
 from rclpy.node import Node
+from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
 from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
 import cv2
@@ -16,11 +17,20 @@ class VideoEncoder(Node):
         self.port = 5006
         self.fps = 30
         
+        # Define o perfil QoS para coincidir com o do AWSIM
+        qos_profile = QoSProfile(
+            reliability=ReliabilityPolicy.BEST_EFFORT,
+            history=HistoryPolicy.KEEP_LAST,
+            depth=10
+        )
+
+        # Aplica o perfil à subscrição
         self.sub = self.create_subscription(
             Image, 
             '/sensing/camera/traffic_light/image_raw', 
             self.encode_callback, 
-            10)
+            qos_profile)
+        
         
         self.get_logger().info(f"Nó Encoder iniciado. A enviar para {self.rs_ip}:{self.port}")
 
