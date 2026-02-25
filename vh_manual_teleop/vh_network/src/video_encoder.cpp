@@ -34,23 +34,28 @@ private:
             cv_bridge::CvImagePtr cv_ptr = cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::BGR8);
             cv::Mat frame = cv_ptr->image;
 
+            if (frame.empty()) {
+                RCLCPP_WARN(this->get_logger(), "Aviso: Frame vazia recebida do AWSIM. A ignorar...");
+                return;
+            }
+
             if (!writer_initialized_) {
                 int width = frame.cols;
                 int height = frame.rows;
                 int fps = 30;
                 
-                // Pipeline de compressão NVENC a apontar para 127.0.0.1 (Loopback)
+                // Pipeline simplificado. Retirámos os parâmetros do appsrc que o C++ gosta de gerir sozinho.
                 std::string pipeline = 
-                    "appsrc is-live=true do-timestamp=true ! "
-                    "videoconvert ! video/x-raw,format=I420 ! "
-                    "nvh264enc preset=low-latency rc-mode=cbr bitrate=8000 zerolatency=true gop-size=30 insert-sps-pps=true ! "
+                    "appsrc ! videoconvert ! video/x-raw,format=I420 ! "
+                    "nvh264enc preset=low-latency rc-mode=cbr bitrate=8000 zerolatency=true ! "
                     "rtph264pay config-interval=1 pt=96 mtu=1300 ! "
                     "udpsink host=127.0.0.1 port=5006 sync=false";
 
+                // O 0 significa API backend preferencial, mas vamos forçar explicitamente o CAP_GSTREAMER
                 writer_.open(pipeline, cv::CAP_GSTREAMER, 0, fps, cv::Size(width, height), true);
                 
                 if (!writer_.isOpened()) {
-                    RCLCPP_ERROR(this->get_logger(), "Falha ao abrir o pipeline GStreamer via OpenCV C++.");
+                    RCLCPP_ERROR(this->get_logger(), "Falha ao abrir o pipeline GStreamer via OpenCV C++ (Resolucao: %dx%d)", width, height);
                     return;
                 }
                 RCLCPP_INFO(this->get_logger(), "Pipeline GStreamer (NVENC) aberto. A enviar para 127.0.0.1:5006");
