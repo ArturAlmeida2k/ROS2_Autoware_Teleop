@@ -9,7 +9,31 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(std_msgs REQUIRED)
+find_package(sensor_msgs REQUIRED)
+find_package(cv_bridge REQUIRED)
+find_package(OpenCV REQUIRED)
 
+add_executable(
+  video_encoder_cpp 
+  src/video_encoder.cpp
+)
+
+ament_target_dependencies(
+  video_encoder_cpp 
+  rclcpp 
+  sensor_msgs 
+  cv_bridge
+)
+
+target_link_libraries(
+  video_encoder_cpp
+  ${OpenCV_LIBS}
+  )
+
+install(TARGETS
+  video_encoder_cpp
+  DESTINATION lib/${PROJECT_NAME}
+)
 
 install(PROGRAMS
   src/input_teleop_decoder.py
