@@ -1,4 +1,4 @@
-#include <rclcpp/rclcpp.hpp>
+##include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/image.hpp>
 #include <cv_bridge/cv_bridge.h>
 #include <opencv2/opencv.hpp>
@@ -7,7 +7,6 @@
 class VideoEncoderTX : public rclcpp::Node {
 public:
     VideoEncoderTX() : Node("video_encoder_tx_cpp"), writer_initialized_(false) {
-        // Configuração de QoS idêntica à do AWSIM para evitar a fila de atraso
         rclcpp::QoS qos_profile(1);
         qos_profile.best_effort();
         qos_profile.keep_last(1);
@@ -44,13 +43,19 @@ private:
                 int height = frame.rows;
                 int fps = 30;
                 
-                // Pipeline simplificado. Retirámos os parâmetros do appsrc que o C++ gosta de gerir sozinho.
-                std::string pipeline = 
-                    "appsrc ! videoconvert ! video/x-raw,format=I420 ! "
-                    "nvh264enc preset=low-latency rc-mode=cbr bitrate=8000 zerolatency=true ! "
-                    "rtph264pay config-interval=1 pt=96 mtu=1300 ! "
-                    "udpsink host=127.0.0.1 port=5006 sync=false";
-
+                // Pipeline 
+		std::string pipeline = 
+		    "appsrc is-live=true do-timestamp=true ! "
+		    "videoconvert ! "
+		    "queue ! "
+		    "video/x-raw,format=I420 ! "
+		    "x264enc tune=zerolatency speed-preset=superfast "
+		    "sliced-threads=true threads=1 "
+		    "key-int-max=15 intra-refresh=true "
+		    "bitrate=4000 ! "
+		    "h264parse config-interval=-1 ! "
+		    "rtph264pay pt=96 mtu=1400 aggregate-mode=zero-latency ! "
+		    "udpsink host=10.0.0.2 port=5006 sync=false";
                 // O 0 significa API backend preferencial, mas vamos forçar explicitamente o CAP_GSTREAMER
                 writer_.open(pipeline, cv::CAP_GSTREAMER, 0, fps, cv::Size(width, height), true);
                 
@@ -58,7 +63,7 @@ private:
                     RCLCPP_ERROR(this->get_logger(), "Falha ao abrir o pipeline GStreamer via OpenCV C++ (Resolucao: %dx%d)", width, height);
                     return;
                 }
-                RCLCPP_INFO(this->get_logger(), "Pipeline GStreamer (NVENC) aberto. A enviar para 127.0.0.1:5006");
+                RCLCPP_INFO(this->get_logger(), "Pipeline GStreamer (NVENC) aberto. A enviar para 10.0.0.2:5006");
                 writer_initialized_ = true;
             }
 
