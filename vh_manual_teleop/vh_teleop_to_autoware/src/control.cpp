@@ -12,6 +12,7 @@
 #include <tier4_control_msgs/msg/gate_mode.hpp>
 #include <tier4_external_api_msgs/srv/engage.hpp>
 #include <autoware_vehicle_msgs/msg/gear_command.hpp>
+#include <autoware_vehicle_msgs/msg/turn_indicators_command.hpp>
 
 using Control = autoware_control_msgs::msg::Control;
 using GateMode = tier4_control_msgs::msg::GateMode;
@@ -22,6 +23,9 @@ using Bool = std_msgs::msg::Bool;
 using Int32 = std_msgs::msg::Int32;
 using String = std_msgs::msg::String;
 using VelocityReport = autoware_vehicle_msgs::msg::VelocityReport;
+using TurnIndicatorsCommand = autoware_vehicle_msgs::msg::TurnIndicatorsCommand;
+
+
 
 class AutowareControllerNode : public rclcpp::Node
 {
@@ -49,6 +53,9 @@ public:
             "/teleop/gear_change", 10,
             std::bind(&AutowareControllerNode::gear_change_callback, this, std::placeholders::_1));
 
+        sub_turn_signal_ = this->create_subscription<Int32>(
+            "/teleop/turn_signal", 10,
+            std::bind(&AutowareControllerNode::turn_signal_callback, this, std::placeholders::_1));
 
         // --- Vehicle status subscription ---
         sub_vlc_current_ = this->create_subscription<VelocityReport>(
@@ -60,6 +67,7 @@ public:
         pub_gate_mode_ = this->create_publisher<GateMode>("/control/gate_mode_cmd", rclcpp::QoS(1));
         pub_control_cmd_ = this->create_publisher<Control>("/external/selected/control_cmd", rclcpp::QoS(1));
         pub_gear_cmd_ = this->create_publisher<GearCommand>("/external/selected/gear_cmd", 1);
+        pub_turn_indicators_ = this->create_publisher<TurnIndicatorsCommand>("/external/selected/turn_indicators_cmd", 1);
 
         // --- Control loop timer (50 Hz) ---
         control_timer_ = this->create_wall_timer(
@@ -81,6 +89,7 @@ private:
     bool last_engage_target = false;
     float brake_factor_ = 0.0f;
     int gear_change_ = 2;
+    int turn_signal_ = TurnIndicatorsCommand::DISABLE; 
 
     // --- Control constants ---
     const double BASE_KP_GAIN = 0.5;   // Base proportional gain
@@ -104,6 +113,8 @@ private:
     rclcpp::Subscription<Int32>::SharedPtr sub_gear_change_;
     rclcpp::TimerBase::SharedPtr control_timer_;
     rclcpp::Client<EngageSrv>::SharedPtr client_engage_;
+    rclcpp::Publisher<TurnIndicatorsCommand>::SharedPtr pub_turn_indicators_;
+    rclcpp::Subscription<Int32>::SharedPtr sub_turn_signal_;
 
     // --- Teleop Callbacks ---
     void vlc_target_callback(const Float32::SharedPtr msg)
@@ -114,6 +125,7 @@ private:
         if (is_in_timeout_) {
             RCLCPP_INFO(this->get_logger(), "Conexão recuperada! Retomando controlo.");
             is_in_timeout_ = false;
+            brake_factor_ = 0.0f;
         }
     }
 
@@ -130,6 +142,16 @@ private:
     void brake_factor_callback(const Float32::SharedPtr msg)
     {
         brake_factor_ = msg->data;
+    }
+
+    void turn_signal_callback(const Int32::SharedPtr msg)
+    {
+        turn_signal_ = msg->data;
+
+        TurnIndicatorsCommand cmd;
+        cmd.stamp = this->now();
+        cmd.command = turn_signal_;
+        pub_turn_indicators_->publish(cmd);
     }
 
     // --- Gear change handling ---
