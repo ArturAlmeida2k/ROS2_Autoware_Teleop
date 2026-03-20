@@ -22,6 +22,7 @@ public:
         pub_steering_ = this->create_publisher<Float32>("/teleop/target_steering_angle", 10);
         pub_engage_ = this->create_publisher<Bool>("/teleop/engage_command", 1);
         pub_gear_ = this->create_publisher<Int32>("/teleop/gear_change", 1);
+        pub_turn_signal_ = this->create_publisher<Int32>("/teleop/turn_signal", 1);
 
         // Sub to the Joystick
         sub_joy_ = this->create_subscription<Joy>(
@@ -36,15 +37,18 @@ private:
 
     // Axis (vals from -1.0 a 1.0)
     const int AXIS_STEERING = 0;   // Sterring Wheel, 0 repose, -1 right, 1 left
+    const int AXIS_CLUTCH = 1;     // Clutch, -1 repose
     const int AXIS_THROTTLE = 2;   // Accelaration, -1 repose
     const int AXIS_BRAKE = 3;      // Brake, -1 repose 
     
     const int BUTTON_ENGAGE_1 = 6; // Engage Button 1 -> R2
     const int BUTTON_ENGAGE_2 = 7; // Engage Button 2 -> L2
+    const int BUTTON_TURN_SIGNAL_RIGHT = 10; // Turn Signal Right -> R3
+    const int BUTTON_TURN_SIGNAL_LEFT = 11; // Turn Signal Left -> L3
+    const int BUTTON_HAZARD_SIGNAL = 23; // Turn Hazard Lights -> "Enter" Button
 
     const int GEAR_DRIVE = 4; // Drive_Button -> Right padle
     const int GEAR_REVERSE = 5; // Reverse Button -> Left padle
-    const int GEAR_PARKED_ENGAGE = 2; // Parking Button 1 -> Circle
     const int GEAR_PARKED_AXIS = 5; // Parking Button 2 -> D-PAD (UP/DOWN)
     
     // --- Constants ---
@@ -57,6 +61,7 @@ private:
     rclcpp::Publisher<Float32>::SharedPtr pub_steering_;
     rclcpp::Publisher<Bool>::SharedPtr pub_engage_;
     rclcpp::Publisher<Int32>::SharedPtr pub_gear_;
+    rclcpp::Publisher<Int32>::SharedPtr pub_turn_signal_;
     rclcpp::Subscription<Joy>::SharedPtr sub_joy_;
 
   
@@ -66,6 +71,12 @@ private:
     bool current_engage_state = false; 
     // --- For Gear ---
     int current_gear_ = 0;
+    // --- For Turn Signal ---
+    int turn_signal_ = 1;
+    bool last_turn_right_ = false;
+    bool last_turn_left_ = false;
+    bool last_hazard_signal_ = false;
+
 
 
     // --- Engage Publisher function ---
@@ -107,6 +118,16 @@ private:
         msg->data = gear;
         pub_gear_->publish(std::move(msg));    
     }
+
+
+    // -- Turn Signal Publisher function --
+    void publish_turn_signal(int turn_signal)
+    {
+        auto msg = std::make_unique<Int32>();
+        msg->data = turn_signal;
+        pub_turn_signal_->publish(std::move(msg));
+    }
+
 
     void joy_callback(const Joy::SharedPtr msg)
     {
@@ -161,16 +182,19 @@ private:
         // --- 4. GEAR CONTROL ---
         bool drive_button = msg->buttons[GEAR_DRIVE];
         bool reverse_button = msg->buttons[GEAR_REVERSE];
-        bool parking_button = msg->buttons[GEAR_PARKED_ENGAGE];
         int parking_axes = msg->axes[GEAR_PARKED_AXIS];
+        float clutch = msg->axes[AXIS_CLUTCH];
 
-        if (current_engage_state){
+        // Change from [-1.0 (Repose) to 1.0 (Fully Pressed)] to [0.0 to 1.0]
+        double normalized_clutch = (clutch + 1.0) / 2.0;
+
+        if (current_engage_state && normalized_clutch >= 0.9){
             // Lógica para sair de Parking (0) para Drive (1)
-            if (current_gear_ == 0 && parking_button && parking_axes == 1) {
+            if (current_gear_ == 0 && parking_axes == 1) {
                 current_gear_ = 1;
             }
             // Lógica para entrar em Parking (0)
-            else if (parking_button && parking_axes == -1) {
+            else if (parking_axes == -1) {
                 current_gear_ = 0;
             }
             // Troca entre Drive (1) e Reverse (2) - apenas se não estiver em Parking
@@ -184,12 +208,35 @@ private:
             }
         }
 
-        // --- 5. PUBLISHING ---  
+        // --- 5. TURN SIGNAL ----
+
+        bool turn_right = msg->buttons[BUTTON_TURN_SIGNAL_RIGHT];
+        bool turn_left = msg->buttons[BUTTON_TURN_SIGNAL_LEFT];
+        bool hazard_signal = msg->buttons[BUTTON_HAZARD_SIGNAL];
+
+        // Toggle RIGHT
+        if (turn_right && !last_turn_right_) {
+            turn_signal_ = (turn_signal_ == 3) ? 1 : 3; // DISABLE ou RIGHT
+        }
+        // Toggle LEFT
+        if (turn_left && !last_turn_left_) {
+            turn_signal_ = (turn_signal_ == 2) ? 1 : 2; // DISABLE ou LEFT
+        }
+        if (hazard_signal && !last_hazard_signal_) {
+            turn_signal_ = (turn_signal_ == 4) ? 1 : 4;
+        }
+        last_turn_right_ = turn_right;
+        last_turn_left_ = turn_left;
+        last_hazard_signal_ = hazard_signal;
+
+        // --- 6. PUBLISHING ---  
         publish_engage(current_engage_state);
         publish_vlc(target_vlc);
         publish_brake_factor((float)normalized_brake);
         publish_steering(target_steering_angle);
         publish_gear(current_gear_);
+        publish_turn_signal(turn_signal_);
+    
     }
 };
 
