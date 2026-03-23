@@ -26,7 +26,6 @@ using VelocityReport = autoware_vehicle_msgs::msg::VelocityReport;
 using TurnIndicatorsCommand = autoware_vehicle_msgs::msg::TurnIndicatorsCommand;
 
 
-
 class AutowareControllerNode : public rclcpp::Node
 {
 public:
@@ -96,7 +95,6 @@ private:
     const double MAX_ACCEL = 1.0;      // Max allowed acceleration (m/s²)
     const double MAX_DECEL = 5.0;      // Max allowed deceleration (m/s²)
     
-
     // --- ROS 2 interfaces ---
     rclcpp::Publisher<GateMode>::SharedPtr pub_gate_mode_;
     rclcpp::Publisher<Control>::SharedPtr pub_control_cmd_;
@@ -110,6 +108,12 @@ private:
     
     rclcpp::TimerBase::SharedPtr control_timer_;
     rclcpp::Client<EngageSrv>::SharedPtr client_engage_;
+
+    // --- FUNÇÃO QUE ESTAVA EM FALTA ---
+    void vlc_target_callback(const Float32::SharedPtr msg)
+    {
+        vlc_target_ = msg->data;
+    }
 
     void vlc_report_callback(const VelocityReport::SharedPtr msg)
     {
@@ -151,7 +155,6 @@ private:
         }
     }
 
-
     // --- Engage command handling ---    
     void set_autoware_engage(bool engage)
     {
@@ -168,7 +171,6 @@ private:
 
         client_engage_->async_send_request(
             req, []([[maybe_unused]] rclcpp::Client<EngageSrv>::SharedFuture result) {});
-
     }
 
     void engage_callback(const Bool::SharedPtr msg)
@@ -193,8 +195,8 @@ private:
         // Set target velocity
         control_cmd->longitudinal.velocity = vlc_target_;
 
-        // Compute velocity error
-        double velocity_error = static_cast<double>(vlc_target_) - abs(vlc_current_);
+        // Compute velocity error (USANDO std::abs)
+        double velocity_error = static_cast<double>(vlc_target_) - std::abs(vlc_current_);
         double acceleration_cmd = 0.0;
 
         // --- Brake control logic ---
@@ -215,10 +217,10 @@ private:
             // Clamp acceleration
             acceleration_cmd = std::clamp(acceleration_cmd, -MAX_ACCEL, MAX_ACCEL);
         }
-        if (acceleration_cmd < 0.0001 && acceleration_cmd > -0.0001){
+        if (std::abs(acceleration_cmd) < 0.0001) {
             acceleration_cmd = 0;
         }
-        if (steering_angle_target_ < 0.0001 && steering_angle_target_ > -0.0001){
+        if (std::abs(steering_angle_target_) < 0.0001) {
             steering_angle_target_ = 0;
         }
         // Assign acceleration command
