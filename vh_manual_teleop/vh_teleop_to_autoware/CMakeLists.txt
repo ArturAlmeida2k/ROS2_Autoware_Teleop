@@ -15,13 +15,8 @@ find_package(autoware_control_msgs REQUIRED)
 find_package(autoware_universe_utils REQUIRED)
 find_package(autoware_vehicle_msgs REQUIRED)
 
-add_executable(
-  control
-  src/control.cpp
-)
-
-ament_target_dependencies(
-  control
+add_executable(control src/control.cpp)
+ament_target_dependencies(control
   rclcpp
   std_msgs
   tier4_external_api_msgs    
@@ -31,8 +26,24 @@ ament_target_dependencies(
   autoware_vehicle_msgs 
 )
 
+add_executable(safety_gate src/teleop_safety_gate.cpp)
+ament_target_dependencies(safety_gate
+  rclcpp
+  std_msgs
+  autoware_control_msgs
+  autoware_vehicle_msgs 
+)
+
+add_executable(topic_monitor src/teleop_topic_monitor.cpp)
+ament_target_dependencies(topic_monitor
+  rclcpp
+  std_msgs
+)
+
 install(TARGETS
   control
+  safety_gate
+  topic_monitor
   DESTINATION lib/${PROJECT_NAME}
 )
 

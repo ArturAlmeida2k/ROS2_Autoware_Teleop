@@ -65,17 +65,16 @@ public:
         // --- Publishers and service clients (Autoware interface) ---
         client_engage_ = this->create_client<EngageSrv>("/api/autoware/set/engage");
         pub_gate_mode_ = this->create_publisher<GateMode>("/control/gate_mode_cmd", rclcpp::QoS(1));
-        pub_control_cmd_ = this->create_publisher<Control>("/external/selected/control_cmd", rclcpp::QoS(1));
-        pub_gear_cmd_ = this->create_publisher<GearCommand>("/external/selected/gear_cmd", 1);
-        pub_turn_indicators_ = this->create_publisher<TurnIndicatorsCommand>("/external/selected/turn_indicators_cmd", 1);
+
+        // --- Publishers for the Safety Gate ---
+        pub_control_cmd_ = this->create_publisher<Control>("/teleop/internal/control_cmd", rclcpp::QoS(1));
+        pub_gear_cmd_ = this->create_publisher<GearCommand>("/teleop/internal/gear_cmd", 1);
+        pub_turn_indicators_ = this->create_publisher<TurnIndicatorsCommand>("/teleop/internal/turn_indicators_cmd", 1);
 
         // --- Control loop timer (50 Hz) ---
         control_timer_ = this->create_wall_timer(
             std::chrono::milliseconds(20),
             std::bind(&AutowareControllerNode::publish_control_command, this));
-        
-        // --- For Timeout ---
-        last_command_time_ = this->now();
 
         RCLCPP_INFO(this->get_logger(), "Autoware Controller Node started. Waiting for /teleop commands...");
     }
@@ -97,37 +96,20 @@ private:
     const double MAX_ACCEL = 1.0;      // Max allowed acceleration (m/s²)
     const double MAX_DECEL = 5.0;      // Max allowed deceleration (m/s²)
     
-    // --- Timeout ---
-    rclcpp::Time last_command_time_;
-    const double TIMEOUT_SEC = 0.2; // 200 milissegundos
-    bool is_in_timeout_ = false;
-    
+
     // --- ROS 2 interfaces ---
     rclcpp::Publisher<GateMode>::SharedPtr pub_gate_mode_;
     rclcpp::Publisher<Control>::SharedPtr pub_control_cmd_;
     rclcpp::Publisher<GearCommand>::SharedPtr pub_gear_cmd_;
-    rclcpp::Publisher<String>::SharedPtr pub_external_select_;
+    rclcpp::Publisher<TurnIndicatorsCommand>::SharedPtr pub_turn_indicators_;
+    
     rclcpp::Subscription<Float32>::SharedPtr sub_vlc_target_, sub_steering_target_, sub_brake_factor_;
     rclcpp::Subscription<Bool>::SharedPtr sub_engage_target_;
-    rclcpp::Subscription<VelocityReport>::SharedPtr sub_vlc_current_;
-    rclcpp::Subscription<Int32>::SharedPtr sub_gear_change_;
+    rclcpp::Sub scription<VelocityReport>::SharedPtr sub_vlc_current_;
+    rclcpp::Subscription<Int32>::SharedPtr sub_gear_change_, sub_turn_signal_;
+    
     rclcpp::TimerBase::SharedPtr control_timer_;
     rclcpp::Client<EngageSrv>::SharedPtr client_engage_;
-    rclcpp::Publisher<TurnIndicatorsCommand>::SharedPtr pub_turn_indicators_;
-    rclcpp::Subscription<Int32>::SharedPtr sub_turn_signal_;
-
-    // --- Teleop Callbacks ---
-    void vlc_target_callback(const Float32::SharedPtr msg)
-    {
-        vlc_target_ = msg->data;
-        last_command_time_ = this->now(); 
-        
-        if (is_in_timeout_) {
-            RCLCPP_INFO(this->get_logger(), "Conexão recuperada! Retomando controlo.");
-            is_in_timeout_ = false;
-            brake_factor_ = 0.0f;
-        }
-    }
 
     void vlc_report_callback(const VelocityReport::SharedPtr msg)
     {
@@ -147,7 +129,7 @@ private:
     void turn_signal_callback(const Int32::SharedPtr msg)
     {
         turn_signal_ = msg->data;
-
+        
         TurnIndicatorsCommand cmd;
         cmd.stamp = this->now();
         cmd.command = turn_signal_;
@@ -156,26 +138,18 @@ private:
 
     // --- Gear change handling ---
     void gear_change_callback(const Int32::SharedPtr msg){
-        if (engage_target_){
+        if (engage_target_) {
             GearCommand gear_cmd;
             gear_cmd.stamp = this->now();
             gear_change_ = msg->data;
-            switch (gear_change_)
-            {
-                case 0:
-                    gear_cmd.command = GearCommand::PARK;
-                    break;
-                case 1:
-                    gear_cmd.command = GearCommand::DRIVE;
-                    break;
-                case 2:
-                    gear_cmd.command = GearCommand::REVERSE;
-                    break;
+            switch (gear_change_) {
+                case 0: gear_cmd.command = GearCommand::PARK; break;
+                case 1: gear_cmd.command = GearCommand::DRIVE; break;
+                case 2: gear_cmd.command = GearCommand::REVERSE; break;
             }
             pub_gear_cmd_->publish(gear_cmd);
         }
     }
-
 
 
     // --- Engage command handling ---    
@@ -211,22 +185,6 @@ private:
     void publish_control_command()
     {   
         if (!engage_target_) return;
-
-        // --- VERIFICAÇÃO DE SEGURANÇA (TIMEOUT) ---
-        double time_since_last_cmd = (this->now() - last_command_time_).seconds();
-        
-        if (time_since_last_cmd > TIMEOUT_SEC) {
-            if (!is_in_timeout_) {
-                RCLCPP_ERROR(this->get_logger(), "ALERTA: Perda de ligação (%.2fs)! A travar o veículo.", time_since_last_cmd);
-                is_in_timeout_ = true;
-            }
-            // Força o carro a parar e ativa o travão no máximo
-            vlc_target_ = 0.0f;
-            steering_angle_target_ = 0.0f;
-            brake_factor_ = 1.0f; 
-        }
-
-        // --- CASO NAO ESTEJA EM TIMEOUT ---
 
         // Create control message
         auto control_cmd = std::make_unique<Control>();
