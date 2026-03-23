@@ -105,7 +105,7 @@ private:
     
     rclcpp::Subscription<Float32>::SharedPtr sub_vlc_target_, sub_steering_target_, sub_brake_factor_;
     rclcpp::Subscription<Bool>::SharedPtr sub_engage_target_;
-    rclcpp::Sub scription<VelocityReport>::SharedPtr sub_vlc_current_;
+    rclcpp::Subscription<VelocityReport>::SharedPtr sub_vlc_current_;
     rclcpp::Subscription<Int32>::SharedPtr sub_gear_change_, sub_turn_signal_;
     
     rclcpp::TimerBase::SharedPtr control_timer_;
