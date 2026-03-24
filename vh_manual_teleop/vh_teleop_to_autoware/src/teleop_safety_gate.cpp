@@ -56,6 +56,10 @@ public:
         pub_turn_indicators_ = this->create_publisher<TurnIndicatorsCommand>("/external/selected/turn_indicators_cmd", 1);
         pub_hazard_lights_ = this->create_publisher<HazardLightsCommand>("/external/selected/hazard_lights_cmd", 1);
 
+        safety_timer_ = this->create_wall_timer(
+            std::chrono::milliseconds(100),
+            std::bind(&TeleopSafetyGateNode::safety_timer_callback, this));   
+
         RCLCPP_INFO(this->get_logger(), "Teleop Safety Gate Node started.");
     }
 
@@ -70,11 +74,12 @@ private:
     rclcpp::Subscription<Int8>::SharedPtr sub_safety_state_;
     rclcpp::Subscription<HazardLightsCommand>::SharedPtr sub_hazard_lights_;
 
-
     rclcpp::Publisher<Control>::SharedPtr pub_control_cmd_;
     rclcpp::Publisher<GearCommand>::SharedPtr pub_gear_cmd_;
     rclcpp::Publisher<TurnIndicatorsCommand>::SharedPtr pub_turn_indicators_;
     rclcpp::Publisher<HazardLightsCommand>::SharedPtr pub_hazard_lights_;
+
+    rclcpp::TimerBase::SharedPtr safety_timer_;
 
     // Atualiza o estado atual com base na mensagem do Monitor
     void safety_state_callback(const Int8::SharedPtr msg) {
@@ -130,15 +135,16 @@ private:
         if (current_state_ == STATE_OK || current_state_ == STATE_WARN) {
             pub_hazard_lights_->publish(*msg);
         }
-        else if (current_state_ == STATE_ERROR) {
-
-            HazardLightsCommand hazard_cmd;
-            hazard_cmd.stamp = this->now();
-            hazard_cmd.command = HazardLightsCommand::ENABLE;
-
-            pub_hazard_lights_->publish(hazard_cmd);
-        }
     }
+
+    void safety_timer_callback() {
+    if (current_state_ == STATE_ERROR) {
+        HazardLightsCommand hazard_cmd;
+        hazard_cmd.stamp = this->now();
+        hazard_cmd.command = HazardLightsCommand::ENABLE;
+        pub_hazard_lights_->publish(hazard_cmd);
+    }
+}
 };
 
 int main(int argc, char **argv) {
