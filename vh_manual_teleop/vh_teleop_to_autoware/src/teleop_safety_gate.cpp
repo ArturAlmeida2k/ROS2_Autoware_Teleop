@@ -2,12 +2,15 @@
 #include "autoware_control_msgs/msg/control.hpp"
 #include "autoware_vehicle_msgs/msg/gear_command.hpp"
 #include "autoware_vehicle_msgs/msg/turn_indicators_command.hpp"
+#include <autoware_vehicle_msgs/msg/hazard_lights_command.hpp>
 #include "std_msgs/msg/int8.hpp"
 #include <algorithm>
 
 using Control = autoware_control_msgs::msg::Control;
 using GearCommand = autoware_vehicle_msgs::msg::GearCommand;
 using TurnIndicatorsCommand = autoware_vehicle_msgs::msg::TurnIndicatorsCommand;
+using HazardLightsCommand = autoware_vehicle_msgs::msg::HazardLightsCommand;
+
 using Int8 = std_msgs::msg::Int8;
 
 class TeleopSafetyGateNode : public rclcpp::Node {
@@ -38,6 +41,10 @@ public:
             "/teleop/internal/turn_indicators_cmd", 10,
             std::bind(&TeleopSafetyGateNode::turn_indicators_callback, this, std::placeholders::_1));
 
+        sub_hazard_lights_ = this->create_subscription<TurnIndicatorsCommand>(
+            "/teleop/internal/hazard_lights_cmd", 10,
+            std::bind(&TeleopSafetyGateNode::hazard_lights_callback, this, std::placeholders::_1));    
+
         // Subscrição do estado de segurança (Virá do futuro nó Monitor)
         sub_safety_state_ = this->create_subscription<Int8>(
             "/teleop/safety_state", 10,
@@ -47,7 +54,8 @@ public:
         pub_control_cmd_ = this->create_publisher<Control>("/external/selected/control_cmd", rclcpp::QoS(1));
         pub_gear_cmd_ = this->create_publisher<GearCommand>("/external/selected/gear_cmd", 1);
         pub_turn_indicators_ = this->create_publisher<TurnIndicatorsCommand>("/external/selected/turn_indicators_cmd", 1);
-        
+        pub_hazard_lights_ = this->create_publisher<HazardLightsCommand>("/external/selected/hazard_lights_cmd", 1);
+
         RCLCPP_INFO(this->get_logger(), "Teleop Safety Gate Node started.");
     }
 
@@ -60,10 +68,13 @@ private:
     rclcpp::Subscription<GearCommand>::SharedPtr sub_gear_cmd_;
     rclcpp::Subscription<TurnIndicatorsCommand>::SharedPtr sub_turn_indicators_;
     rclcpp::Subscription<Int8>::SharedPtr sub_safety_state_;
+    rclcpp::Subscription<HazardLightsCommand>::SharedPtr sub_hazard_lights_;
+
 
     rclcpp::Publisher<Control>::SharedPtr pub_control_cmd_;
     rclcpp::Publisher<GearCommand>::SharedPtr pub_gear_cmd_;
     rclcpp::Publisher<TurnIndicatorsCommand>::SharedPtr pub_turn_indicators_;
+    rclcpp::Publisher<HazardLightsCommand>::SharedPtr pub_hazard_lights_;
 
     // Atualiza o estado atual com base na mensagem do Monitor
     void safety_state_callback(const Int8::SharedPtr msg) {
@@ -112,6 +123,20 @@ private:
     void turn_indicators_callback(const TurnIndicatorsCommand::SharedPtr msg) {
         if (current_state_ == STATE_OK || current_state_ == STATE_WARN) {
             pub_turn_indicators_->publish(*msg);
+        }
+    }
+
+    void hazard_lights_callback(const HazardLightsCommand::SharedPtr msg){
+        if (current_state_ == STATE_OK || current_state_ == STATE_WARN) {
+            pub_hazard_lights_->publish(*msg);
+        }
+        else if (current_state_ == STATE_ERROR) {
+
+            HazardLightsCommand hazard_cmd;
+            hazard_cmd.stamp = this->now();
+            hazard_cmd.command = HazardLightsCommand::ENABLE;
+
+            pub_hazard_lights_->publish(hazard_cmd)
         }
     }
 };

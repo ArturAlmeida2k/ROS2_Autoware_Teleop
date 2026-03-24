@@ -30,7 +30,6 @@ public:
 
         // Inicia o relógio
         last_msg_time_ = this->now();
-        current_state_ = STATE_ERROR; // Começa em erro até receber a primeira mensagem
 
         // Timer de verificação (Roda a 100Hz / a cada 10ms)
         monitor_timer_ = this->create_wall_timer(
@@ -44,7 +43,7 @@ private:
     double warn_timeout_ms_;
     double error_timeout_ms_;
     rclcpp::Time last_msg_time_;
-    int8_t current_state_;
+    int8_t current_state_ = STATE_ERROR;
 
     rclcpp::Subscription<Float32>::SharedPtr sub_heartbeat_;
     rclcpp::Publisher<Int8>::SharedPtr pub_safety_state_;

@@ -13,6 +13,7 @@
 #include <tier4_external_api_msgs/srv/engage.hpp>
 #include <autoware_vehicle_msgs/msg/gear_command.hpp>
 #include <autoware_vehicle_msgs/msg/turn_indicators_command.hpp>
+#include <autoware_vehicle_msgs/msg/hazard_lights_command.hpp>
 
 using Control = autoware_control_msgs::msg::Control;
 using GateMode = tier4_control_msgs::msg::GateMode;
@@ -24,7 +25,7 @@ using Int32 = std_msgs::msg::Int32;
 using String = std_msgs::msg::String;
 using VelocityReport = autoware_vehicle_msgs::msg::VelocityReport;
 using TurnIndicatorsCommand = autoware_vehicle_msgs::msg::TurnIndicatorsCommand;
-
+using HazardLightsCommand = autoware_vehicle_msgs::msg::HazardLightsCommand;
 
 class AutowareControllerNode : public rclcpp::Node
 {
@@ -69,6 +70,7 @@ public:
         pub_control_cmd_ = this->create_publisher<Control>("/teleop/internal/control_cmd", rclcpp::QoS(1));
         pub_gear_cmd_ = this->create_publisher<GearCommand>("/teleop/internal/gear_cmd", 1);
         pub_turn_indicators_ = this->create_publisher<TurnIndicatorsCommand>("/teleop/internal/turn_indicators_cmd", 1);
+        pub_hazard_lights_ = this->create_publisher<HazardLightsCommand>("/teleop/internal/hazard_lights_cmd", 1);
 
         // --- Control loop timer (50 Hz) ---
         control_timer_ = this->create_wall_timer(
@@ -100,6 +102,7 @@ private:
     rclcpp::Publisher<Control>::SharedPtr pub_control_cmd_;
     rclcpp::Publisher<GearCommand>::SharedPtr pub_gear_cmd_;
     rclcpp::Publisher<TurnIndicatorsCommand>::SharedPtr pub_turn_indicators_;
+    rclcpp::Publisher<HazardLightsCommand>::SharedPtr pub_hazard_lights_;
     
     rclcpp::Subscription<Float32>::SharedPtr sub_vlc_target_, sub_steering_target_, sub_brake_factor_;
     rclcpp::Subscription<Bool>::SharedPtr sub_engage_target_;
@@ -109,7 +112,6 @@ private:
     rclcpp::TimerBase::SharedPtr control_timer_;
     rclcpp::Client<EngageSrv>::SharedPtr client_engage_;
 
-    // --- FUNÇÃO QUE ESTAVA EM FALTA ---
     void vlc_target_callback(const Float32::SharedPtr msg)
     {
         vlc_target_ = msg->data;
@@ -133,11 +135,22 @@ private:
     void turn_signal_callback(const Int32::SharedPtr msg)
     {
         turn_signal_ = msg->data;
-        
-        TurnIndicatorsCommand cmd;
-        cmd.stamp = this->now();
-        cmd.command = turn_signal_;
-        pub_turn_indicators_->publish(cmd);
+
+        TurnIndicatorsCommand turn_cmd;
+        turn_cmd.stamp = this->now();
+        HazardLightsCommand hazard_cmd;
+        hazard_cmd.stamp = this->now();
+
+        if (turn_signal_ == 4) {
+            turn_cmd.command = TurnIndicatorsCommand::DISABLE;
+            hazard_cmd.command = HazardLightsCommand::ENABLE;
+        } else {
+            turn_cmd.command = turn_signal_;
+            hazard_cmd.command = HazardLightsCommand::DISABLE;
+        }
+
+        pub_turn_indicators_->publish(turn_cmd);
+        pub_hazard_lights_->publish(hazard_cmd);
     }
 
     // --- Gear change handling ---
