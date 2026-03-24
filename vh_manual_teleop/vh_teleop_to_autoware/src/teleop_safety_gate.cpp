@@ -41,7 +41,7 @@ public:
             "/teleop/internal/turn_indicators_cmd", 10,
             std::bind(&TeleopSafetyGateNode::turn_indicators_callback, this, std::placeholders::_1));
 
-        sub_hazard_lights_ = this->create_subscription<TurnIndicatorsCommand>(
+        sub_hazard_lights_ = this->create_subscription<HazardLightsCommand>(
             "/teleop/internal/hazard_lights_cmd", 10,
             std::bind(&TeleopSafetyGateNode::hazard_lights_callback, this, std::placeholders::_1));    
 
