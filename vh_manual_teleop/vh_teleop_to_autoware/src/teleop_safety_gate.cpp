@@ -136,7 +136,7 @@ private:
             hazard_cmd.stamp = this->now();
             hazard_cmd.command = HazardLightsCommand::ENABLE;
 
-            pub_hazard_lights_->publish(hazard_cmd)
+            pub_hazard_lights_->publish(hazard_cmd);
         }
     }
 };

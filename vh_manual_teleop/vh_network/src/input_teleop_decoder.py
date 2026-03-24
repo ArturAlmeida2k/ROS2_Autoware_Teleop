@@ -26,24 +26,25 @@ class InputTeleopDecoder(Node):
         self.get_logger().info("Decoder iniciado na porta 5005")
 
     def receive_packet(self):
-        try:
-            data, _ = self.sock.recvfrom(1024)
-            send_time, vlc, steer, brake, gear, signal, engage = struct.unpack('dfffii?', data)
+        while True:
+            try:
+                data, _ = self.sock.recvfrom(1024)
+                send_time, vlc, steer, brake, gear, signal, engage = struct.unpack('dfffii?', data)
 
-            delay_ms = (time.time() - send_time) * 1000
+                delay_ms = (time.time() - send_time) * 1000
 
-            self.pub_vlc.publish(Float32(data=vlc))
-            self.pub_steer.publish(Float32(data=steer))
-            self.pub_brake.publish(Float32(data=brake))
-            self.pub_gear.publish(Int32(data=gear))
-            self.pub_turn.publish(Int32(data=signal))
-            self.pub_engage.publish(Bool(data=engage))
-            self.pub_delay.publish(Float32(data=float(delay_ms)))
+                self.pub_vlc.publish(Float32(data=vlc))
+                self.pub_steer.publish(Float32(data=steer))
+                self.pub_brake.publish(Float32(data=brake))
+                self.pub_gear.publish(Int32(data=gear))
+                self.pub_turn.publish(Int32(data=signal))
+                self.pub_engage.publish(Bool(data=engage))
+                self.pub_delay.publish(Float32(data=float(delay_ms)))
 
-        except BlockingIOError:
-            pass
-        except Exception as e:
-            self.get_logger().error(f"Erro: {e}")
+            except BlockingIOError:
+                break
+            except Exception as e:
+                self.get_logger().error(f"Erro: {e}")
 
 def main(args=None):
     rclpy.init(args=args)
