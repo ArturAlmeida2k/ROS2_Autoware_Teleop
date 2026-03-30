@@ -9,14 +9,14 @@
 #include "autoware_adapi_v1_msgs/msg/operation_mode_state.hpp"
 
 // Mensagem custom
-#include "vh_telemetry/msg/telemetry_state.hpp"
+#include "msg_manual_teleop/msg/telemetry_state.hpp"
 
 using VelocityReport       = autoware_vehicle_msgs::msg::VelocityReport;
 using GearReport           = autoware_vehicle_msgs::msg::GearReport;
 using TurnIndicatorsReport = autoware_vehicle_msgs::msg::TurnIndicatorsReport;
 using HazardLightsReport   = autoware_vehicle_msgs::msg::HazardLightsReport;
 using OperationModeState   = autoware_adapi_v1_msgs::msg::OperationModeState;
-using TelemetryState       = vh_telemetry::msg::TelemetryState;
+using TelemetryState       = msg_manual_teleop::msg::TelemetryState;
 
 class TelemetrySubscriber : public rclcpp::Node {
 public:

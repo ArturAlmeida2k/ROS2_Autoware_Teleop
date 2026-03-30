@@ -14,24 +14,24 @@ find_package(cv_bridge REQUIRED)
 find_package(OpenCV REQUIRED)
 
 add_executable(
-  video_encoder_cpp 
+  video_encoder
   src/video_encoder.cpp
 )
 
 ament_target_dependencies(
-  video_encoder_cpp 
+  video_encoder
   rclcpp 
   sensor_msgs 
   cv_bridge
 )
 
 target_link_libraries(
-  video_encoder_cpp
+  video_encoder
   ${OpenCV_LIBS}
   )
 
 install(TARGETS
-  video_encoder_cpp
+  video_encoder
   DESTINATION lib/${PROJECT_NAME}
 )
 
@@ -39,12 +39,6 @@ install(PROGRAMS
   src/input_teleop_decoder.py
   DESTINATION lib/${PROJECT_NAME}
   RENAME input_teleop_decoder
-)
-
-install(PROGRAMS
-  src/video_encoder.py
-  DESTINATION lib/${PROJECT_NAME}
-  RENAME video_encoder
 )
 
 ament_package()
