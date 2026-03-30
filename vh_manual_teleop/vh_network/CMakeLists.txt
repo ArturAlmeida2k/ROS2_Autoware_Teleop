@@ -41,4 +41,16 @@ install(PROGRAMS
   RENAME input_teleop_decoder
 )
 
+install(PROGRAMS                       
+  src/telemetry_encoder.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME telemetry_encoder
+)
+
+install(PROGRAMS                        
+  src/teleop_logger.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME teleop_logger
+)
+
 ament_package()
