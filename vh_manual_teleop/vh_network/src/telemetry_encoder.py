@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import rclpy
 from rclpy.node import Node
-from vh_telemetry.msg import TelemetryState
+from msg_manual_teleop.msg import TelemetryState
 import socket
 import struct
 import time
