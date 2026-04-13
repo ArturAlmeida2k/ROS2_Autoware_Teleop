@@ -48,9 +48,6 @@ MainWindow::MainWindow(RosBridge* bridge, QWidget* parent)
     grid->setRowStretch(0, 2);    // Cima: 2/3
     grid->setRowStretch(1, 1);    // Baixo: 1/3
 
-    // (Opcional) Instanciar o painel, mas não o adicionar ao layout por agora
-    panel_ = new TelemetryPanel();
-
     // Ligar o painel (se for mostrado noutra janela)
     connect(bridge_, &RosBridge::telemetryReceived,
             panel_,  &TelemetryPanel::onTelemetryReceived,
@@ -62,4 +59,36 @@ MainWindow::MainWindow(RosBridge* bridge, QWidget* parent)
     connect(bridge_, &RosBridge::imageReceived, cam_front_,   &CameraGLWidget::onImageReceived, Qt::QueuedConnection);
     connect(bridge_, &RosBridge::imageReceived, cam_back_, &CameraGLWidget::onImageReceived, Qt::QueuedConnection);
     connect(bridge_, &RosBridge::imageReceived, cam_right_,  &CameraGLWidget::onImageReceived, Qt::QueuedConnection);
+
+
+    // 1. Passamos o widget 'central' como parent
+    panel_ = new TelemetryPanel(central); 
+    
+    // 2. Trazemos o painel para a camada da frente (acima do vídeo)
+    panel_->raise(); 
+
+    // As conexões continuam iguais:
+    connect(bridge_, &RosBridge::telemetryReceived,
+            panel_,  &TelemetryPanel::onTelemetryReceived,
+            Qt::QueuedConnection);
+}
+
+void MainWindow::resizeEvent(QResizeEvent* event)
+{
+    // Chama a função base do Qt primeiro para ele fazer os cálculos normais
+    QMainWindow::resizeEvent(event);
+    
+    // Se o painel e a câmara já existirem
+    if (panel_ && cam_main_) {
+        // Define uma margem de 20 píxeis
+        int padding = 20;
+        
+        // Calcula a posição X e Y (relativa à janela principal) 
+        // para o canto superior esquerdo da câmara central
+        int x = cam_main_->x() + padding;
+        int y = cam_main_->y() + padding;
+        
+        // Move o painel flutuante para a nova coordenada
+        panel_->move(x, y);
+    }
 }

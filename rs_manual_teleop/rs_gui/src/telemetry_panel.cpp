@@ -6,12 +6,12 @@
 
 static const char* PANEL_STYLE = R"(
     QWidget#panel {
-        background-color: #0d0d1a;
-        border-left: 1px solid #1e1e2e;
+        background-color: rgba(13, 13, 26, 180); 
+        border-radius: 8px; 
     }
     QFrame#card {
-        background-color: #1e1e2e;
-        border: 1px solid #313244;
+        background-color: rgba(30, 30, 46, 100);
+        border: 1px solid rgba(49, 50, 68, 150);
         border-radius: 6px;
     }
 )";

@@ -10,6 +10,9 @@ class MainWindow : public QMainWindow {
 public:
     explicit MainWindow(RosBridge* bridge, QWidget* parent = nullptr);
 
+protected:
+    void resizeEvent(QResizeEvent* event) override;
+
 private:
     TelemetryPanel*  panel_;
     CameraGLWidget*  cam_left_;
