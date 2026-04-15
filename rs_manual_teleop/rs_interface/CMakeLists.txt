@@ -35,9 +35,22 @@ ament_target_dependencies(
   sensor_msgs
 )
 
+add_executable(
+  xbox_controller
+  src/xbox_controller.cpp
+)
+
+ament_target_dependencies(
+  xbox_controller
+  rclcpp
+  std_msgs
+  sensor_msgs
+)
+
 install(TARGETS
   g923_teleop_node
   g923_debug
+  xbox_controller
   DESTINATION lib/${PROJECT_NAME}
 )
 
