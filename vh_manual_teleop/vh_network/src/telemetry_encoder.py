@@ -11,7 +11,7 @@ class TelemetryEncoder(Node):
         super().__init__('telemetry_encoder')
 
         self.target_ip = "10.0.0.2"
-        self.port      = 5006
+        self.port      = 5010
         self.sock      = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
         self.state = TelemetryState()

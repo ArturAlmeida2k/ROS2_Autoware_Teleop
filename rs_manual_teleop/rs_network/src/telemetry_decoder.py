@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import rclpy
 from rclpy.node import Node
-from autoware_telemetry.msg import TelemetryState
+from msg_manual_teleop.msg import TelemetryState
 import socket
 import struct
 import threading
@@ -16,7 +16,7 @@ class TelemetryDecoder(Node):
         self.pub = self.create_publisher(TelemetryState, '/telemetry/state', 10)
 
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.sock.bind(("0.0.0.0", 5006))
+        self.sock.bind(("0.0.0.0", 5010))
 
         # UDP corre numa thread separada para não bloquear o executor ROS
         self.thread = threading.Thread(target=self.recv_loop, daemon=True)

@@ -6,9 +6,7 @@
 #include <sensor_msgs/msg/compressed_image.hpp>
 #include <mutex>
 #include <vector>
-using CompressedImage = sensor_msgs::msg::CompressedImage;
 
-// Renderiza um frame de câmara via OpenGL — pronto para point clouds depois
 class CameraGLWidget : public QOpenGLWidget {
     Q_OBJECT
 public:
@@ -24,7 +22,7 @@ protected:
     void paintGL() override;
 
 private:
-    QOpenGLTexture*       texture_      = nullptr;
+    QOpenGLTexture* texture_      = nullptr;
     QOpenGLShaderProgram* shader_       = nullptr;
     unsigned int          vao_          = 0;
     unsigned int          vbo_          = 0;

@@ -14,10 +14,10 @@ protected:
     void resizeEvent(QResizeEvent* event) override;
 
 private:
-    TelemetryPanel*  panel_;
-    CameraGLWidget*  cam_left_;
-    CameraGLWidget*  cam_right_;
-    CameraGLWidget*  cam_front_;   
-    CameraGLWidget*  cam_back_;
-    RosBridge*       bridge_;
+    TelemetryPanel* panel_      = nullptr;
+    CameraGLWidget* cam_left_   = nullptr;
+    CameraGLWidget* cam_right_  = nullptr;
+    CameraGLWidget* cam_front_  = nullptr;   
+    CameraGLWidget* cam_back_   = nullptr;
+    RosBridge* bridge_     = nullptr;
 };
