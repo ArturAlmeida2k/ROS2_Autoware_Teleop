@@ -74,4 +74,10 @@ install(PROGRAMS
   RENAME teleop_logger
 )
 
+install(PROGRAMS                        
+  src/pointcloud_encoder.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME pointcloud_encoder
+)
+
 ament_package()
