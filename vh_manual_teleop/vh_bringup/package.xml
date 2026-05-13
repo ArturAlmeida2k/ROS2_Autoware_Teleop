@@ -11,7 +11,7 @@
 
   <depend>vh_network</depend>
   <depend>vh_telemetry</depend>
-  <depend>teleop_to_autoware</depend>
+  <depend>vh_teleop_to_autoware</depend>
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>

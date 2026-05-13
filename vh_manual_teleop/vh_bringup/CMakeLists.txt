@@ -11,7 +11,7 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(vh_network REQUIRED)
 find_package(vh_telemetry REQUIRED)
-find_package(teleop_to_autoware REQUIRED)
+find_package(vh_teleop_to_autoware REQUIRED)
 
 
 install(DIRECTORY

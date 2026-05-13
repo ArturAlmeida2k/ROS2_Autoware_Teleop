@@ -59,21 +59,21 @@ def generate_launch_description():
 
     # --- Nós do pacote: teleop_to_autoware ---
     control_node = Node(
-        package='teleop_to_autoware',
+        package='vh_teleop_to_autoware',
         executable='control',
         name='control',
         output='screen'
     )
 
     teleop_safety_gate_node = Node(
-        package='teleop_to_autoware',
+        package='vh_teleop_to_autoware',
         executable='teleop_safety_gate',
         name='teleop_safety_gate',
         output='screen'
     )
 
     teleop_topic_monitor_node = Node(
-        package='teleop_to_autoware',
+        package='vh_teleop_to_autoware',
         executable='teleop_topic_monitor',
         name='teleop_topic_monitor',
         output='screen'
