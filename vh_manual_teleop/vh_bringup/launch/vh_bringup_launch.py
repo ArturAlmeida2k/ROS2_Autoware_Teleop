@@ -16,19 +16,30 @@ def generate_launch_description():
     )
     video_mode = LaunchConfiguration('video_mode')
 
+    server_ip_arg = DeclareLaunchArgument(
+        'server_ip', 
+        default_value='192.168.1.100', # Coloque aqui o IP padrão
+        description="Endereço IP para os nós de rede"
+    )
+    server_ip = LaunchConfiguration('server_ip')
+
+    network_params = [{'server_ip': server_ip}]
+
     # --- Nós do pacote: vh_network ---
     input_teleop_decoder_node = Node(
         package='vh_network',
         executable='input_teleop_decoder',
         name='input_teleop_decoder',
-        output='screen'
+        output='screen',
+        parameters=network_params
     )
 
     telemetry_encoder_node = Node(
         package='vh_network',
         executable='telemetry_encoder',
         name='telemetry_encoder',
-        output='screen'
+        output='screen',
+        parameters=network_params
     )
 
     # Nó opcional: video_encoder
@@ -37,7 +48,8 @@ def generate_launch_description():
         executable='video_encoder',
         name='video_encoder',
         output='screen',
-        condition=IfCondition(PythonExpression(["'", video_mode, "' == 'standard'"]))
+        condition=IfCondition(PythonExpression(["'", video_mode, "' == 'standard'"])),
+        parameters=network_params
     )
 
     # Nó opcional: video_encoder_4x
@@ -46,7 +58,8 @@ def generate_launch_description():
         executable='video_encoder_4x',
         name='video_encoder_4x',
         output='screen',
-        condition=IfCondition(PythonExpression(["'", video_mode, "' == '4x'"]))
+        condition=IfCondition(PythonExpression(["'", video_mode, "' == '4x'"])),
+        parameters=network_params
     )
 
     # --- Nós do pacote: vh_telemetry ---
@@ -81,6 +94,7 @@ def generate_launch_description():
 
     return LaunchDescription([
         video_mode_arg,
+        server_ip_arg,
         input_teleop_decoder_node,
         telemetry_encoder_node,
         video_encoder_node,
