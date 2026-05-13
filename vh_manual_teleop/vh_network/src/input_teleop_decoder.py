@@ -11,7 +11,7 @@ class InputTeleopDecoder(Node):
         super().__init__('input_teleop_decoder')
 
         self.declare_parameter('server_ip', '10.0.0.2')
-        ip_address = self.get_parameter('server_ip').value
+        self.allowed_ip = self.get_parameter('server_ip').value
 
         self.pub_vlc        = self.create_publisher(Float32, '/teleop/target_velocity', 10)
         self.pub_steer      = self.create_publisher(Float32, '/teleop/target_steering_angle', 10)
@@ -22,16 +22,21 @@ class InputTeleopDecoder(Node):
         self.pub_delay      = self.create_publisher(Float32, '/teleop/network_delay_ms', 10)
 
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.sock.bind((ip_address, 5005))
+        self.sock.bind(('0.0.0.0', 5005))
         self.sock.setblocking(False)
 
         self.create_timer(0.01, self.receive_packet)  # 100Hz 
-        self.get_logger().info("Decoder iniciado na porta 5005")
+        self.get_logger().info(f"Decoder iniciado na porta 5005. A aceitar apenas comandos do IP: {self.allowed_ip}")
 
     def receive_packet(self):
         while True:
             try:
-                data, _ = self.sock.recvfrom(1024)
+                data, addr = self.sock.recvfrom(1024)
+                sender_ip = addr[0]
+
+                if sender_ip != self.allowed_ip:
+                    continue
+
                 send_time, vlc, steer, brake, gear, signal, engage = struct.unpack('dfffii?', data)
 
                 delay_ms = (time.time() - send_time) * 1000
