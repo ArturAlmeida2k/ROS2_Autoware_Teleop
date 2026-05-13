@@ -13,6 +13,9 @@ class InputTeleopDecoder(Node):
         self.declare_parameter('server_ip', '10.0.0.2')
         self.allowed_ip = self.get_parameter('server_ip').value
 
+        self.declare_parameter('port', 5005)
+        self.port = self.get_parameter('port').value
+
         self.pub_vlc        = self.create_publisher(Float32, '/teleop/target_velocity', 10)
         self.pub_steer      = self.create_publisher(Float32, '/teleop/target_steering_angle', 10)
         self.pub_brake      = self.create_publisher(Float32, '/teleop/brake_factor', 10)
@@ -22,11 +25,11 @@ class InputTeleopDecoder(Node):
         self.pub_delay      = self.create_publisher(Float32, '/teleop/network_delay_ms', 10)
 
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.sock.bind(('0.0.0.0', 5005))
+        self.sock.bind(('0.0.0.0', self.port))
         self.sock.setblocking(False)
 
         self.create_timer(0.01, self.receive_packet)  # 100Hz 
-        self.get_logger().info(f"Decoder iniciado na porta 5005. A aceitar apenas comandos do IP: {self.allowed_ip}")
+        self.get_logger().info(f"Decoder iniciado na porta {self.port}. A aceitar apenas comandos do IP: {self.allowed_ip}")
 
     def receive_packet(self):
         while True:
@@ -62,8 +65,10 @@ def main(args=None):
     except KeyboardInterrupt:
         pass
     finally:
+        node.sock.close()
         node.destroy_node()
-        rclpy.shutdown()
+        if rclpy.ok():
+            rclpy.shutdown()
 
 if __name__ == '__main__':
     main()
