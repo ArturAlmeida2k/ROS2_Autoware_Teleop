@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import rclpy
+from rclpy.qos import qos_profile_sensor_data
 from rclpy.node import Node
 from sensor_msgs.msg import PointCloud2
 from rclpy.serialization import serialize_message
@@ -23,12 +24,11 @@ class PointCloudEncoder(Node):
         except Exception as e:
             self.get_logger().error(f"Falha ao conectar (O recetor está ligado?): {e}")
 
-        # Inscrição no tópico do Autoware (corrigi 'segentation' para 'segmentation')
         self.create_subscription(
             PointCloud2,
             '/perception/obstacle_segmentation/pointcloud',
             self.on_pointcloud,
-            10
+            qos_profile_sensor_data
         )
 
     def on_pointcloud(self, msg: PointCloud2):

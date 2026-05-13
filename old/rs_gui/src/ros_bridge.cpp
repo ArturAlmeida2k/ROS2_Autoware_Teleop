@@ -10,16 +10,16 @@ RosBridge::RosBridge(QObject* parent)
         });
     
     sub_pointcloud_ = create_subscription<PointCloud2>(
-        "/sensing/lidar/concatenated/pointcloud", 
+        "/sensing/lidar/concatenated/pointcloud", // <-- Coloque o tópico do Autoware aqui
         rclcpp::SensorDataQoS(),
         [this](const PointCloud2::SharedPtr msg) {
             emit pointCloudReceived(msg);
         });
         
     sub_front_ = create_subscription<CompressedImage>(
-        "/camera/front/compressed", rclcpp::SensorDataQoS(),
+        "/camera/front/compressed", rclcpp::SensorDataQoS(), // Correção do QoS
         [this](const CompressedImage::SharedPtr msg) {
-            emit imageFrontReceived(msg); 
+            emit imageFrontReceived(msg); // Sinal específico
         });
     
     sub_left_ = create_subscription<CompressedImage>(

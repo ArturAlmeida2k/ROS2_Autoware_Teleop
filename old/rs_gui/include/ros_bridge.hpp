@@ -23,6 +23,7 @@ signals:
 
     void pointCloudReceived(PointCloud2::SharedPtr msg);
 
+    // 1. Declarar um sinal específico para cada câmara
     void imageFrontReceived(CompressedImage::SharedPtr msg);
     void imageLeftReceived(CompressedImage::SharedPtr msg);
     void imageRightReceived(CompressedImage::SharedPtr msg);
@@ -33,6 +34,7 @@ private:
 
     rclcpp::Subscription<PointCloud2>::SharedPtr      sub_pointcloud_;
     
+    // 2. Declarar as quatro variáveis de subscrição
     rclcpp::Subscription<CompressedImage>::SharedPtr  sub_front_;
     rclcpp::Subscription<CompressedImage>::SharedPtr  sub_left_;
     rclcpp::Subscription<CompressedImage>::SharedPtr  sub_right_;

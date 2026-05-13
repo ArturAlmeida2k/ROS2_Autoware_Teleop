@@ -1,15 +1,12 @@
 #include "rclcpp/rclcpp.hpp"
 #include "sensor_msgs/msg/joy.hpp"
-#include "std_msgs/msg/float32.hpp"
-#include "std_msgs/msg/bool.hpp"
-#include "std_msgs/msg/int32.hpp"
 #include <algorithm>
 #include <memory>
 
+#include "msg_manual_teleop/msg/teleop_command.hpp"
+
 using Joy = sensor_msgs::msg::Joy;
-using Float32 = std_msgs::msg::Float32;
-using Bool = std_msgs::msg::Bool;
-using Int32 = std_msgs::msg::Int32;
+using TeleopCommand = msg_manual_teleop::msg::TeleopCommand;
 
 class G923TeleopNode : public rclcpp::Node
 {
@@ -17,19 +14,14 @@ public:
     G923TeleopNode() : Node("g923_teleop_node")
     {
         // Pub to the Autoware Controller Node
-        pub_vlc_ = this->create_publisher<Float32>("/teleop/target_velocity", 10);
-        pub_brake_factor_ = this->create_publisher<Float32>("/teleop/brake_factor", 10);
-        pub_steering_ = this->create_publisher<Float32>("/teleop/target_steering_angle", 10);
-        pub_engage_ = this->create_publisher<Bool>("/teleop/engage_command", 1);
-        pub_gear_ = this->create_publisher<Int32>("/teleop/gear_change", 1);
-        pub_turn_signal_ = this->create_publisher<Int32>("/teleop/turn_signal", 1);
+        pub_filtered_command_ = this->create_publisher<TeleopCommand>("/teleop/filtered_command", 10);
 
         // Sub to the Joystick
         sub_joy_ = this->create_subscription<Joy>(
             "/joy", 10, 
             std::bind(&G923TeleopNode::joy_callback, this, std::placeholders::_1));
 
-        RCLCPP_INFO(this->get_logger(), "Nó G923 Teleop iniciado. Mapeamento de controlo ativo.");
+        RCLCPP_INFO(this->get_logger(), "Nó G923 Teleop iniciado. Mapeamento de controlo ativo. Publicando em /teleop/filtered_command.");
     }
 
 private:
@@ -56,79 +48,9 @@ private:
     const float MAX_STEERING_RAD = 0.5f; // Maximum steering angle (~28.6 graus)
     
     // --- ROS 2 ---
-    rclcpp::Publisher<Float32>::SharedPtr pub_vlc_;
-    rclcpp::Publisher<Float32>::SharedPtr pub_brake_factor_; 
-    rclcpp::Publisher<Float32>::SharedPtr pub_steering_;
-    rclcpp::Publisher<Bool>::SharedPtr pub_engage_;
-    rclcpp::Publisher<Int32>::SharedPtr pub_gear_;
-    rclcpp::Publisher<Int32>::SharedPtr pub_turn_signal_;
+    rclcpp::Publisher<TeleopCommand>::SharedPtr pub_filtered_command_;
     rclcpp::Subscription<Joy>::SharedPtr sub_joy_;
-
   
-    // Variables to publish
-    // --- For Engage ---
-    bool last_engage_state = false; 
-    bool current_engage_state = false; 
-    // --- For Gear ---
-    int current_gear_ = 0;
-    // --- For Turn Signal ---
-    int turn_signal_ = 1;
-    bool last_turn_right_ = false;
-    bool last_turn_left_ = false;
-    bool last_hazard_signal_ = false;
-
-
-
-    // --- Engage Publisher function ---
-    void publish_engage(bool state)
-    {
-        auto msg = std::make_unique<Bool>();
-        msg->data = state;
-        pub_engage_->publish(std::move(msg));
-    }
-
-    // --- Velocity Publisher function ---
-    void publish_vlc(float vlc)
-    { 
-        auto msg = std::make_unique<Float32>();
-        msg->data = vlc;
-        pub_vlc_->publish(std::move(msg));
-    }
-
-    // --- Break Publisher function ---
-    void publish_brake_factor(float factor) 
-    {
-        auto msg = std::make_unique<Float32>();
-        msg->data = factor;
-        pub_brake_factor_->publish(std::move(msg));
-    }
-
-    // --- Steering Publisher function ---
-    void publish_steering(float angle)
-    {
-        auto msg = std::make_unique<Float32>();
-        msg->data = angle;
-        pub_steering_->publish(std::move(msg));
-    }
-
-    // -- Gear Publisher function --
-    void publish_gear(int gear)
-    {
-        auto msg = std::make_unique<Int32>();
-        msg->data = gear;
-        pub_gear_->publish(std::move(msg));    
-    }
-
-
-    // -- Turn Signal Publisher function --
-    void publish_turn_signal(int turn_signal)
-    {
-        auto msg = std::make_unique<Int32>();
-        msg->data = turn_signal;
-        pub_turn_signal_->publish(std::move(msg));
-    }
-
-
     void joy_callback(const Joy::SharedPtr msg)
     {
         // Check if the joy mensage is complete (it should have 4 axis and 8 buttons)
@@ -144,13 +66,6 @@ private:
         bool engage_button_2 = msg->buttons[BUTTON_ENGAGE_2];
         
         bool change_engage_state = engage_button_1 && engage_button_2;
-        
-        // Logic to prevent multiple changes in the engage state
-        if (change_engage_state && !last_engage_state){
-            current_engage_state = !current_engage_state;
-            RCLCPP_INFO(this->get_logger(), "Engage State Alterado: %s", current_engage_state ? "TRUE" : "FALSE");
-        }
-        last_engage_state = change_engage_state;
         
         // --- 2. VELOCITY CONTROL (ACCEL & BRAKE) ---
 
@@ -188,23 +103,26 @@ private:
         // Change from [-1.0 (Repose) to 1.0 (Fully Pressed)] to [0.0 to 1.0]
         double normalized_clutch = (clutch + 1.0) / 2.0;
 
-        if (current_engage_state && normalized_clutch >= 0.9){
+        int new_gear = 0;
+        // Enter Parking(1), Leave Parking(2), Drive(2), Reverse(3)
+
+        if (normalized_clutch >= 0.9){
             // Lógica para sair de Parking (0) para Drive (1)
-            if (current_gear_ == 0 && parking_axes == 1) {
-                current_gear_ = 1;
+            if (parking_axes == 1) {
+                new_gear = 2;
             }
             // Lógica para entrar em Parking (0)
             else if (parking_axes == -1) {
-                current_gear_ = 0;
+                new_gear = 1;
             }
             // Troca entre Drive (1) e Reverse (2) - apenas se não estiver em Parking
-            else if (current_gear_ != 0) {
-                if (drive_button && !reverse_button) {
-                    current_gear_ = 1;
-                }
-                else if (!drive_button && reverse_button) {
-                    current_gear_ = 2;
-                }
+           
+            else if (drive_button) {
+                    new_gear = 2;
+            }
+            
+            else if (reverse_button) {
+                    new_gear = 3;
             }
         }
 
@@ -214,29 +132,36 @@ private:
         bool turn_left = msg->buttons[BUTTON_TURN_SIGNAL_LEFT];
         bool hazard_signal = msg->buttons[BUTTON_HAZARD_SIGNAL];
 
-        // Toggle RIGHT
-        if (turn_right && !last_turn_right_) {
-            turn_signal_ = (turn_signal_ == 3) ? 1 : 3; // DISABLE ou RIGHT
+        int turn_signal = 0;
+
+        // Right(1), Left(2), Hazard(3)
+        if (turn_right) {
+            turn_signal = 1;
+
         }
-        // Toggle LEFT
-        if (turn_left && !last_turn_left_) {
-            turn_signal_ = (turn_signal_ == 2) ? 1 : 2; // DISABLE ou LEFT
+        else if (turn_left){
+            turn_signal = 2;
         }
-        if (hazard_signal && !last_hazard_signal_) {
-            turn_signal_ = (turn_signal_ == 4) ? 1 : 4;
+        else if (hazard_signal){
+            turn_signal = 3;
         }
-        last_turn_right_ = turn_right;
-        last_turn_left_ = turn_left;
-        last_hazard_signal_ = hazard_signal;
 
         // --- 6. PUBLISHING ---  
-        publish_engage(current_engage_state);
-        publish_vlc(target_vlc);
-        publish_brake_factor((float)normalized_brake);
-        publish_steering(target_steering_angle);
-        publish_gear(current_gear_);
-        publish_turn_signal(turn_signal_);
-    
+        auto teleop_msg = std::make_unique<TeleopCommand>();
+
+        // Preenchimento do Header (necessário já que a mensagem inclui std_msgs/Header)
+        teleop_msg->header.stamp = this->now();
+        teleop_msg->header.frame_id = "g923_teleop";
+
+        // Preenchimento dos campos customizados
+        teleop_msg->target_velocity = target_vlc;
+        teleop_msg->brake_factor = static_cast<float>(normalized_brake);
+        teleop_msg->target_steering_angle = target_steering_angle;
+        teleop_msg->engage_command = change_engage_state;
+        teleop_msg->gear = new_gear;
+        teleop_msg->turn_signal = turn_signal;
+
+        pub_filtered_command_->publish(std::move(teleop_msg));
     }
 };
 

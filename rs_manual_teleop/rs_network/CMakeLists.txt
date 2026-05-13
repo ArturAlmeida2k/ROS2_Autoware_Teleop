@@ -10,6 +10,9 @@ find_package(rclcpp REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(OpenCV REQUIRED)
 find_package(sensor_msgs REQUIRED)
+find_package(msg_manual_teleop REQUIRED)
+find_package(autoware_perception_msgs REQUIRED)
+
 
 # --- Python nodes ---
 install(PROGRAMS
@@ -19,9 +22,21 @@ install(PROGRAMS
 )
 
 install(PROGRAMS
+  src/input_teleop_encoder_v2.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME input_teleop_encoder_v2
+)
+
+install(PROGRAMS
   src/telemetry_decoder.py
   DESTINATION lib/${PROJECT_NAME}
   RENAME telemetry_decoder
+)
+
+install(PROGRAMS
+  src/pointcloud_decoder.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME pointcloud_decoder
 )
 
 # --- video_decoder_cpp (exibe janela) ---

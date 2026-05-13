@@ -48,14 +48,57 @@ ament_target_dependencies(
   sensor_msgs
 )
 
+add_executable(
+  xbox_teleop_node_v2
+  src/xbox_teleop_node_v2.cpp
+)
+
+ament_target_dependencies(
+  xbox_teleop_node_v2
+  rclcpp
+  sensor_msgs
+  msg_manual_teleop
+)
+
+add_executable(
+  g923_teleop_node_v2
+  src/g923_teleop_node_v2.cpp
+)
+
+ament_target_dependencies(
+  g923_teleop_node_v2
+  rclcpp
+  sensor_msgs
+  msg_manual_teleop
+)
+
+add_executable(
+  command_gate
+  src/command_gate.cpp
+)
+
+ament_target_dependencies(
+  command_gate
+  rclcpp
+  msg_manual_teleop
+)
+
+
 install(TARGETS
   g923_teleop_node
   g923_debug
   xbox_controller
+  xbox_teleop_node_v2
+  g923_teleop_node_v2
+  command_gate
   DESTINATION lib/${PROJECT_NAME}
 )
 
-install(DIRECTORY launch DESTINATION share/${PROJECT_NAME})
 
+install(PROGRAMS
+  src/pointcloud_generator.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME pointcloud_generator
+)
 
 ament_package()
