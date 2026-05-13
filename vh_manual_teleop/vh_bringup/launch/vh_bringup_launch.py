@@ -65,17 +65,17 @@ def generate_launch_description():
         output='screen'
     )
 
-    teleop_safety_gate_node = Node(
+    safety_gate_node = Node(
         package='vh_teleop_to_autoware',
-        executable='teleop_safety_gate',
-        name='teleop_safety_gate',
+        executable='safety_gate',
+        name='safety_gate',
         output='screen'
     )
 
-    teleop_topic_monitor_node = Node(
+    topic_monitor_node = Node(
         package='vh_teleop_to_autoware',
-        executable='teleop_topic_monitor',
-        name='teleop_topic_monitor',
+        executable='topic_monitor',
+        name='topic_monitor',
         output='screen'
     )
 
@@ -87,6 +87,6 @@ def generate_launch_description():
         video_encoder_4x_node,
         telemetry_node,
         control_node,
-        teleop_safety_gate_node,
-        teleop_topic_monitor_node
+        safety_gate_node,
+        topic_monitor_node
     ])
