@@ -14,6 +14,8 @@ find_package(tier4_control_msgs REQUIRED)
 find_package(autoware_control_msgs REQUIRED)
 find_package(autoware_universe_utils REQUIRED)
 find_package(autoware_vehicle_msgs REQUIRED)
+find_package(msg_manual_teleop REQUIRED)
+
 
 add_executable(control src/control.cpp)
 ament_target_dependencies(control
@@ -24,6 +26,7 @@ ament_target_dependencies(control
   autoware_control_msgs
   autoware_universe_utils  
   autoware_vehicle_msgs 
+  msg_manual_teleop
 )
 
 add_executable(safety_gate src/teleop_safety_gate.cpp)

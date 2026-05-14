@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 import rclpy
 from rclpy.node import Node
-from std_msgs.msg import Float32, Bool, Int32
+from std_msgs.msg import Float32
 import socket
 import struct
 import time
+
+from msg_manual_teleop.msg import TeleopCommand
 
 class InputTeleopDecoder(Node):
     def __init__(self):
@@ -16,13 +18,7 @@ class InputTeleopDecoder(Node):
         self.declare_parameter('port', 5005)
         self.port = self.get_parameter('port').value
 
-        self.pub_vlc        = self.create_publisher(Float32, '/teleop/target_velocity', 10)
-        self.pub_steer      = self.create_publisher(Float32, '/teleop/target_steering_angle', 10)
-        self.pub_brake      = self.create_publisher(Float32, '/teleop/brake_factor', 10)
-        self.pub_gear       = self.create_publisher(Int32,   '/teleop/gear_change', 10)
-        self.pub_turn       = self.create_publisher(Int32,   '/teleop/turn_signal', 10)
-        self.pub_engage     = self.create_publisher(Bool,    '/teleop/engage_command', 10)
-        self.pub_delay      = self.create_publisher(Float32, '/teleop/network_delay_ms', 10)
+        self.pub_command = self.create_publisher(TeleopCommand, '/teleop/command', 10)
 
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.bind(('0.0.0.0', self.port))
@@ -30,6 +26,8 @@ class InputTeleopDecoder(Node):
 
         self.create_timer(0.01, self.receive_packet)  # 100Hz 
         self.get_logger().info(f"Decoder iniciado na porta {self.port}. A aceitar apenas comandos do IP: {self.allowed_ip}")
+
+        
 
     def receive_packet(self):
         while True:
@@ -44,14 +42,16 @@ class InputTeleopDecoder(Node):
 
                 delay_ms = (time.time() - send_time) * 1000
 
-                self.pub_vlc.publish(Float32(data=vlc))
-                self.pub_steer.publish(Float32(data=steer))
-                self.pub_brake.publish(Float32(data=brake))
-                self.pub_gear.publish(Int32(data=gear))
-                self.pub_turn.publish(Int32(data=signal))
-                self.pub_engage.publish(Bool(data=engage))
-                self.pub_delay.publish(Float32(data=float(delay_ms)))
+                msg = TeleopCommand()
+                msg.target_velocity       = vlc
+                msg.target_steering_angle = steer
+                msg.brake_factor          = brake
+                msg.gear                  = gear
+                msg.turn_signal           = signal
+                msg.engage_command        = engage
 
+                self.pub_command.publish(msg)
+                
             except BlockingIOError:
                 break
             except Exception as e:

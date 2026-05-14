@@ -38,6 +38,8 @@ class InputTeleopEncoder(Node):
 
         self.create_timer(0.02, self.send_packet)  # 50Hz
         self.get_logger().info(f"Encoder iniciado → a enviar para {self.target_ip}:{self.port}")
+
+        self.sequence_id = 0
         
     def command_callback(self, msg):
         # Atualiza o dicionário com os valores da mensagem recebida
@@ -54,7 +56,8 @@ class InputTeleopEncoder(Node):
     def send_packet(self):
         try:
             # 'd' = double (timestamp), 'fff' = floats, 'ii' = ints, '?' = bool
-            packet = struct.pack('dfffii?',
+            packet = struct.pack('Idfffii?',
+                self.sequence_id,
                 self.latest_timestamp,  # Usa a hora exata da leitura original do volante
                 self.data['vlc'],
                 self.data['steer'],
@@ -64,6 +67,9 @@ class InputTeleopEncoder(Node):
                 self.data['engage']
             )
             self.sock.sendto(packet, (self.target_ip, self.port))
+
+            self.sequence_id += 1
+            
         except Exception as e:
             self.get_logger().error(f"Erro ao enviar: {e}")
 
