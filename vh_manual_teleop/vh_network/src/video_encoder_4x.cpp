@@ -8,6 +8,14 @@
 class VideoEncoderTX : public rclcpp::Node {
 public:
     VideoEncoderTX() : Node("video_encoder_tx_cpp") {
+
+        this->declare_parameter<std::string>("ip_address", "10.0.0.2");
+        this->declare_parameter<int>("port", 5007);
+
+        ip_address = this->get_parameter("ip_address").as_string();
+        int base_port = this->get_parameter("port").as_int();
+
+
         rclcpp::QoS qos_profile(1);
         qos_profile.best_effort();
         qos_profile.keep_last(1);
@@ -20,7 +28,8 @@ public:
             "/sensing/camera/CAM_FRONT_RIGHT/image_raw"
         };
         
-        int base_port = 5006;
+        RCLCPP_INFO(this->get_logger(), "Configurado para enviar vídeo para o IP: %s (Porta base: %d)", 
+                    ip_address.c_str(), base_port);
 
         for (size_t i = 0; i < topics.size(); ++i) {
             streams_[i].topic_name = topics[i];
@@ -62,6 +71,9 @@ private:
     // Array para armazenar o estado das 4 câmaras
     std::array<CameraStream, 4> streams_;
 
+    std::string ip_address;
+
+
     void image_callback(const sensor_msgs::msg::Image::SharedPtr msg, size_t camera_index) {
         try {
             // Conversão direta de ROS 2 para OpenCV
@@ -90,7 +102,7 @@ private:
                     "bitrate=4000 ! "
                     "h264parse config-interval=-1 ! "
                     "rtph264pay pt=96 mtu=1400 aggregate-mode=zero-latency ! "
-                    "udpsink host=10.0.0.2 port=" + std::to_string(streams_[camera_index].port) + " sync=false";
+                    "udpsink host=" + ip_address + " port=" + std::to_string(streams_[camera_index].port) + " sync=false";
                 
                 // Abre o escritor associado a esta câmara específica
                 streams_[camera_index].writer.open(pipeline, cv::CAP_GSTREAMER, 0, fps, cv::Size(width, height), true);

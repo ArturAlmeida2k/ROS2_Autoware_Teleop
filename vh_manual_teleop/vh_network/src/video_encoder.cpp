@@ -7,6 +7,12 @@
 class VideoEncoderTX : public rclcpp::Node {
 public:
     VideoEncoderTX() : Node("video_encoder_tx_cpp"), writer_initialized_(false) {
+        this->declare_parameter<std::string>("ip_address", "10.0.0.2");
+        this->declare_parameter<int>("port", 5007);
+        
+        ip_address_ = this->get_parameter("ip_address").as_string();
+        port_ = this->get_parameter("port").as_int();        
+        
         rclcpp::QoS qos_profile(1);
         qos_profile.best_effort();
         qos_profile.keep_last(1);
@@ -17,7 +23,8 @@ public:
             std::bind(&VideoEncoderTX::image_callback, this, std::placeholders::_1)
         );
 
-        RCLCPP_INFO(this->get_logger(), "Nó C++ Encoder iniciado. A aguardar imagens do AWSIM...");
+        RCLCPP_INFO(this->get_logger(), "Nó C++ Encoder iniciado. A aguardar imagens... (Destino: %s:%d)", 
+                    ip_address_.c_str(), port_);
     }
 
     ~VideoEncoderTX() {
@@ -27,6 +34,14 @@ public:
     }
 
 private:
+
+    std::string ip_address_;
+    int port_;
+
+    rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr subscription_;
+    cv::VideoWriter writer_;
+    bool writer_initialized_;
+
     void image_callback(const sensor_msgs::msg::Image::SharedPtr msg) {
         try {
             // Conversão direta de ROS 2 para OpenCV
@@ -44,18 +59,19 @@ private:
                 int fps = 30;
                 
                 // Pipeline 
-		std::string pipeline = 
-		    "appsrc is-live=true do-timestamp=true ! "
-		    "videoconvert ! "
-		    "queue ! "
-		    "video/x-raw,format=I420 ! "
-		    "x264enc tune=zerolatency speed-preset=superfast "
-		    "sliced-threads=true threads=1 "
-		    "key-int-max=15 intra-refresh=true "
-		    "bitrate=4000 ! "
-		    "h264parse config-interval=-1 ! "
-		    "rtph264pay pt=96 mtu=1400 aggregate-mode=zero-latency ! "
-		    "udpsink host=10.0.0.2 port=5006 sync=false";
+                std::string pipeline = 
+                    "appsrc is-live=true do-timestamp=true ! "
+                    "videoconvert ! "
+                    "queue ! "
+                    "video/x-raw,format=I420 ! "
+                    "x264enc tune=zerolatency speed-preset=superfast "
+                    "sliced-threads=true threads=1 "
+                    "key-int-max=15 intra-refresh=true "
+                    "bitrate=4000 ! "
+                    "h264parse config-interval=-1 ! "
+                    "rtph264pay pt=96 mtu=1400 aggregate-mode=zero-latency ! "
+                    "udpsink host=" + ip_address_ + " port=" + std::to_string(port_) + " sync=false";
+                    
                 // O 0 significa API backend preferencial, mas vamos forçar explicitamente o CAP_GSTREAMER
                 writer_.open(pipeline, cv::CAP_GSTREAMER, 0, fps, cv::Size(width, height), true);
                 
@@ -63,7 +79,7 @@ private:
                     RCLCPP_ERROR(this->get_logger(), "Falha ao abrir o pipeline GStreamer via OpenCV C++ (Resolucao: %dx%d)", width, height);
                     return;
                 }
-                RCLCPP_INFO(this->get_logger(), "Pipeline GStreamer (NVENC) aberto. A enviar para 10.0.0.2:5006");
+                RCLCPP_INFO(this->get_logger(), "Pipeline GStreamer aberto. A enviar para %s:%d", ip_address_.c_str(), port_);
                 writer_initialized_ = true;
             }
 
@@ -74,10 +90,6 @@ private:
             RCLCPP_ERROR(this->get_logger(), "Erro no cv_bridge: %s", e.what());
         }
     }
-
-    rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr subscription_;
-    cv::VideoWriter writer_;
-    bool writer_initialized_;
 };
 
 int main(int argc, char * argv[]) {

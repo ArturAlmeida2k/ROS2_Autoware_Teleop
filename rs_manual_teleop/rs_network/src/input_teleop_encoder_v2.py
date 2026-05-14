@@ -11,8 +11,13 @@ from msg_manual_teleop.msg import TeleopCommand
 class InputTeleopEncoder(Node):
     def __init__(self):
         super().__init__('input_teleop_encoder')
-        self.target_ip = "10.0.0.1"
-        self.port = 5005
+
+        self.declare_parameter('ip_address', '10.0.0.1')
+        self.declare_parameter('port', 5005)
+
+        self.target_ip = self.get_parameter('ip_address').value
+        self.port = self.get_parameter('port').value
+
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
         self.data = {
@@ -32,8 +37,8 @@ class InputTeleopEncoder(Node):
         )
 
         self.create_timer(0.02, self.send_packet)  # 50Hz
-        self.get_logger().info(f"Encoder iniciado → {self.target_ip}:{self.port}")
-
+        self.get_logger().info(f"Encoder iniciado → a enviar para {self.target_ip}:{self.port}")
+        
     def command_callback(self, msg):
         # Atualiza o dicionário com os valores da mensagem recebida
         self.data['vlc'] = msg.target_velocity

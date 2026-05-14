@@ -7,12 +7,18 @@
 class VideoDecoderRX : public rclcpp::Node {
 public:
     VideoDecoderRX() : Node("video_decoder_rx_cpp") {
+
+        this->declare_parameter<std::string>("ip_address", "10.0.0.1");
+        this->declare_parameter<int>("port", 5007);
+
+        int port = this->get_parameter("port").as_int();
+        
         RCLCPP_INFO(this->get_logger(), "A inicializar descodificador C++...");
 
         publisher_ = this->create_publisher<sensor_msgs::msg::CompressedImage>(
             "/camera/front/compressed", 10);
 
-        video_thread_ = std::thread(&VideoDecoderRX::receive_and_publish, this);
+        video_thread_ = std::thread(&VideoDecoderRX::receive_and_publish, this, port);
     }
 
     ~VideoDecoderRX() {
@@ -22,21 +28,22 @@ public:
     }
 
 private:
-    void receive_and_publish() {
+    void receive_and_publish(int port) {
+
         std::string pipeline =
-            "udpsrc port=5007 buffer-size=2129920 caps=\"application/x-rtp, media=(string)video, clock-rate=(int)90000, encoding-name=(string)H264, payload=(int)96\" ! "
+            "udpsrc port=" + std::to_string(port) + " buffer-size=2129920 caps=\"application/x-rtp, media=(string)video, clock-rate=(int)90000, encoding-name=(string)H264, payload=(int)96\" ! "
             "rtpjitterbuffer latency=10 ! "
             "rtph264depay ! h264parse ! avdec_h264 output-corrupt=false ! "
             "videoconvert ! appsink sync=false drop=true max-buffers=1";
 
         cv::VideoCapture cap(pipeline, cv::CAP_GSTREAMER);
         if (!cap.isOpened()) {
-            RCLCPP_ERROR(this->get_logger(), "Falha ao abrir a porta UDP 5007 via GStreamer.");
+            RCLCPP_ERROR(this->get_logger(), "Falha ao abrir a porta UDP %d via GStreamer.", port);
             return;
         }
 
-        RCLCPP_INFO(this->get_logger(), "A escutar vídeo em UDP (Porta 5007)... A publicar em /camera/front/compressed.");
-
+        RCLCPP_INFO(this->get_logger(), "A escutar vídeo em UDP (Porta %d)... A publicar em /camera/front/compressed.", port);
+        
         cv::Mat frame;
         std::vector<uint8_t> jpeg_buffer;
         std::vector<int> encode_params = {cv::IMWRITE_JPEG_QUALITY, 90};

@@ -9,7 +9,15 @@
 class VideoDecoderRX : public rclcpp::Node {
 public:
     VideoDecoderRX() : Node("video_decoder_rx_multi_cpp") {
-        RCLCPP_INFO(this->get_logger(), "A inicializar descodificador C++ para 4 camaras...");
+
+        this->declare_parameter<std::string>("ip_address", "10.0.0.1");
+        this->declare_parameter<int>("port", 5007); 
+
+        std::string ip_address = this->get_parameter("ip_address").as_string();
+        int base_port = this->get_parameter("port").as_int();
+
+        RCLCPP_INFO(this->get_logger(), "A inicializar descodificador C++ para 4 camaras");
+        RCLCPP_INFO(this->get_logger(), "A escutar nas portas a partir da porta base: %d", base_port);
 
         // Estrutura para organizar os parâmetros de cada fluxo de vídeo
         struct CameraConfig {
@@ -20,10 +28,10 @@ public:
 
         // Mapeamento das 4 câmaras com base nas portas e tópicos do transmissor
         std::array<CameraConfig, 4> configs = {{
-            {5006, "/camera/back/compressed", "camera_back"},
-            {5007, "/camera/front/compressed", "camera_front"},
-            {5008, "/camera/left/compressed", "camera_left"},
-            {5009, "/camera/right/compressed", "camera_right"}
+            {base_port,     "/camera/back/compressed",  "camera_back"},
+            {base_port + 1, "/camera/front/compressed", "camera_front"},
+            {base_port + 2, "/camera/left/compressed",  "camera_left"},
+            {base_port + 3, "/camera/right/compressed", "camera_right"}
         }};
 
         for (size_t i = 0; i < configs.size(); ++i) {
@@ -103,8 +111,6 @@ private:
 int main(int argc, char * argv[]) {
     rclcpp::init(argc, argv);
     
-    // Neste caso, o MultiThreadedExecutor não é estritamente necessário no main(), 
-    // porque criámos nós as threads manualmente usando o std::thread na classe.
     // O rclcpp::spin() regular será suficiente para manter o nó vivo.
     rclcpp::spin(std::make_shared<VideoDecoderRX>());
     

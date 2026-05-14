@@ -1,4 +1,3 @@
-import os
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
 from launch.conditions import IfCondition
@@ -15,12 +14,12 @@ def generate_launch_description():
     )
     video_mode = LaunchConfiguration('video_mode')
 
-    server_ip_arg = DeclareLaunchArgument(
-        'server_ip', 
+    ip_address_arg = DeclareLaunchArgument(
+        'ip_address', 
         default_value='10.0.0.2', 
         description="Endereço IP para os nós de rede"
     )
-    server_ip = LaunchConfiguration('server_ip')
+    ip_address = LaunchConfiguration('ip_address')
 
     # --- Argumentos das Portas ---
     input_port_arg = DeclareLaunchArgument(
@@ -50,7 +49,7 @@ def generate_launch_description():
         executable='input_teleop_decoder',
         name='input_teleop_decoder',
         output='screen',
-        parameters=[{'server_ip': server_ip, 'port': input_port}]
+        parameters=[{'ip_address': ip_address, 'port': input_port}]
     )
 
     telemetry_encoder_node = Node(
@@ -58,7 +57,7 @@ def generate_launch_description():
         executable='telemetry_encoder',
         name='telemetry_encoder',
         output='screen',
-        parameters=[{'server_ip': server_ip, 'port': telemetry_port}]
+        parameters=[{'ip_address': ip_address, 'port': telemetry_port}]
     )
 
     # Nó opcional: video_encoder
@@ -68,7 +67,7 @@ def generate_launch_description():
         name='video_encoder',
         output='screen',
         condition=IfCondition(PythonExpression(["'", video_mode, "' == 'standard'"])),
-        parameters=[{'server_ip': server_ip, 'port': camera_port}]
+        parameters=[{'ip_address': ip_address, 'port': camera_port}]
     )
 
     # Nó opcional: video_encoder_4x
@@ -78,7 +77,7 @@ def generate_launch_description():
         name='video_encoder_4x',
         output='screen',
         condition=IfCondition(PythonExpression(["'", video_mode, "' == '4x'"])),
-        parameters=[{'server_ip': server_ip, 'port': camera_port}]
+        parameters=[{'ip_address': ip_address, 'port': camera_port}]
     )
 
     # --- Nós do pacote: vh_telemetry ---
@@ -113,7 +112,7 @@ def generate_launch_description():
 
     return LaunchDescription([
         video_mode_arg,
-        server_ip_arg,
+        ip_address_arg,
         input_port_arg,
         telemetry_port_arg,
         camera_port_arg,

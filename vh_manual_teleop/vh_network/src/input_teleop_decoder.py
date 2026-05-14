@@ -10,8 +10,8 @@ class InputTeleopDecoder(Node):
     def __init__(self):
         super().__init__('input_teleop_decoder')
 
-        self.declare_parameter('server_ip', '10.0.0.2')
-        self.allowed_ip = self.get_parameter('server_ip').value
+        self.declare_parameter('ip_address', '10.0.0.2')
+        self.allowed_ip = self.get_parameter('ip_address').value
 
         self.declare_parameter('port', 5005)
         self.port = self.get_parameter('port').value

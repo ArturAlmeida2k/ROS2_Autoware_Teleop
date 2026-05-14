@@ -10,8 +10,8 @@ class TelemetryEncoder(Node):
     def __init__(self):
         super().__init__('telemetry_encoder')
 
-        self.declare_parameter('server_ip', '10.0.0.2')
-        self.target_ip = self.get_parameter('server_ip').value
+        self.declare_parameter('ip_address', '10.0.0.2')
+        self.target_ip = self.get_parameter('ip_address').value
 
         self.declare_parameter('port', 5006)
         self.port = self.get_parameter('port').value 
