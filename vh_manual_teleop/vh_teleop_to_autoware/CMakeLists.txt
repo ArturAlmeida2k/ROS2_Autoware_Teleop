@@ -39,6 +39,7 @@ ament_target_dependencies(safety_gate
 add_executable(topic_monitor src/teleop_topic_monitor.cpp)
 ament_target_dependencies(topic_monitor
   rclcpp
+  msg_manual_teleop
   std_msgs
 )
 
