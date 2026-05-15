@@ -81,23 +81,28 @@ public:
     }
 
 private:
-    int8_t current_state_ = STATE_ERROR; // Inicia em estado de erro por segurança
+    int8_t current_state_ = STATE_ERROR;
     float warning_velocity_limit_;
     float emergency_deceleration_;
 
-    rclcpp::Subscription<Control>::SharedPtr sub_control_cmd_;
-    rclcpp::Subscription<GearCommand>::SharedPtr sub_gear_cmd_;
+    rclcpp::Subscription<Control>::SharedPtr            sub_control_cmd_;
+    rclcpp::Subscription<GearCommand>::SharedPtr        sub_gear_cmd_;
     rclcpp::Subscription<TurnIndicatorsCommand>::SharedPtr sub_turn_indicators_;
-    rclcpp::Subscription<Int8>::SharedPtr sub_safety_state_;
-    rclcpp::Subscription<HazardLightsCommand>::SharedPtr sub_hazard_lights_;
+    rclcpp::Subscription<HazardLightsCommand>::SharedPtr   sub_hazard_lights_;
+    rclcpp::Subscription<Bool>::SharedPtr               sub_engage_cmd_;
+    rclcpp::Subscription<GateMode>::SharedPtr           sub_gate_mode_;
+    rclcpp::Subscription<Int8>::SharedPtr               sub_safety_state_;
 
-    rclcpp::Publisher<Control>::SharedPtr pub_control_cmd_;
-    rclcpp::Publisher<GearCommand>::SharedPtr pub_gear_cmd_;
+    rclcpp::Publisher<Control>::SharedPtr               pub_control_cmd_;
+    rclcpp::Publisher<GearCommand>::SharedPtr           pub_gear_cmd_;
     rclcpp::Publisher<TurnIndicatorsCommand>::SharedPtr pub_turn_indicators_;
-    rclcpp::Publisher<HazardLightsCommand>::SharedPtr pub_hazard_lights_;
+    rclcpp::Publisher<HazardLightsCommand>::SharedPtr   pub_hazard_lights_;
+    rclcpp::Publisher<GateMode>::SharedPtr              pub_gate_mode_;
 
-    rclcpp::TimerBase::SharedPtr safety_timer_;
+    rclcpp::Client<EngageSrv>::SharedPtr                client_engage_;
+    rclcpp::TimerBase::SharedPtr                        safety_timer_;
 
+    
     // Atualiza o estado atual com base na mensagem do Monitor
     void safety_state_callback(const Int8::SharedPtr msg) {
         current_state_ = msg->data;
