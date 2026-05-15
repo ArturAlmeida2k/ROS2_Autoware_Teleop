@@ -1,75 +1,34 @@
 #!/usr/bin/env python3
 import rclpy
 from rclpy.node import Node
+from rclpy.serialization import serialize_message
 import socket
-import struct
-import time
-
-# Importar a tua mensagem customizada em vez das std_msgs
 from msg_manual_teleop.msg import TeleopCommand
 
 class InputTeleopEncoder(Node):
     def __init__(self):
         super().__init__('input_teleop_encoder')
-
         self.declare_parameter('ip_address', '10.0.0.1')
         self.declare_parameter('port', 5005)
-
         self.target_ip = self.get_parameter('ip_address').value
         self.port = self.get_parameter('port').value
 
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.latest_msg = None
 
-        self.data = {
-            'vlc': 0.0, 'steer': 0.0, 'brake': 0.0,
-            'gear': 0, 'signal': 1, 'engage': False
-        }
-        
-        # Variável para guardar o timestamp do ROS
-        self.latest_timestamp = time.time()
-
-        # Substituir as 6 subscrições por apenas 1
-        self.create_subscription(
-            TeleopCommand, 
-            '/teleop/command', 
-            self.command_callback, 
-            10
-        )
-
+        self.create_subscription(TeleopCommand, '/teleop/command', self.command_callback, 10)
         self.create_timer(0.02, self.send_packet)  # 50Hz
         self.get_logger().info(f"Encoder iniciado → a enviar para {self.target_ip}:{self.port}")
 
-        self.sequence_id = 0
-        
     def command_callback(self, msg):
-        # Atualiza o dicionário com os valores da mensagem recebida
-        self.data['vlc'] = msg.target_velocity
-        self.data['steer'] = msg.target_steering_angle
-        self.data['brake'] = msg.brake_factor
-        self.data['gear'] = msg.gear
-        self.data['signal'] = msg.turn_signal
-        self.data['engage'] = msg.engage_command
-        
-        # Extrair a hora da mensagem (segundos + nanosegundos convertidos para segundos)
-        self.latest_timestamp = msg.header.stamp.sec + (msg.header.stamp.nanosec * 1e-9)
+        self.latest_msg = msg
 
     def send_packet(self):
+        if self.latest_msg is None:
+            return
         try:
-            # 'd' = double (timestamp), 'fff' = floats, 'ii' = ints, '?' = bool
-            packet = struct.pack('Idfffii?',
-                self.sequence_id,
-                self.latest_timestamp,  # Usa a hora exata da leitura original do volante
-                self.data['vlc'],
-                self.data['steer'],
-                self.data['brake'],
-                self.data['gear'],
-                self.data['signal'],
-                self.data['engage']
-            )
-            self.sock.sendto(packet, (self.target_ip, self.port))
-
-            self.sequence_id += 1
-            
+            data = serialize_message(self.latest_msg)
+            self.sock.sendto(data, (self.target_ip, self.port))
         except Exception as e:
             self.get_logger().error(f"Erro ao enviar: {e}")
 
@@ -81,6 +40,7 @@ def main(args=None):
     except KeyboardInterrupt:
         pass
     finally:
+        node.sock.close()
         node.destroy_node()
         if rclpy.ok():
             rclpy.shutdown()
