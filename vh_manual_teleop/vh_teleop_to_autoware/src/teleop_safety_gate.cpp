@@ -1,11 +1,17 @@
 #include "rclcpp/rclcpp.hpp"
+#include "std_msgs/msg/bool.hpp"
 #include "autoware_control_msgs/msg/control.hpp"
 #include "autoware_vehicle_msgs/msg/gear_command.hpp"
 #include "autoware_vehicle_msgs/msg/turn_indicators_command.hpp"
 #include <autoware_vehicle_msgs/msg/hazard_lights_command.hpp>
+#include "tier4_control_msgs/msg/gate_mode.hpp"
+#include "tier4_external_api_msgs/srv/engage.hpp"
 #include "std_msgs/msg/int8.hpp"
 #include <algorithm>
 
+using Bool     = std_msgs::msg::Bool;
+using GateMode = tier4_control_msgs::msg::GateMode;
+using EngageSrv = tier4_external_api_msgs::srv::Engage;
 using Control = autoware_control_msgs::msg::Control;
 using GearCommand = autoware_vehicle_msgs::msg::GearCommand;
 using TurnIndicatorsCommand = autoware_vehicle_msgs::msg::TurnIndicatorsCommand;
@@ -45,16 +51,27 @@ public:
             "/teleop/internal/hazard_lights_cmd", 10,
             std::bind(&TeleopSafetyGateNode::hazard_lights_callback, this, std::placeholders::_1));    
 
+        sub_engage_cmd_ = this->create_subscription<Bool>(
+            "/teleop/internal/engage_cmd", 10,
+            std::bind(&TeleopSafetyGateNode::engage_cmd_callback, this, std::placeholders::_1));
+
+        sub_gate_mode_ = this->create_subscription<GateMode>(
+            "/teleop/internal/gate_mode_cmd", 10,
+            std::bind(&TeleopSafetyGateNode::gate_mode_callback, this, std::placeholders::_1));
+
         // Subscrição do estado de segurança (Virá do futuro nó Monitor)
         sub_safety_state_ = this->create_subscription<Int8>(
             "/teleop/safety_state", 10,
             std::bind(&TeleopSafetyGateNode::safety_state_callback, this, std::placeholders::_1));
 
+     
         // Publicadores (Enviam dados finais para o Autoware)
         pub_control_cmd_ = this->create_publisher<Control>("/external/selected/control_cmd", rclcpp::QoS(1));
         pub_gear_cmd_ = this->create_publisher<GearCommand>("/external/selected/gear_cmd", 1);
         pub_turn_indicators_ = this->create_publisher<TurnIndicatorsCommand>("/external/selected/turn_indicators_cmd", 1);
         pub_hazard_lights_ = this->create_publisher<HazardLightsCommand>("/external/selected/hazard_lights_cmd", 1);
+        pub_gate_mode_  = this->create_publisher<GateMode>("/control/gate_mode_cmd", rclcpp::QoS(1));
+        client_engage_  = this->create_client<EngageSrv>("/api/autoware/set/engage");
 
         safety_timer_ = this->create_wall_timer(
             std::chrono::milliseconds(100),
@@ -138,13 +155,38 @@ private:
     }
 
     void safety_timer_callback() {
-    if (current_state_ == STATE_ERROR) {
-        HazardLightsCommand hazard_cmd;
-        hazard_cmd.stamp = this->now();
-        hazard_cmd.command = HazardLightsCommand::ENABLE;
-        pub_hazard_lights_->publish(hazard_cmd);
+        if (current_state_ == STATE_ERROR) {
+            HazardLightsCommand hazard_cmd;
+            hazard_cmd.stamp = this->now();
+            hazard_cmd.command = HazardLightsCommand::ENABLE;
+            pub_hazard_lights_->publish(hazard_cmd);
+        }
     }
-}
+
+    void gate_mode_callback(const GateMode::SharedPtr msg) {
+        if (current_state_ != STATE_ERROR) {
+            pub_gate_mode_->publish(*msg);
+        }
+    }
+
+    void engage_cmd_callback(const Bool::SharedPtr msg) {
+        if (current_state_ == STATE_ERROR) {
+            RCLCPP_ERROR(this->get_logger(), "Engage bloqueado: sistema em estado de erro.");
+            return;
+        }
+
+        if (!client_engage_->service_is_ready()) {
+            RCLCPP_ERROR(this->get_logger(), "Serviço /api/autoware/set/engage indisponível.");
+            return;
+        }
+
+        auto req = std::make_shared<EngageSrv::Request>();
+        req->engage = msg->data;
+        client_engage_->async_send_request(
+            req, []([[maybe_unused]] rclcpp::Client<EngageSrv>::SharedFuture) {});
+
+        RCLCPP_INFO(this->get_logger(), "Engage encaminhado: %s", msg->data ? "TRUE" : "FALSE");
+    }
 };
 
 int main(int argc, char **argv) {
