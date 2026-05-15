@@ -22,7 +22,7 @@ public:
 
         // Subscrição do tópico que serve de "Heartbeat" (batimento cardíaco)
         sub_heartbeat_ = this->create_subscription<Float32>(
-            "/teleop/target_velocity", 10,
+            "/teleop/command", 10,
             std::bind(&TeleopTopicMonitorNode::heartbeat_callback, this, std::placeholders::_1));
 
         // Publicador do estado de segurança (vai para a Safety Gate)
