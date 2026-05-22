@@ -47,15 +47,10 @@ public:
         pub_engage_cmd_      = this->create_publisher<Bool>("/teleop/internal/engage_cmd", 1);
         pub_gate_mode_       = this->create_publisher<GateMode>("/teleop/internal/gate_mode_cmd", rclcpp::QoS(1));
 
-        control_timer_ = this->create_wall_timer(
-            std::chrono::milliseconds(20),
-            std::bind(&AutowareControllerNode::publish_control_command, this));
-
         RCLCPP_INFO(this->get_logger(), "Autoware Controller Node started.");
     }
 
 private:
-    // --- Teleop inputs ---
     float   vlc_target_            = 0.0f;
     float   vlc_current_           = 0.0f;
     float   steering_angle_target_ = 0.0f;
@@ -63,16 +58,13 @@ private:
     int     gear_change_           = GearCommand::REVERSE;
     bool    last_engage_cmd_       = false;
 
-    // --- Modo real do Autoware ---
     uint8_t current_mode_ = OperationModeState::UNKNOWN;
 
-    // --- Control constants ---
     const double BASE_KP_GAIN = 0.5;
     const double BRAKE_KP_MAX = 5.0;
     const double MAX_ACCEL    = 1.0;
     const double MAX_DECEL    = 5.0;
 
-    // --- ROS 2 interfaces ---
     rclcpp::Publisher<GateMode>::SharedPtr              pub_gate_mode_;
     rclcpp::Publisher<Control>::SharedPtr               pub_control_cmd_;
     rclcpp::Publisher<GearCommand>::SharedPtr           pub_gear_cmd_;
@@ -84,9 +76,6 @@ private:
     rclcpp::Subscription<VelocityReport>::SharedPtr     sub_vlc_current_;
     rclcpp::Subscription<OperationModeState>::SharedPtr sub_operation_mode_;
 
-    rclcpp::TimerBase::SharedPtr control_timer_;
-
-    // --- Callbacks ---
     void operation_mode_callback(const OperationModeState::SharedPtr msg)
     {
         current_mode_ = msg->mode;
@@ -104,38 +93,6 @@ private:
         steering_angle_target_ = msg->target_steering_angle;
         brake_factor_          = msg->brake_factor;
 
-        if (current_mode_ == OperationModeState::LOCAL || current_mode_ == OperationModeState::REMOTE) {
-        
-          // --- Sinais luminosos ---
-          TurnIndicatorsCommand turn_cmd;
-          turn_cmd.stamp = this->now();
-          HazardLightsCommand hazard_cmd;
-          hazard_cmd.stamp = this->now();
-
-          if (msg->turn_signal == 4) {
-              turn_cmd.command   = TurnIndicatorsCommand::DISABLE;
-              hazard_cmd.command = HazardLightsCommand::ENABLE;
-          } else {
-              turn_cmd.command   = msg->turn_signal;
-              hazard_cmd.command = HazardLightsCommand::DISABLE;
-          }
-
-          pub_turn_indicators_->publish(turn_cmd);
-          pub_hazard_lights_->publish(hazard_cmd);
-        
-
-          // --- Gear (só em LOCAL ou REMOTE) ---
-          gear_change_ = msg->gear;
-          GearCommand gear_cmd;
-          gear_cmd.stamp = this->now();
-          switch (gear_change_) {
-              case 0: gear_cmd.command = GearCommand::PARK;    break;
-              case 1: gear_cmd.command = GearCommand::DRIVE;   break;
-              case 2: gear_cmd.command = GearCommand::REVERSE; break;
-          }
-          pub_gear_cmd_->publish(gear_cmd);
-        }
-
         // --- Engage: edge detection ---
         bool engage_cmd = msg->engage_command;
         if (engage_cmd != last_engage_cmd_) {
@@ -151,34 +108,62 @@ private:
 
             last_engage_cmd_ = engage_cmd;
         }
-    }
 
-    // --- Loop de controlo (50 Hz) ---
-    void publish_control_command()
-    {
-      if (current_mode_ == OperationModeState::LOCAL || current_mode_ == OperationModeState::REMOTE) return;
+        if (current_mode_ == OperationModeState::LOCAL || current_mode_ == OperationModeState::REMOTE) {
+        // --- Sinais luminosos ---
+            TurnIndicatorsCommand turn_cmd;
+            turn_cmd.stamp = this->now();
+            HazardLightsCommand hazard_cmd;
+            hazard_cmd.stamp = this->now();
 
-        auto control_cmd = std::make_unique<Control>();
-        control_cmd->stamp = this->now();
-        control_cmd->longitudinal.velocity = vlc_target_;
+            if (msg->turn_signal == 4) {
+                turn_cmd.command   = TurnIndicatorsCommand::DISABLE;
+                hazard_cmd.command = HazardLightsCommand::ENABLE;
+            } else {
+                turn_cmd.command   = msg->turn_signal;
+                hazard_cmd.command = HazardLightsCommand::DISABLE;
+            }
 
-        double velocity_error   = static_cast<double>(vlc_target_) - std::abs(vlc_current_);
-        double acceleration_cmd = 0.0;
+            pub_turn_indicators_->publish(turn_cmd);
+            pub_hazard_lights_->publish(hazard_cmd);
+        
 
-        if (vlc_target_ <= 0.01f && brake_factor_ > 0.01f) {
-            double dynamic_kp = BASE_KP_GAIN + (BRAKE_KP_MAX - BASE_KP_GAIN) * brake_factor_;
-            acceleration_cmd  = std::clamp(dynamic_kp * velocity_error, -MAX_DECEL, 0.0);
-        } else {
-            acceleration_cmd  = std::clamp(BASE_KP_GAIN * velocity_error, -MAX_ACCEL, MAX_ACCEL);
+        // --- Gear (só em LOCAL ou REMOTE) ---
+            gear_change_ = msg->gear;
+            GearCommand gear_cmd;
+            gear_cmd.stamp = this->now();
+            switch (gear_change_) {
+                case 0: gear_cmd.command = GearCommand::PARK;    break;
+                case 1: gear_cmd.command = GearCommand::DRIVE;   break;
+                case 2: gear_cmd.command = GearCommand::REVERSE; break;
+            }
+            pub_gear_cmd_->publish(gear_cmd);
+        
+
+        // --- Controlo (só em LOCAL ou REMOTE) ---
+            auto control_cmd = std::make_unique<Control>();
+            control_cmd->stamp = this->now();
+            control_cmd->longitudinal.velocity = vlc_target_;
+
+            double velocity_error   = static_cast<double>(vlc_target_) - std::abs(vlc_current_);
+            double acceleration_cmd = 0.0;
+
+            if (vlc_target_ <= 0.01f && brake_factor_ > 0.01f) {
+                double dynamic_kp = BASE_KP_GAIN + (BRAKE_KP_MAX - BASE_KP_GAIN) * brake_factor_;
+                acceleration_cmd  = std::clamp(dynamic_kp * velocity_error, -MAX_DECEL, 0.0);
+            } else {
+                acceleration_cmd  = std::clamp(BASE_KP_GAIN * velocity_error, -MAX_ACCEL, MAX_ACCEL);
+            }
+
+            if (std::abs(acceleration_cmd)       < 0.0001) acceleration_cmd       = 0.0;
+            if (std::abs(steering_angle_target_) < 0.0001) steering_angle_target_ = 0.0f;
+
+            control_cmd->longitudinal.acceleration   = acceleration_cmd;
+            control_cmd->lateral.steering_tire_angle = steering_angle_target_;
+
+            pub_control_cmd_->publish(std::move(control_cmd));
         }
 
-        if (std::abs(acceleration_cmd)       < 0.0001) acceleration_cmd       = 0.0;
-        if (std::abs(steering_angle_target_) < 0.0001) steering_angle_target_ = 0.0f;
-
-        control_cmd->longitudinal.acceleration   = acceleration_cmd;
-        control_cmd->lateral.steering_tire_angle = steering_angle_target_;
-
-        pub_control_cmd_->publish(std::move(control_cmd));
     }
 };
 
