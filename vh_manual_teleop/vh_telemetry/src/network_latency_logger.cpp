@@ -13,6 +13,8 @@ public:
         const char* home_dir = std::getenv("HOME");
         std::string file_path = std::string(home_dir) + "/autoware_workspace/metrics/latency_cmd.csv";
 
+        RCLCPP_INFO(this->get_logger(), "%s", file_path);
+
         if (log_file_.is_open()) {
             log_file_ << "timestamp_ms,latency_ms\n";
         } else {
