@@ -1,7 +1,6 @@
 #include "rclcpp/rclcpp.hpp"
 #include "std_msgs/msg/int8.hpp"
 #include "std_msgs/msg/float32.hpp"
-#include <fstream>
 
 using Int8    = std_msgs::msg::Int8;
 using Float32 = std_msgs::msg::Float32;
@@ -24,9 +23,6 @@ public:
 
         pub_safety_state_ = this->create_publisher<Int8>("/teleop/safety_state", rclcpp::QoS(1));
 
-        log_file_.open("/tmp/latency_cmd.csv", std::ios::app);
-        log_file_ << "timestamp_ms,latency_ms\n";
-
         last_msg_time_ = this->now();
 
         monitor_timer_ = this->create_wall_timer(
@@ -36,10 +32,6 @@ public:
         RCLCPP_INFO(this->get_logger(), "Teleop Topic Monitor Node started.");
     }
 
-    ~TeleopTopicMonitorNode() {
-        if (log_file_.is_open()) log_file_.close();
-    }
-
 private:
     double warn_timeout_ms_;
     double error_timeout_ms_;
@@ -47,7 +39,6 @@ private:
     rclcpp::Time last_msg_time_;
     int8_t current_state_ = STATE_ERROR;
 
-    std::ofstream log_file_;
     rclcpp::Subscription<Float32>::SharedPtr sub_latency_;
     rclcpp::Publisher<Int8>::SharedPtr       pub_safety_state_;
     rclcpp::TimerBase::SharedPtr             monitor_timer_;
@@ -55,10 +46,6 @@ private:
     void latency_callback(const Float32::SharedPtr msg) {
         latest_latency_ms_ = msg->data;
         last_msg_time_ = this->now();
-
-        auto now_ms = this->now().nanoseconds() / 1e6;
-        log_file_ << now_ms << "," << msg->data << "\n";
-        log_file_.flush();
     }
 
     void check_timeouts() {
