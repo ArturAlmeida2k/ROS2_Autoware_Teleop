@@ -10,6 +10,7 @@ class InputTeleopEncoder(Node):
         super().__init__('input_teleop_encoder')
         self.declare_parameter('ip_address', '10.0.0.1')
         self.declare_parameter('port', 5005)
+
         self.target_ip = self.get_parameter('ip_address').value
         self.port = self.get_parameter('port').value
 
@@ -18,6 +19,7 @@ class InputTeleopEncoder(Node):
 
         self.create_subscription(TeleopCommand, '/teleop/command', self.command_callback, 10)
         self.create_timer(0.02, self.send_packet)  # 50Hz
+
         self.get_logger().info(f"Encoder iniciado → a enviar para {self.target_ip}:{self.port}")
 
     def command_callback(self, msg):
@@ -27,6 +29,8 @@ class InputTeleopEncoder(Node):
         if self.latest_msg is None:
             return
         try:
+            self.latest_msg.header.stamp = self.get_clock().now().to_msg()
+            
             data = serialize_message(self.latest_msg)
             self.sock.sendto(data, (self.target_ip, self.port))
         except Exception as e:

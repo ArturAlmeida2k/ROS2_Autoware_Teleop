@@ -117,8 +117,8 @@ def generate_launch_description():
 
     # Nó opcional: video_encoder
     video_decoder_node = Node(
-        package='vh_network',
-        executable='video_decoder_v2',
+        package='rs_network',
+        executable='video_decoder_cpp_v2',
         name='video_decoder_v2',
         output='screen',
         condition=IfCondition(PythonExpression(["'", video_mode, "' == 'standard'"])),
@@ -127,7 +127,7 @@ def generate_launch_description():
 
     # Nó opcional: video_encoder_4x
     video_decoder_4x_node = Node(
-        package='vh_network',
+        package='rs_network',
         executable='video_decoder_4x',
         name='video_decoder_4x',
         output='screen',

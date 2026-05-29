@@ -2,6 +2,8 @@
 import rclpy
 from rclpy.node import Node
 from rclpy.serialization import deserialize_message
+from rclpy.time import Time
+from std_msgs.msg import Float32
 import socket
 from msg_manual_teleop.msg import TeleopCommand
 
@@ -15,6 +17,8 @@ class InputTeleopDecoder(Node):
 
         self.pub_command = self.create_publisher(TeleopCommand, '/teleop/command', 10)
 
+        self.pub_latency = self.create_publisher(Float32, '/metrics/latency_cmd_ms', 10)
+
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.bind(('0.0.0.0', self.port))
         self.sock.setblocking(False)
@@ -26,9 +30,22 @@ class InputTeleopDecoder(Node):
         while True:
             try:
                 data, addr = self.sock.recvfrom(65535)
+            
                 if addr[0] != self.allowed_ip:
                     continue
+
+                recv_time = self.get_clock().now()
+
                 msg = deserialize_message(data, TeleopCommand)
+
+                send_time = Time.from_msg(msg.header.stamp)
+                latency_ms = (recv_time - send_time).nanoseconds / 1e6
+
+                if 0.0 < latency_ms < 5000.0:
+                    lat_msg = Float32()
+                    lat_msg.data = float(latency_ms)
+                    self.pub_latency.publish(lat_msg)
+                    
                 self.pub_command.publish(msg)
             except BlockingIOError:
                 break

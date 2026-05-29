@@ -56,7 +56,7 @@ public:
             });
 
         // --- 3. Watchdog Timer (Proteção contra perda de sinal) ---
-        // Se passarem 500ms sem o watchdog ser reiniciado no callback acima, esta função é chamada
+        // Se passarem 3s sem o watchdog ser reiniciado no callback acima, esta função é chamada
         telemetry_watchdog_ = this->create_wall_timer(
             3s, std::bind(&ComandGate::telemetry_timeout_callback, this));
 

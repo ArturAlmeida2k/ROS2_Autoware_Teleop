@@ -1,9 +1,10 @@
 #include "rclcpp/rclcpp.hpp"
 #include "std_msgs/msg/int8.hpp"
-#include "msg_manual_teleop/msg/teleop_command.hpp"
+#include "std_msgs/msg/float32.hpp"
+#include <fstream>
 
-using Int8          = std_msgs::msg::Int8;
-using TeleopCommand = msg_manual_teleop::msg::TeleopCommand;
+using Int8    = std_msgs::msg::Int8;
+using Float32 = std_msgs::msg::Float32;
 
 class TeleopTopicMonitorNode : public rclcpp::Node {
 public:
@@ -14,15 +15,17 @@ public:
     TeleopTopicMonitorNode() : Node("teleop_topic_monitor_node") {
         this->declare_parameter<double>("warn_timeout_ms",  100.0);
         this->declare_parameter<double>("error_timeout_ms", 250.0);
-
         warn_timeout_ms_  = this->get_parameter("warn_timeout_ms").as_double();
         error_timeout_ms_ = this->get_parameter("error_timeout_ms").as_double();
 
-        sub_heartbeat_ = this->create_subscription<TeleopCommand>(
-            "/teleop/command", 10,
-            std::bind(&TeleopTopicMonitorNode::heartbeat_callback, this, std::placeholders::_1));
+        sub_latency_ = this->create_subscription<Float32>(
+            "/metrics/latency_cmd_ms", 10,
+            std::bind(&TeleopTopicMonitorNode::latency_callback, this, std::placeholders::_1));
 
         pub_safety_state_ = this->create_publisher<Int8>("/teleop/safety_state", rclcpp::QoS(1));
+
+        log_file_.open("/tmp/latency_cmd.csv", std::ios::app);
+        log_file_ << "timestamp_ms,latency_ms\n";
 
         last_msg_time_ = this->now();
 
@@ -33,33 +36,43 @@ public:
         RCLCPP_INFO(this->get_logger(), "Teleop Topic Monitor Node started.");
     }
 
-private:
-    double     warn_timeout_ms_;
-    double     error_timeout_ms_;
-    rclcpp::Time last_msg_time_;
-    int8_t     current_state_ = STATE_ERROR;
-
-    rclcpp::Subscription<TeleopCommand>::SharedPtr sub_heartbeat_;
-    rclcpp::Publisher<Int8>::SharedPtr             pub_safety_state_;
-    rclcpp::TimerBase::SharedPtr                   monitor_timer_;
-
-    void heartbeat_callback(const TeleopCommand::SharedPtr /*msg*/)
-    {
-        last_msg_time_ = this->now();
+    ~TeleopTopicMonitorNode() {
+        if (log_file_.is_open()) log_file_.close();
     }
 
-    void check_timeouts()
-    {
+private:
+    double warn_timeout_ms_;
+    double error_timeout_ms_;
+    double latest_latency_ms_ = 0.0;
+    rclcpp::Time last_msg_time_;
+    int8_t current_state_ = STATE_ERROR;
+
+    std::ofstream log_file_;
+    rclcpp::Subscription<Float32>::SharedPtr sub_latency_;
+    rclcpp::Publisher<Int8>::SharedPtr       pub_safety_state_;
+    rclcpp::TimerBase::SharedPtr             monitor_timer_;
+
+    void latency_callback(const Float32::SharedPtr msg) {
+        latest_latency_ms_ = msg->data;
+        last_msg_time_ = this->now();
+
+        auto now_ms = this->now().nanoseconds() / 1e6;
+        log_file_ << now_ms << "," << msg->data << "\n";
+        log_file_.flush();
+    }
+
+    void check_timeouts() {
         double elapsed_ms = (this->now() - last_msg_time_).seconds() * 1000.0;
 
         int8_t new_state;
-        if      (elapsed_ms > error_timeout_ms_) new_state = STATE_ERROR;
-        else if (elapsed_ms > warn_timeout_ms_)  new_state = STATE_WARN;
-        else                                     new_state = STATE_OK;
+        if      (elapsed_ms > error_timeout_ms_)         new_state = STATE_ERROR;
+        else if (latest_latency_ms_ > error_timeout_ms_) new_state = STATE_ERROR;
+        else if (latest_latency_ms_ > warn_timeout_ms_)  new_state = STATE_WARN;
+        else                                              new_state = STATE_OK;
 
         if (new_state != current_state_) {
-            if      (new_state == STATE_ERROR) RCLCPP_ERROR(this->get_logger(), "NETWORK ERROR: Timeout (%.1f ms). Stopping vehicle.", elapsed_ms);
-            else if (new_state == STATE_WARN)  RCLCPP_WARN (this->get_logger(), "NETWORK WARN: High Latency (%.1f ms). Limiting velocity.", elapsed_ms);
+            if      (new_state == STATE_ERROR) RCLCPP_ERROR(this->get_logger(), "NETWORK ERROR: latency %.1f ms / timeout %.1f ms.", latest_latency_ms_, elapsed_ms);
+            else if (new_state == STATE_WARN)  RCLCPP_WARN (this->get_logger(), "NETWORK WARN: High latency %.1f ms.", latest_latency_ms_);
             else                               RCLCPP_INFO (this->get_logger(), "NETWORK OK: Connection stable.");
             current_state_ = new_state;
         }
