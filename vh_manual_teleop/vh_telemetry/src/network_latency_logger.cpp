@@ -1,13 +1,18 @@
 #include "rclcpp/rclcpp.hpp"
 #include "std_msgs/msg/float32.hpp"
 #include <fstream>
+#include <cstdlib> 
+#include <string>
 
 using Float32 = std_msgs::msg::Float32;
 
 class TeleopLatencyLoggerNode : public rclcpp::Node {
 public:
     TeleopLatencyLoggerNode() : Node("teleop_latency_logger_node") {
-        log_file_.open("~/autoware_workspace/metrics/latency_cmd.csv", std::ios::app);
+
+        const char* home_dir = std::getenv("HOME");
+        std::string file_path = std::string(home_dir) + "/autoware_workspace/metrics/latency_cmd.csv";
+
         if (log_file_.is_open()) {
             log_file_ << "timestamp_ms,latency_ms\n";
         } else {
