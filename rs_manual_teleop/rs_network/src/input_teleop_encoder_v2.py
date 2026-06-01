@@ -29,15 +29,14 @@ class InputTeleopEncoder(Node):
 
     def command_callback(self, msg):
         try:
-            self.latest_msg.header.stamp = self.get_clock().now().to_msg()
-            self.latest_msg.id = self.seq_num_
+            msg.header.stamp = self.get_clock().now().to_msg()
+            msg.id = self.seq_num_
             self.seq_num_ += 1
 
-            data = serialize_message(self.latest_msg)
+            data = serialize_message(msg)
             self.sock.sendto(data, (self.target_ip, self.port))
         except Exception as e:
             self.get_logger().error(f"Erro ao enviar: {e}")
-    def send_packet(self):
         
 
 def main(args=None):
