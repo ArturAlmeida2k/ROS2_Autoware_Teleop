@@ -3,7 +3,7 @@ import rclpy
 from rclpy.node import Node
 from rclpy.serialization import deserialize_message
 from rclpy.time import Time
-from std_msgs.msg import Float32
+from std_msgs.msg import Float32, UInt32
 import socket
 from msg_manual_teleop.msg import TeleopCommand
 
@@ -15,15 +15,19 @@ class InputTeleopDecoder(Node):
         self.declare_parameter('port', 5005)
         self.port = self.get_parameter('port').value
 
+        self.expected_id_ = None
+
         self.pub_command = self.create_publisher(TeleopCommand, '/teleop/command', 10)
 
         self.pub_latency = self.create_publisher(Float32, '/metrics/latency_cmd_ms', 10)
+
+        self.pub_lost = self.create_publisher(UInt32, '/metrics/packets_lost', 10)
 
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.bind(('0.0.0.0', self.port))
         self.sock.setblocking(False)
 
-        self.create_timer(0.01, self.receive_packet)  # 100Hz
+        self.create_timer(0.01, self.receive_packet) 
         self.get_logger().info(f"Decoder iniciado na porta {self.port}. A aceitar apenas comandos do IP: {self.allowed_ip}")
 
     def receive_packet(self):
@@ -38,6 +42,8 @@ class InputTeleopDecoder(Node):
 
                 msg = deserialize_message(data, TeleopCommand)
 
+                self.pub_command.publish(msg)
+
                 send_time = Time.from_msg(msg.header.stamp)
                 latency_ms = (recv_time - send_time).nanoseconds / 1e6
 
@@ -45,8 +51,15 @@ class InputTeleopDecoder(Node):
                     lat_msg = Float32()
                     lat_msg.data = float(latency_ms)
                     self.pub_latency.publish(lat_msg)
-                    
-                self.pub_command.publish(msg)
+
+                if self.expected_id_ != None and msg.id != self.expected_id:
+                    q_of_loss_msg = msg.id - self.expected_id_
+                    lost_msg = UInt32()
+                    lost_msg,data = float(q_of_loss_msg)
+                    self.pub_lost(lost_msg)
+
+                self.expected_id_ = msg.id + 1
+
             except BlockingIOError:
                 break
             except Exception as e:
