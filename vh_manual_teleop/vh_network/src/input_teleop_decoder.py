@@ -5,6 +5,7 @@ from rclpy.serialization import deserialize_message
 from rclpy.time import Time
 from std_msgs.msg import Float32, UInt32
 import socket
+import threading
 from msg_manual_teleop.msg import TeleopCommand
 
 class InputTeleopDecoder(Node):
@@ -25,13 +26,16 @@ class InputTeleopDecoder(Node):
 
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.bind(('0.0.0.0', self.port))
-        self.sock.setblocking(False)
 
-        self.create_timer(0.01, self.receive_packet) 
+        self.sock.settimeout(0.5)
+
+        self.receive_thread = threading.Thread(target=self.receive_loop, daemon=True)
+        self.receive_thread.start()
+
         self.get_logger().info(f"Decoder iniciado na porta {self.port}. A aceitar apenas comandos do IP: {self.allowed_ip}")
 
-    def receive_packet(self):
-        while True:
+    def receive_loop(self):
+        while rclpy.ok():
             try:
                 data, addr = self.sock.recvfrom(65535)
             
@@ -60,10 +64,11 @@ class InputTeleopDecoder(Node):
 
                 self.expected_id_ = msg.id + 1
 
-            except BlockingIOError:
-                break
+            except socket.timeout:
+                continue
             except Exception as e:
-                self.get_logger().error(f"Erro: {e}")
+                if rclpy.ok():
+                    self.get_logger().error(f"Erro: {e}")
 
 def main(args=None):
     rclpy.init(args=args)

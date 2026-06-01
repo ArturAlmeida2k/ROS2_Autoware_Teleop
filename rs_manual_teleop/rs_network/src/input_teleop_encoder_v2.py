@@ -16,20 +16,18 @@ class InputTeleopEncoder(Node):
 
         self.seq_num_ = 0
 
-        self.create_subscription(TeleopCommand, '/teleop/command', self.command_callback, 10)
-        self.create_timer(0.02, self.send_packet)  # 50Hz
-
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.latest_msg = None
+
+        self.create_subscription(
+            TeleopCommand,
+            '/teleop/command',
+            self.command_callback, 
+            10
+        )
 
         self.get_logger().info(f"Encoder iniciado → a enviar para {self.target_ip}:{self.port}")
 
     def command_callback(self, msg):
-        self.latest_msg = msg
-
-    def send_packet(self):
-        if self.latest_msg is None:
-            return
         try:
             self.latest_msg.header.stamp = self.get_clock().now().to_msg()
             self.latest_msg.id = self.seq_num_
@@ -39,6 +37,8 @@ class InputTeleopEncoder(Node):
             self.sock.sendto(data, (self.target_ip, self.port))
         except Exception as e:
             self.get_logger().error(f"Erro ao enviar: {e}")
+    def send_packet(self):
+        
 
 def main(args=None):
     rclpy.init(args=args)
