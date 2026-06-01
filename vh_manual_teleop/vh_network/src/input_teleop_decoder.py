@@ -52,11 +52,11 @@ class InputTeleopDecoder(Node):
                     lat_msg.data = float(latency_ms)
                     self.pub_latency.publish(lat_msg)
 
-                if self.expected_id_ != None and msg.id != self.expected_id:
+                if self.expected_id_ != None and msg.id != self.expected_id_:
                     q_of_loss_msg = msg.id - self.expected_id_
                     lost_msg = UInt32()
-                    lost_msg,data = float(q_of_loss_msg)
-                    self.pub_lost(lost_msg)
+                    lost_msg.data = int(q_of_loss_msg)
+                    self.pub_lost.publish(lost_msg)
 
                 self.expected_id_ = msg.id + 1
 

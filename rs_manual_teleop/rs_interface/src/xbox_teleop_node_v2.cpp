@@ -177,6 +177,8 @@ private:
         teleop_msg->header.stamp    = this->now();
         teleop_msg->header.frame_id = "xbox_teleop";
 
+        teleop_msg->id = 0;
+
         teleop_msg->target_velocity      = target_vlc;
         teleop_msg->brake_factor         = static_cast<float>(normalized_brake);
         teleop_msg->target_steering_angle = target_steering_angle;
