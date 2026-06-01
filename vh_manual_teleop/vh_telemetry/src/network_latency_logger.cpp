@@ -17,7 +17,7 @@ public:
     TeleopLatencyLoggerNode() : Node("teleop_latency_logger_node") {
 
         // Create a file with a the command latency with in the folder autoware_workspace/metrics/latency_cmd with the name of day and hour of creation
-        {
+        
             const char* home_dir = std::getenv("HOME");
             std::string dir_path = std::string(home_dir) + "/autoware_workspace/metrics/latency_cmd";
 
@@ -33,7 +33,7 @@ public:
             std::string file_path = dir_path + "/latency_" + time_stream.str() + ".csv";
 
             RCLCPP_INFO(this->get_logger(), "A gravar dados em: %s", file_path.c_str());
-        }
+        
 
         log_file_.open(file_path, std::ios::app);
 
