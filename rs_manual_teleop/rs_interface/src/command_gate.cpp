@@ -120,7 +120,7 @@ private:
         final_msg->header.stamp = msg->header.stamp; 
         final_msg->header.frame_id = "comand_gate";  
 
-        final_msg->id = 0;
+        final_msg->id = msg->id;
 
         // Se não houver telemetria ativa, nem sequer deixamos o Engage funcionar
         if (!telemetry_active_) {

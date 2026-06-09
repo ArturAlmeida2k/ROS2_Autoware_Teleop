@@ -83,6 +83,10 @@ private:
     const float MAX_VLC           = 10.0f;  // Velocidade máxima em m/s
     const float MAX_STEERING_RAD  =  0.5f;  // Ângulo máximo de direção (~28.6°)
 
+    // --- Extra Variables ---
+
+    u_int32_t seq_num_ = 1;
+
     // --- ROS 2 ---
     rclcpp::Publisher<TeleopCommand>::SharedPtr pub_filtered_command_;
     rclcpp::Subscription<Joy>::SharedPtr sub_joy_;
@@ -177,7 +181,7 @@ private:
         teleop_msg->header.stamp    = this->now();
         teleop_msg->header.frame_id = "xbox_teleop";
 
-        teleop_msg->id = 0;
+        teleop_msg->id = seq_num_++;
 
         teleop_msg->target_velocity      = target_vlc;
         teleop_msg->brake_factor         = static_cast<float>(normalized_brake);

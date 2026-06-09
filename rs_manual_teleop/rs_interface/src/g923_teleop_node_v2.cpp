@@ -46,6 +46,10 @@ private:
     // --- Constants ---
     const float MAX_VLC = 10.0f; // Maximum Velocity in m/s, 5m/s -> 18Km/h
     const float MAX_STEERING_RAD = 0.5f; // Maximum steering angle (~28.6 graus)
+
+    // --- Extra variables ---
+
+    u_int16_t seq_num_ = 1;
     
     // --- ROS 2 ---
     rclcpp::Publisher<TeleopCommand>::SharedPtr pub_filtered_command_;
@@ -149,9 +153,10 @@ private:
         // --- 6. PUBLISHING ---  
         auto teleop_msg = std::make_unique<TeleopCommand>();
 
-        // Preenchimento do Header (necessário já que a mensagem inclui std_msgs/Header)
         teleop_msg->header.stamp = this->now();
         teleop_msg->header.frame_id = "g923_teleop";
+
+        teleop_msg->id = seq_num_++;
 
         // Preenchimento dos campos customizados
         teleop_msg->target_velocity = target_vlc;
