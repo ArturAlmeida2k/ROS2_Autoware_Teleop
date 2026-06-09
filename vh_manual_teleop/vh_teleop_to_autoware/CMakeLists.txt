@@ -40,6 +40,7 @@ add_executable(topic_monitor src/teleop_topic_monitor.cpp)
 ament_target_dependencies(topic_monitor
   rclcpp
   std_msgs
+  msg_manual_teleop
 )
 
 install(TARGETS

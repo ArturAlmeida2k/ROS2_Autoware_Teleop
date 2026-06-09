@@ -2,8 +2,11 @@
 #include "std_msgs/msg/int8.hpp"
 #include "std_msgs/msg/float32.hpp"
 
+#include "msg_manual_teleop/msg/teleop_command.hpp"
+
 using Int8    = std_msgs::msg::Int8;
 using Float32 = std_msgs::msg::Float32;
+using CommandMetrics = msg_manual_teleop::msg::NetworkMetrics;
 
 class TeleopTopicMonitorNode : public rclcpp::Node {
 public:
@@ -16,10 +19,10 @@ public:
         this->declare_parameter<double>("error_timeout_ms", 250.0);
         warn_timeout_ms_  = this->get_parameter("warn_timeout_ms").as_double();
         error_timeout_ms_ = this->get_parameter("error_timeout_ms").as_double();
-
-        sub_latency_ = this->create_subscription<Float32>(
-            "/metrics/latency_cmd_ms", 10,
-            std::bind(&TeleopTopicMonitorNode::latency_callback, this, std::placeholders::_1));
+        
+        sub_metrics_ = this->create_subscription<CommandMetrics>(
+            "/metrics/teleop_commands", 10,
+            std::bind(&TeleopTopicMonitorNode::metrics_callback, this, std::placeholders::_1));
 
         pub_safety_state_ = this->create_publisher<Int8>("/teleop/safety_state", rclcpp::QoS(1));
 
@@ -43,8 +46,8 @@ private:
     rclcpp::Publisher<Int8>::SharedPtr       pub_safety_state_;
     rclcpp::TimerBase::SharedPtr             monitor_timer_;
 
-    void latency_callback(const Float32::SharedPtr msg) {
-        latest_latency_ms_ = msg->data;
+    void metrics_callback(const TeleopMetrics::SharedPtr msg) {
+        latest_latency_ms_ = msg->latency; 
         last_msg_time_ = this->now();
     }
 
