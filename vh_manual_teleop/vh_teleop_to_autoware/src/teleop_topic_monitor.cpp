@@ -42,11 +42,12 @@ private:
     rclcpp::Time last_msg_time_;
     int8_t current_state_ = STATE_ERROR;
 
-    rclcpp::Subscription<Float32>::SharedPtr sub_latency_;
+    rclcpp::Subscription<CommandMetrics>::SharedPtr sub_metrics_;
     rclcpp::Publisher<Int8>::SharedPtr       pub_safety_state_;
     rclcpp::TimerBase::SharedPtr             monitor_timer_;
+    
 
-    void metrics_callback(const TeleopMetrics::SharedPtr msg) {
+    void metrics_callback(const CommandMetrics::SharedPtr msg) {
         latest_latency_ms_ = msg->latency; 
         last_msg_time_ = this->now();
     }
