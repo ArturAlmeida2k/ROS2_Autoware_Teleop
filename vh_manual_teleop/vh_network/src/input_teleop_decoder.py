@@ -3,72 +3,71 @@ import rclpy
 from rclpy.node import Node
 from rclpy.serialization import deserialize_message
 from rclpy.time import Time
-from std_msgs.msg import Float32, UInt32
 import socket
-import threading
 from msg_manual_teleop.msg import TeleopCommand
+from msg_manual_teleop.msg import NetworkMetrics
 
 class InputTeleopDecoder(Node):
     def __init__(self):
         super().__init__('input_teleop_decoder')
         self.declare_parameter('ip_address', '10.0.0.2')
-        self.allowed_ip = self.get_parameter('ip_address').value
         self.declare_parameter('port', 5005)
+        
+        self.allowed_ip = self.get_parameter('ip_address').value
         self.port = self.get_parameter('port').value
 
         self.expected_id_ = None
 
         self.pub_command = self.create_publisher(TeleopCommand, '/teleop/command', 10)
-
-        self.pub_latency = self.create_publisher(Float32, '/metrics/latency_cmd_ms', 10)
-
-        self.pub_lost = self.create_publisher(UInt32, '/metrics/packets_lost', 10)
+        self.pub_metrics = self.create_publisher(NetworkMetrics, '/metrics/teleop_commands', 10)
 
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.bind(('0.0.0.0', self.port))
+        self.sock.setblocking(False)
 
-        self.sock.settimeout(0.5)
+        self.create_timer(0.005, self.receive_packet)  # 200Hz
 
-        self.receive_thread = threading.Thread(target=self.receive_loop, daemon=True)
-        self.receive_thread.start()
+        self.get_logger().info(f"Command Decoder → {self.port} from {self.allowed_ip}")
 
-        self.get_logger().info(f"Decoder iniciado na porta {self.port}. A aceitar apenas comandos do IP: {self.allowed_ip}")
-
-    def receive_loop(self):
-        while rclpy.ok():
+    def receive_packet(self):
+        while True:
             try:
                 data, addr = self.sock.recvfrom(65535)
-            
+
                 if addr[0] != self.allowed_ip:
                     continue
 
                 recv_time = self.get_clock().now()
-
                 msg = deserialize_message(data, TeleopCommand)
 
                 self.pub_command.publish(msg)
 
                 send_time = Time.from_msg(msg.header.stamp)
-                latency_ms = (recv_time - send_time).nanoseconds / 1e6
+                send_time_s  = send_time.nanoseconds / 1e9
+                recv_time_s  = recv_time.nanoseconds / 1e9
+                latency_ms   = (recv_time_s - send_time_s) * 1e3
 
-                if 0.0 < latency_ms < 5000.0:
-                    lat_msg = Float32()
-                    lat_msg.data = float(latency_ms)
-                    self.pub_latency.publish(lat_msg)
-
-                if self.expected_id_ != None and msg.id != self.expected_id_:
-                    q_of_loss_msg = msg.id - self.expected_id_
-                    lost_msg = UInt32()
-                    lost_msg.data = int(q_of_loss_msg)
-                    self.pub_lost.publish(lost_msg)
+                lost = 0
+                if self.expected_id_ is not None and msg.id != self.expected_id_:
+                    lost = int(msg.id - self.expected_id_)
 
                 self.expected_id_ = msg.id + 1
 
-            except socket.timeout:
-                continue
+                metrics_msg = NetworkMetrics()
+                metrics_msg.id           = msg.id
+                metrics_msg.send_time    = float(send_time_s)
+                metrics_msg.receive_time = float(recv_time_s)
+                metrics_msg.latency      = float(latency_ms)
+                metrics_msg.lost_pkg     = lost
+
+                self.pub_metrics.publish(metrics_msg)
+
+            except BlockingIOError:
+                break
             except Exception as e:
                 if rclpy.ok():
                     self.get_logger().error(f"Erro: {e}")
+                break
 
 def main(args=None):
     rclpy.init(args=args)
