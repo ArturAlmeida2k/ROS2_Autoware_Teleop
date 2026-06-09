@@ -27,7 +27,7 @@ class TelemetryEncoder(Node):
 
     def telemetry_callback(self, msg):
         try:
-            msg.latest_msg.header.stamp = self.get_clock().now().to_msg()
+            msg.header.stamp = self.get_clock().now().to_msg()
 
             data = serialize_message(msg)
             self.sock.sendto(data, (self.target_ip, self.port))
