@@ -40,8 +40,6 @@ def main():
 
     rows = []
     
-    # NOTA: Confirma se queres '/metrics/telemetry' ou '/metrics/teleop_commands'
-    target_topic = '/metrics/telemetry'
 
     print(f"A ler o bag em: {bag_path}")
 
@@ -49,15 +47,14 @@ def main():
     try:
         with Reader(bag_path) as reader:
             for connection, timestamp, rawdata in reader.messages():
-                if connection.topic == target_topic:
-                    msg = typestore.deserialize_cdr(rawdata, connection.msgtype)
-                    rows.append({
-                        'id':           msg.id,
-                        'send_time':    msg.send_time,
-                        'receive_time': msg.receive_time,
-                        'latency_ms':   msg.latency,
-                        'lost_pkg':     msg.lost_pkg,
-                    })
+                msg = typestore.deserialize_cdr(rawdata, connection.msgtype)
+                rows.append({
+                    'id':           msg.id,
+                    'send_time':    msg.send_time,
+                    'receive_time': msg.receive_time,
+                    'latency_ms':   msg.latency,
+                    'lost_pkg':     msg.lost_pkg,
+                })
     except Exception as e:
         print(f"Erro ao processar o bag: {e}")
         sys.exit(1)
@@ -66,7 +63,7 @@ def main():
 
     # 5. Guardar em CSV
     if len(rows) == 0:
-        print(f"Bag vazio ou o tópico '{target_topic}' não foi encontrado.")
+        pass
     else:
         df = pd.DataFrame(rows)
         # Substitui to_excel por to_csv conforme pediste
