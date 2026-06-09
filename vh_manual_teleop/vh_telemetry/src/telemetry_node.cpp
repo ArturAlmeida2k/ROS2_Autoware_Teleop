@@ -8,7 +8,6 @@
 #include "autoware_vehicle_msgs/msg/hazard_lights_report.hpp"
 #include "autoware_adapi_v1_msgs/msg/operation_mode_state.hpp"
 
-// Mensagem custom
 #include "msg_manual_teleop/msg/telemetry_state.hpp"
 
 using VelocityReport       = autoware_vehicle_msgs::msg::VelocityReport;
@@ -21,21 +20,18 @@ using TelemetryState       = msg_manual_teleop::msg::TelemetryState;
 class TelemetrySubscriber : public rclcpp::Node {
 public:
     TelemetrySubscriber() : Node("autoware_telemetry_node") {
-
         pub_telemetry_ = create_publisher<TelemetryState>("/telemetry/state", 10);
 
         sub_velocity_ = create_subscription<VelocityReport>(
             "/vehicle/status/velocity_status", 10,
             [this](const VelocityReport::SharedPtr msg) {
                 state_.velocity_kmh = msg->longitudinal_velocity * 3.6f;
-                publish_and_log();
             });
 
         sub_gear_ = create_subscription<GearReport>(
             "/vehicle/status/gear_status", 10,
             [this](const GearReport::SharedPtr msg) {
                 state_.gear = msg->report;
-                publish_and_log();
             });
 
         sub_operation_mode_ = create_subscription<OperationModeState>(
@@ -43,44 +39,43 @@ public:
             [this](const OperationModeState::SharedPtr msg) {
                 state_.mode    = msg->mode;
                 state_.engaged = msg->is_autoware_control_enabled;
-                publish_and_log();
             });
 
         sub_turn_indicators_ = create_subscription<TurnIndicatorsReport>(
             "/vehicle/status/turn_indicators_status", 10,
             [this](const TurnIndicatorsReport::SharedPtr msg) {
                 state_.turn_signal = msg->report;
-                publish_and_log();
             });
 
         sub_hazard_lights_ = create_subscription<HazardLightsReport>(
             "/vehicle/status/hazard_lights_status", 10,
             [this](const HazardLightsReport::SharedPtr msg) {
                 state_.hazard = msg->report;
-                publish_and_log();
             });
+
+        // Publica a 50Hz com o estado mais recente de todos os campos
+        timer_ = create_wall_timer(
+            std::chrono::milliseconds(20),
+            [this]() { publish_and_log(); }
+        );
     }
 
 private:
     TelemetryState state_{};
-
     rclcpp::Publisher<TelemetryState>::SharedPtr pub_telemetry_;
-
     rclcpp::Subscription<VelocityReport>::SharedPtr       sub_velocity_;
     rclcpp::Subscription<GearReport>::SharedPtr           sub_gear_;
     rclcpp::Subscription<OperationModeState>::SharedPtr   sub_operation_mode_;
     rclcpp::Subscription<TurnIndicatorsReport>::SharedPtr sub_turn_indicators_;
     rclcpp::Subscription<HazardLightsReport>::SharedPtr   sub_hazard_lights_;
+    rclcpp::TimerBase::SharedPtr timer_;
 
-    u_int32_t seq_num_ = 1;
+    uint32_t seq_num_ = 1;  
 
     void publish_and_log() {
-
-        state_.header.stamp = this->now();
+        state_.header.stamp    = this->now();
         state_.header.frame_id = "telemetry_node";
-        
-        state_.id = seq_num_++;
-
+        state_.id              = seq_num_++;
         pub_telemetry_->publish(state_);
     }
 };
