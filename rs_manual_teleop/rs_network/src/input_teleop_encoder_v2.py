@@ -14,8 +14,6 @@ class InputTeleopEncoder(Node):
         self.target_ip = self.get_parameter('ip_address').value
         self.port = self.get_parameter('port').value
 
-        self.seq_num_ = 0
-
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
         self.create_subscription(
@@ -25,13 +23,11 @@ class InputTeleopEncoder(Node):
             10
         )
 
-        self.get_logger().info(f"Encoder iniciado → a enviar para {self.target_ip}:{self.port}")
+        self.get_logger().info(f"Command Enconder → {self.target_ip}:{self.port}")
 
     def command_callback(self, msg):
         try:
             msg.header.stamp = self.get_clock().now().to_msg()
-            msg.id = self.seq_num_
-            self.seq_num_ += 1
 
             data = serialize_message(msg)
             self.sock.sendto(data, (self.target_ip, self.port))
