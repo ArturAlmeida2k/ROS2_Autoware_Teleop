@@ -72,30 +72,16 @@ private:
     rclcpp::Subscription<TurnIndicatorsReport>::SharedPtr sub_turn_indicators_;
     rclcpp::Subscription<HazardLightsReport>::SharedPtr   sub_hazard_lights_;
 
+    u_int32_t seq_num_ = 1;
+
     void publish_and_log() {
+
+        state.header.stamp = this->now;
+        state.header.frame_id = "telemetry_node";
+        
+        state_.id = seq_num_++;
+
         pub_telemetry_->publish(state_);
-
-        const char* gear_str = "UNKNOWN";
-        switch (state_.gear) {
-            case GearReport::PARK:    gear_str = "PARK";    break;
-            case GearReport::DRIVE:   gear_str = "DRIVE";   break;
-            case GearReport::REVERSE: gear_str = "REVERSE"; break;
-            case GearReport::NEUTRAL: gear_str = "NEUTRAL"; break;
-        }
-
-        const char* turn_str = "OFF";
-        if      (state_.turn_signal == TurnIndicatorsReport::ENABLE_LEFT)  turn_str = "LEFT";
-        else if (state_.turn_signal == TurnIndicatorsReport::ENABLE_RIGHT) turn_str = "RIGHT";
-
-        RCLCPP_INFO(get_logger(),
-            "Vel: %.1f km/h | Gear: %s | Mode: %d | Engaged: %s | Lights: %s | Hazard: %s",
-            state_.velocity_kmh,
-            gear_str,
-            state_.mode,
-            state_.engaged ? "YES" : "NO",
-            turn_str,
-            state_.hazard == HazardLightsReport::ENABLE ? "ON" : "OFF"
-        );
     }
 };
 
