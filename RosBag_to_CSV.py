@@ -8,7 +8,7 @@ from rosbags.typesys import Stores, get_typestore, get_types_from_msg
 
 def main():
     # 1. Configurar os argumentos do terminal
-    parser = argparse.ArgumentParser(description="Extrai métricas de rede de um ROS 2 Bag para um ficheiro CSV.")
+    parser = argparse.ArgumentParser(description="Extrai métricas de rede de um ROS 2 Bag para um ficheiro Excel.")
     parser.add_argument("caminho_bag", type=str, help="Caminho (relativo ou absoluto) para a pasta do rosbag")
     args = parser.parse_args()
 
@@ -23,8 +23,8 @@ def main():
     # Ex: .../autoware_workspace/bags/sessao_20260609 -> .../autoware_workspace/
     output_dir = bag_path.parent.parent
     
-    # Criar o nome do CSV baseado no nome da pasta do bag
-    output_csv = output_dir / f"{bag_path.name}_metricas.csv"
+    # Criar o nome do Excel baseado no nome da pasta do bag
+    output_excel = output_dir / f"{bag_path.name}_metricas.xlsx"
 
     # 3. Registar a mensagem customizada
     typestore = get_typestore(Stores.ROS2_HUMBLE)
@@ -40,6 +40,8 @@ def main():
 
     rows = []
     
+    # Confirma se o tópico é este que pretendes analisar
+    target_topic = '/metrics/telemetry'
 
     print(f"A ler o bag em: {bag_path}")
 
@@ -47,28 +49,30 @@ def main():
     try:
         with Reader(bag_path) as reader:
             for connection, timestamp, rawdata in reader.messages():
-                msg = typestore.deserialize_cdr(rawdata, connection.msgtype)
-                rows.append({
-                    'id':           msg.id,
-                    'send_time':    msg.send_time,
-                    'receive_time': msg.receive_time,
-                    'latency_ms':   msg.latency,
-                    'lost_pkg':     msg.lost_pkg,
-                })
+                if connection.topic == target_topic:
+                    msg = typestore.deserialize_cdr(rawdata, connection.msgtype)
+                    rows.append({
+                        'id':           msg.id,
+                        'send_time':    msg.send_time,
+                        'receive_time': msg.receive_time,
+                        'latency_ms':   msg.latency,
+                        'lost_pkg':     msg.lost_pkg,
+                    })
     except Exception as e:
         print(f"Erro ao processar o bag: {e}")
         sys.exit(1)
 
     print(f"Mensagens lidas: {len(rows)}")
 
-    # 5. Guardar em CSV
+    # 5. Guardar em Excel
     if len(rows) == 0:
-        pass
+        print(f"Bag vazio ou o tópico '{target_topic}' não foi encontrado.")
     else:
         df = pd.DataFrame(rows)
-        # Substitui to_excel por to_csv conforme pediste
-        df.to_csv(output_csv, index=False)
-        print(f"\nSucesso! Ficheiro criado em:\n -> {output_csv}\n")
+        # Exportar para Excel (.xlsx)
+        df.to_excel(output_excel, index=False)
+        
+        print(f"\nSucesso! Ficheiro Excel criado em:\n -> {output_excel}\n")
         print("--- Estatísticas Básicas ---")
         print(df.describe())
 
