@@ -1,8 +1,10 @@
+import os
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument
+from launch.actions import DeclareLaunchArgument, ExecuteProcess
 from launch.conditions import IfCondition, UnlessCondition
 from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node
+from datetime import datetime
 
 def generate_launch_description():
    
@@ -107,7 +109,7 @@ def generate_launch_description():
         parameters=[{'ip_address': ip_address, 'port': input_port}]
     )
 
-    telemetry_encoder_node = Node(
+    telemetry_decoder_node = Node(
         package="rs_network",
         executable='telemetry_decoder', 
         name='telemetry_decoder',
@@ -135,6 +137,21 @@ def generate_launch_description():
         parameters=[{'ip_address': ip_address, 'port': camera_port}]
     )
 
+    # Rosbag
+    bag_dir = os.path.expanduser('~/bags')
+    os.makedirs(bag_dir, exist_ok=True)  
+    
+    bag_path = os.path.join(bag_dir, f'sessao_{datetime.now().strftime("%Y%m%d_%H%M%S")}')
+
+    rosbag_node = ExecuteProcess(
+        cmd=[
+            'ros2', 'bag', 'record',
+            '/metrics/telemetry',
+            '--output', bag_path
+        ],
+        output='screen'
+    )
+
     return LaunchDescription([
         device_id_arg,
         use_xbox_arg,
@@ -148,7 +165,8 @@ def generate_launch_description():
         xbox_teleop_node,
         command_gate_node,
         input_teleop_encoder_node,
-        telemetry_encoder_node,
+        telemetry_decoder_node,
         video_decoder_node,
-        video_decoder_4x_node
+        video_decoder_4x_node,
+        rosbag_node
     ])
