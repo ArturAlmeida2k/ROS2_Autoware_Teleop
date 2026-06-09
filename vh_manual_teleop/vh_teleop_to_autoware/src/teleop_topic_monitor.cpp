@@ -2,7 +2,7 @@
 #include "std_msgs/msg/int8.hpp"
 #include "std_msgs/msg/float32.hpp"
 
-#include "msg_manual_teleop/msg/teleop_command.hpp"
+#include "msg_manual_teleop/msg/network_metrics.hpp"
 
 using Int8    = std_msgs::msg::Int8;
 using Float32 = std_msgs::msg::Float32;
