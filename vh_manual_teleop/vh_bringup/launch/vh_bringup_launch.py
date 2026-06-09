@@ -1,8 +1,11 @@
+import os
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument
+from launch.actions import DeclareLaunchArgument,ExecuteProcess
 from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node
+from datetime import datetime
+
 
 def generate_launch_description():
     
@@ -110,6 +113,20 @@ def generate_launch_description():
         output='screen'
     )
 
+    # Rosbag
+    bag_dir = os.path.expanduser('~/bags')
+    os.makedirs(bag_dir, exist_ok=True)  
+    
+    bag_path = os.path.join(bag_dir, f'sessao_{datetime.now().strftime("%Y%m%d_%H%M%S")}')
+
+    rosbag_node = ExecuteProcess(
+        cmd=[
+            'ros2', 'bag', 'record',
+            '/metrics/teleop_commands',
+            '--output', bag_path
+        ],
+        output='screen'
+    )
     return LaunchDescription([
         video_mode_arg,
         ip_address_arg,
@@ -123,5 +140,6 @@ def generate_launch_description():
         telemetry_node,
         control_node,
         safety_gate_node,
-        topic_monitor_node
+        topic_monitor_node,
+        bag_dir
     ])
