@@ -76,7 +76,7 @@ private:
 
     void publish_and_log() {
 
-        state_.header.stamp = this->now;
+        state_.header.stamp = this->now();
         state_.header.frame_id = "telemetry_node";
         
         state_.id = seq_num_++;
