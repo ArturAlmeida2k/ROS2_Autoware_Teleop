@@ -2,7 +2,6 @@
 #include <memory>
 #include <chrono> 
 
-// Incluir as tuas mensagens customizadas
 #include "msg_manual_teleop/msg/teleop_command.hpp"
 #include "msg_manual_teleop/msg/telemetry_state.hpp" 
 

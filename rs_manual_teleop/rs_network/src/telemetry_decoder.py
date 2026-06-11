@@ -48,10 +48,14 @@ class TelemetryDecoder(Node):
 
                 lost = 0
                 if self.expected_id_ is not None and msg.id != self.expected_id_:
-                    lost = int(msg.id - self.expected_id_)
-
-                self.expected_id_ = msg.id + 1
-
+                    diff = int(msg.id - self.expected_id_)
+                    if diff > 0:
+                        lost = diff                  # pacotes genuinamente perdidos
+                        self.expected_id_ = msg.id + 1   # ← só atualiza se id é superior
+                    # se diff < 0 → pacote atrasado, ignora e não atualiza expected
+                else:
+                    self.expected_id_ = msg.id + 1   # ← caso normal
+                    
                 metrics_msg = NetworkMetrics()
                 metrics_msg.id           = msg.id
                 metrics_msg.send_time    = float(send_time_s)
