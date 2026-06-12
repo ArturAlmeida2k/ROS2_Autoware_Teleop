@@ -39,6 +39,14 @@ def generate_launch_description():
     )
     telemetry_port = LaunchConfiguration('telemetry_port')
 
+    rtt_port_arg = DeclareLaunchArgument(
+        'rtt_port', 
+        default_value='5011', 
+        description="Porta UDP para o rtt_metrics"
+    )
+    rtt_port = LaunchConfiguration('rtt_port')
+
+
     camera_port_arg = DeclareLaunchArgument(
         'camera_port', 
         default_value='5007', 
@@ -61,6 +69,14 @@ def generate_launch_description():
         name='telemetry_encoder',
         output='screen',
         parameters=[{'ip_address': ip_address, 'port': telemetry_port}]
+    )
+
+    rtt_metrics_node = Node(
+        package='vh_network',
+        executable='rtt_metrics',
+        name='rtt_metrics',
+        output='screen',
+        parameters=[{'ip_address': ip_address, 'port': rtt_port}]
     )
 
     # Nó opcional: video_encoder
@@ -117,29 +133,32 @@ def generate_launch_description():
     bag_dir = os.path.expanduser('~/bags')
     os.makedirs(bag_dir, exist_ok=True)  
     
-    bag_path = os.path.join(bag_dir, f'sessao_{datetime.now().strftime("%Y%m%d_%H%M%S")}')
+    bag_commands_path = os.path.join(bag_dir, f'commands/{datetime.now().strftime("%Y%m%d_%H%M%S")}')
 
-    rosbag_node = ExecuteProcess(
+    rosbag_commands_node = ExecuteProcess(
         cmd=[
             'ros2', 'bag', 'record',
             '/metrics/teleop_commands',
-            '--output', bag_path
+            '--output', bag_commands_path
         ],
         output='screen'
     )
+    
     return LaunchDescription([
         video_mode_arg,
         ip_address_arg,
         input_port_arg,
         telemetry_port_arg,
+        rtt_port_arg,
         camera_port_arg,
         input_teleop_decoder_node,
         telemetry_encoder_node,
         video_encoder_node,
         video_encoder_4x_node,
         telemetry_node,
+        rtt_metrics_node,
         control_node,
         safety_gate_node,
         topic_monitor_node,
-        rosbag_node
+        rosbag_commands_node
     ])

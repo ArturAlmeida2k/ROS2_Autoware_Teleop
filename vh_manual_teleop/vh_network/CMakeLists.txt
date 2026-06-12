@@ -69,6 +69,12 @@ install(PROGRAMS
   RENAME telemetry_encoder
 )
 
+install(PROGRAMS                       
+  src/rtt_metrics.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME rtt_metrics
+)
+
 install(PROGRAMS                        
   src/teleop_logger.py
   DESTINATION lib/${PROJECT_NAME}

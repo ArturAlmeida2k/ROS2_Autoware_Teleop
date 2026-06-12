@@ -51,6 +51,14 @@ def generate_launch_description():
     )
     telemetry_port = LaunchConfiguration('telemetry_port')
 
+    rtt_port_arg = DeclareLaunchArgument(
+        'rtt_port', 
+        default_value='5011', 
+        description="Porta UDP para o rtt_metrics"
+    )
+    rtt_port = LaunchConfiguration('rtt_port')
+
+
     camera_port_arg = DeclareLaunchArgument(
         'camera_port', 
         default_value='5007', 
@@ -117,6 +125,14 @@ def generate_launch_description():
         parameters=[{'ip_address': ip_address, 'port': telemetry_port}]
     )
 
+    rtt_metrics_node = Node(
+        package="rs_network",
+        executable='rtt_metrics', 
+        name='rtt_metrics',
+        output='screen',
+        parameters=[{'ip_address': ip_address, 'port': rtt_port}]
+    )
+
     # Nó opcional: video_encoder
     video_decoder_node = Node(
         package='rs_network',
@@ -141,16 +157,28 @@ def generate_launch_description():
     bag_dir = os.path.expanduser('~/bags')
     os.makedirs(bag_dir, exist_ok=True)  
     
-    bag_path = os.path.join(bag_dir, f'sessao_{datetime.now().strftime("%Y%m%d_%H%M%S")}')
+    bag_telemetry_path = os.path.join(bag_dir, f'telemetry/{datetime.now().strftime("%Y%m%d_%H%M%S")}')
 
-    rosbag_node = ExecuteProcess(
+    rosbag_telemetry_node = ExecuteProcess(
         cmd=[
             'ros2', 'bag', 'record',
             '/metrics/telemetry',
-            '--output', bag_path
+            '--output', bag_telemetry_path
         ],
         output='screen'
     )
+
+    bag_rtt_path = os.path.join(bag_dir, f'rtt/{datetime.now().strftime("%Y%m%d_%H%M%S")}')
+
+    rosbag_rtt_node = ExecuteProcess(
+        cmd=[
+            'ros2', 'bag', 'record',
+            '/metrics/rtt',
+            '--output', bag_rtt_path
+        ],
+        output='screen'
+    )
+
 
     return LaunchDescription([
         device_id_arg,
@@ -159,6 +187,7 @@ def generate_launch_description():
         ip_address_arg,
         input_port_arg,
         telemetry_port_arg,
+        rtt_port_arg,
         camera_port_arg,
         joy_node,
         g923_teleop_node,
@@ -166,7 +195,9 @@ def generate_launch_description():
         command_gate_node,
         input_teleop_encoder_node,
         telemetry_decoder_node,
+        rtt_metrics_node,
         video_decoder_node,
         video_decoder_4x_node,
-        rosbag_node
+        rosbag_telemetry_node,
+        rosbag_rtt_node
     ])
