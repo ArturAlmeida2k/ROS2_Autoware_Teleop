@@ -36,7 +36,7 @@ install(PROGRAMS
 install(PROGRAMS
   src/rtt_metrics.py
   DESTINATION lib/${PROJECT_NAME}
-  RENAME pointcloud_decoder
+  RENAME rtt_metrics
 )
 
 install(PROGRAMS
