@@ -9,9 +9,14 @@ find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(OpenCV REQUIRED)
+find_package(cv_bridge REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(msg_manual_teleop REQUIRED)
 find_package(autoware_perception_msgs REQUIRED)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(GSTREAMER REQUIRED gstreamer-1.0 gstreamer-app-1.0 gstreamer-video-1.0)
+
+include_directories(${GSTREAMER_INCLUDE_DIRS})
 
 
 # --- Python nodes ---
@@ -57,7 +62,7 @@ target_link_libraries(video_decoder_cpp
   ${OpenCV_LIBS}
 )
 
-# --- video_decoder_cpp_v2 (publica em /camera/front/compressed) ---
+# --- video_decoder_cpp_v2 ---
 add_executable(video_decoder_cpp_v2
   src/video_decoder_v2.cpp
 )
@@ -71,15 +76,38 @@ target_link_libraries(video_decoder_cpp_v2
 
 
 # --- video_decoder_4x.cpp  ---
-add_executable(video_decoder_4x_cpp
+add_executable(
+  video_decoder_4x_cpp
   src/video_decoder_4x.cpp
 )
-ament_target_dependencies(video_decoder_4x_cpp
+ament_target_dependencies(
+  video_decoder_4x_cpp
   rclcpp
   sensor_msgs
 )
-target_link_libraries(video_decoder_4x_cpp
+target_link_libraries(
+  video_decoder_4x_cpp
   ${OpenCV_LIBS}
+)
+
+
+# --- Nó 4 Câmaras com metadata ---
+add_executable(
+  video_decoder_metadata
+  src/video_decoder_metadata.cpp
+)
+
+ament_target_dependencies(
+  video_decoder_metadata
+  rclcpp 
+  sensor_msgs 
+  cv_bridge
+)
+
+target_link_libraries(
+  video_decoder_metadata
+  ${OpenCV_LIBS}
+  ${GSTREAMER_LIBRARIES}
 )
 
 
@@ -88,6 +116,7 @@ install(TARGETS
   video_decoder_cpp
   video_decoder_cpp_v2
   video_decoder_4x_cpp
+  video_decoder_metadata
   DESTINATION lib/${PROJECT_NAME}
 )
 

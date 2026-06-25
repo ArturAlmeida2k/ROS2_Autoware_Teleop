@@ -8,7 +8,7 @@ class RttEchoer(Node):
     def __init__(self):
         super().__init__('rtt_echoer')
         self.declare_parameter('allowed_ip', '10.0.0.2')
-        self.declare_parameter('port', 5007)
+        self.declare_parameter('port', 5011)
         self.allowed_ip = self.get_parameter('allowed_ip').value
         self.port       = self.get_parameter('port').value
 

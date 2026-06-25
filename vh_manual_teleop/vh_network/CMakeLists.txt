@@ -12,8 +12,12 @@ find_package(sensor_msgs REQUIRED)
 find_package(cv_bridge REQUIRED)
 find_package(msg_manual_teleop REQUIRED)
 find_package(OpenCV REQUIRED)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(GSTREAMER REQUIRED gstreamer-1.0 gstreamer-app-1.0 gstreamer-video-1.0)
 
-# --- Nó Original (1 Câmara) ---
+include_directories(${GSTREAMER_INCLUDE_DIRS})
+
+# --- Nó 1 Câmara ---
 add_executable(
   video_encoder
   src/video_encoder.cpp
@@ -31,7 +35,7 @@ target_link_libraries(
   ${OpenCV_LIBS}
 )
 
-# --- Novo Nó (4 Câmaras) ---
+# --- Nó 4 Câmaras ---
 add_executable(
   video_encoder_4x
   src/video_encoder_4x.cpp
@@ -49,10 +53,31 @@ target_link_libraries(
   ${OpenCV_LIBS}
 )
 
+# --- Nó 4 Câmaras com metadata ---
+add_executable(
+  video_encoder_metadata
+  src/video_encoder_metadata.cpp
+)
+
+ament_target_dependencies(
+  video_encoder_metadata
+  rclcpp 
+  sensor_msgs 
+  cv_bridge
+)
+
+target_link_libraries(
+  video_encoder_metadata
+  ${OpenCV_LIBS}
+  ${GSTREAMER_LIBRARIES}
+)
+
 # --- Instalação de Executáveis C++ ---
+
 install(TARGETS
   video_encoder
   video_encoder_4x
+  video_encoder_metadata
   DESTINATION lib/${PROJECT_NAME}
 )
 

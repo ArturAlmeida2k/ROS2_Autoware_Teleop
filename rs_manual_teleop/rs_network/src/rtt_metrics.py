@@ -18,13 +18,9 @@ class RttProber(Node):
 
         self.pub_rtt = self.create_publisher(NetworkMetrics, '/metrics/rtt', 10)
 
-        # socket de envio
-        self.send_sock_ = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-
-        # socket de receção do echo
-        self.recv_sock_ = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.recv_sock_.bind(('0.0.0.0', self.port))
-        self.recv_sock_.settimeout(0.5)
+        self.sock_ = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.sock_.bind(('0.0.0.0', self.port))
+        self.sock_.settimeout(0.5)
 
         # thread de envio de probes a 10Hz
         threading.Thread(target=self.probe_loop, daemon=True).start()
@@ -42,13 +38,13 @@ class RttProber(Node):
             self.seq_ += 1
 
             data = serialize_message(probe)
-            self.send_sock_.sendto(data, (self.target_ip, self.port))
+            self.sock_.sendto(data, (self.target_ip, self.port))
             time.sleep(0.1)  # 10Hz
 
     def echo_loop(self):
         while rclpy.ok():
             try:
-                data, _ = self.recv_sock_.recvfrom(65535)
+                data, _ = self.sock_.recvfrom(65535)
                 recv_time_s = self.get_clock().now().nanoseconds / 1e9
 
                 probe = deserialize_message(data, NetworkMetrics)
@@ -78,8 +74,7 @@ def main(args=None):
     except KeyboardInterrupt:
         pass
     finally:
-        node.send_sock_.close()
-        node.recv_sock_.close()
+        node.sock_.close()
         node.destroy_node()
         if rclpy.ok():
             rclpy.shutdown()
