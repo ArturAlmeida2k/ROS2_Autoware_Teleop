@@ -58,7 +58,6 @@ target_link_libraries(
 install(TARGETS
   video_encoder
   video_encoder_4x
-  video_encoder_metadata
   DESTINATION lib/${PROJECT_NAME}
 )
 
