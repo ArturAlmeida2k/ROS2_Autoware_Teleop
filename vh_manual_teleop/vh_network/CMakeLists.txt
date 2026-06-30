@@ -53,25 +53,6 @@ target_link_libraries(
   ${OpenCV_LIBS}
 )
 
-# --- Nó 4 Câmaras com metadata ---
-add_executable(
-  video_encoder_metadata
-  src/video_encoder_metadata.cpp
-)
-
-ament_target_dependencies(
-  video_encoder_metadata
-  rclcpp 
-  sensor_msgs 
-  cv_bridge
-)
-
-target_link_libraries(
-  video_encoder_metadata
-  ${OpenCV_LIBS}
-  ${GSTREAMER_LIBRARIES}
-)
-
 # --- Instalação de Executáveis C++ ---
 
 install(TARGETS

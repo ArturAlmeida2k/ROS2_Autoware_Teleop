@@ -146,8 +146,8 @@ def generate_launch_description():
     # Nó opcional: video_encoder_4x
     video_decoder_4x_node = Node(
         package='rs_network',
-        executable='video_decoder_4x',
-        name='video_decoder_4x',
+        executable='video_decoder_4x_cpp',
+        name='video_decoder_4x_cpp',
         output='screen',
         condition=IfCondition(PythonExpression(["'", video_mode, "' == '4x'"])),
         parameters=[{'ip_address': ip_address, 'port': camera_port}]
