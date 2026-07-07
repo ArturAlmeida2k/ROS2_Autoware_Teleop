@@ -20,8 +20,7 @@ public:
         warn_timeout_ms_  = this->get_parameter("warn_timeout_ms").as_double();
         error_timeout_ms_ = this->get_parameter("error_timeout_ms").as_double();
         
-        sub_metrics_ = this->create_subscription<CommandMetrics>(
-            "/metrics/teleop_commands", 10,
+        sub_metrics_ = this->create_subscription<CommandMetrics>("/metrics/network/teleop_command", 10,
             std::bind(&TeleopTopicMonitorNode::metrics_callback, this, std::placeholders::_1));
 
         pub_safety_state_ = this->create_publisher<Int8>("/teleop/safety_state", rclcpp::QoS(1));

@@ -1,202 +1,226 @@
 #include "rclcpp/rclcpp.hpp"
 #include "std_msgs/msg/bool.hpp"
-#include "autoware_control_msgs/msg/control.hpp"
-#include "autoware_vehicle_msgs/msg/gear_command.hpp"
-#include "autoware_vehicle_msgs/msg/turn_indicators_command.hpp"
-#include <autoware_vehicle_msgs/msg/hazard_lights_command.hpp>
-#include "tier4_control_msgs/msg/gate_mode.hpp"
-#include "tier4_external_api_msgs/srv/engage.hpp"
-#include "std_msgs/msg/int8.hpp"
+#include "autoware_vehicle_msgs/msg/velocity_report.hpp"
 #include <algorithm>
+#include <memory>
+#include <cmath>
 
-using Bool     = std_msgs::msg::Bool;
-using GateMode = tier4_control_msgs::msg::GateMode;
-using EngageSrv = tier4_external_api_msgs::srv::Engage;
-using Control = autoware_control_msgs::msg::Control;
-using GearCommand = autoware_vehicle_msgs::msg::GearCommand;
+#include "msg_manual_teleop/msg/teleop_command.hpp"
+#include "msg_manual_teleop/msg/node_metrics.hpp"
+#include <autoware_control_msgs/msg/control.hpp>
+#include <tier4_control_msgs/msg/gate_mode.hpp>
+#include <autoware_vehicle_msgs/msg/gear_command.hpp>
+#include <autoware_vehicle_msgs/msg/turn_indicators_command.hpp>
+#include <autoware_vehicle_msgs/msg/hazard_lights_command.hpp>
+#include <autoware_adapi_v1_msgs/msg/operation_mode_state.hpp>
+#include "tier4_external_api_msgs/srv/engage.hpp"
+
+using Control               = autoware_control_msgs::msg::Control;
+using GateMode              = tier4_control_msgs::msg::GateMode;
+using GearCommand           = autoware_vehicle_msgs::msg::GearCommand;
+using Bool                  = std_msgs::msg::Bool;
+using VelocityReport        = autoware_vehicle_msgs::msg::VelocityReport;
 using TurnIndicatorsCommand = autoware_vehicle_msgs::msg::TurnIndicatorsCommand;
-using HazardLightsCommand = autoware_vehicle_msgs::msg::HazardLightsCommand;
+using HazardLightsCommand   = autoware_vehicle_msgs::msg::HazardLightsCommand;
+using OperationModeState    = autoware_adapi_v1_msgs::msg::OperationModeState;
+using EngageSrv             = tier4_external_api_msgs::srv::Engage;
+using TeleopCommand         = msg_manual_teleop::msg::TeleopCommand;
+using Metrics               = msg_manual_teleop::msg::NodeMetrics;
 
-using Int8 = std_msgs::msg::Int8;
-
-class TeleopSafetyGateNode : public rclcpp::Node {
+class AutowareControllerNode : public rclcpp::Node
+{
 public:
-    // Definição dos estados de segurança
-    static constexpr int8_t STATE_OK = 0;
-    static constexpr int8_t STATE_WARN = 1;
-    static constexpr int8_t STATE_ERROR = 2;
+    AutowareControllerNode() : Node("autoware_controller_node")
+    {
+        // 1. Subscrições
+        // Agora ouve os comandos já validados e filtrados pelo Safety Gate
+        sub_safe_command_ = this->create_subscription<TeleopCommand>(
+            "/teleop/safe_command", 10,
+            std::bind(&AutowareControllerNode::safe_command_callback, this, std::placeholders::_1));
 
-    TeleopSafetyGateNode() : Node("teleop_safety_gate_node") {
-        // Parâmetros de segurança
-        this->declare_parameter<float>("warning_velocity_limit", 2.77f); // ~10 km/h
-        this->declare_parameter<float>("emergency_deceleration", -3.0f); // Travagem a 3 m/s²
-        
-        warning_velocity_limit_ = this->get_parameter("warning_velocity_limit").as_double();
-        emergency_deceleration_ = this->get_parameter("emergency_deceleration").as_double();
+        sub_vlc_current_ = this->create_subscription<VelocityReport>(
+            "/vehicle/status/velocity_status", 10,
+            std::bind(&AutowareControllerNode::vlc_report_callback, this, std::placeholders::_1));
 
-        // Subscrições (Recebem dados do seu AutowareControllerNode)
-        sub_control_cmd_ = this->create_subscription<Control>(
-            "/teleop/internal/control_cmd", 10,
-            std::bind(&TeleopSafetyGateNode::control_cmd_callback, this, std::placeholders::_1));
+        sub_operation_mode_ = this->create_subscription<OperationModeState>(
+            "/system/operation_mode/state", 10,
+            std::bind(&AutowareControllerNode::operation_mode_callback, this, std::placeholders::_1));
 
-        sub_gear_cmd_ = this->create_subscription<GearCommand>(
-            "/teleop/internal/gear_cmd", 10,
-            std::bind(&TeleopSafetyGateNode::gear_cmd_callback, this, std::placeholders::_1));
-
-        sub_turn_indicators_ = this->create_subscription<TurnIndicatorsCommand>(
-            "/teleop/internal/turn_indicators_cmd", 10,
-            std::bind(&TeleopSafetyGateNode::turn_indicators_callback, this, std::placeholders::_1));
-
-        sub_hazard_lights_ = this->create_subscription<HazardLightsCommand>(
-            "/teleop/internal/hazard_lights_cmd", 10,
-            std::bind(&TeleopSafetyGateNode::hazard_lights_callback, this, std::placeholders::_1));    
-
-        sub_engage_cmd_ = this->create_subscription<Bool>(
-            "/teleop/internal/engage_cmd", 10,
-            std::bind(&TeleopSafetyGateNode::engage_cmd_callback, this, std::placeholders::_1));
-
-        sub_gate_mode_ = this->create_subscription<GateMode>(
-            "/teleop/internal/gate_mode_cmd", 10,
-            std::bind(&TeleopSafetyGateNode::gate_mode_callback, this, std::placeholders::_1));
-
-        // Subscrição do estado de segurança (Virá do futuro nó Monitor)
-        sub_safety_state_ = this->create_subscription<Int8>(
-            "/teleop/safety_state", 10,
-            std::bind(&TeleopSafetyGateNode::safety_state_callback, this, std::placeholders::_1));
-
-     
-        // Publicadores (Enviam dados finais para o Autoware)
-        pub_control_cmd_ = this->create_publisher<Control>("/external/selected/control_cmd", rclcpp::QoS(1));
-        pub_gear_cmd_ = this->create_publisher<GearCommand>("/external/selected/gear_cmd", 1);
+        // 2. Publicadores Autoware
+        pub_control_cmd_     = this->create_publisher<Control>("/external/selected/control_cmd", rclcpp::QoS(1));
+        pub_gear_cmd_        = this->create_publisher<GearCommand>("/external/selected/gear_cmd", 1);
         pub_turn_indicators_ = this->create_publisher<TurnIndicatorsCommand>("/external/selected/turn_indicators_cmd", 1);
-        pub_hazard_lights_ = this->create_publisher<HazardLightsCommand>("/external/selected/hazard_lights_cmd", 1);
-        pub_gate_mode_  = this->create_publisher<GateMode>("/control/gate_mode_cmd", rclcpp::QoS(1));
-        client_engage_  = this->create_client<EngageSrv>("/api/autoware/set/engage");
+        pub_hazard_lights_   = this->create_publisher<HazardLightsCommand>("/external/selected/hazard_lights_cmd", 1);
+        pub_gate_mode_       = this->create_publisher<GateMode>("/control/gate_mode_cmd", rclcpp::QoS(1));
+        
+        // 3. Clientes/Serviços Autoware
+        client_engage_       = this->create_client<EngageSrv>("/api/autoware/set/engage");
 
-        safety_timer_ = this->create_wall_timer(
-            std::chrono::milliseconds(100),
-            std::bind(&TeleopSafetyGateNode::safety_timer_callback, this));   
+        // 4. Publicadores de Métricas
+        rclcpp::QoS metrics_qos(10);       
+        metrics_qos.best_effort();    
+        metrics_qos.durability_volatile();
 
-        RCLCPP_INFO(this->get_logger(), "Teleop Safety Gate Node started.");
+        pub_metrics_end_to_end_  = this->create_publisher<Metrics>("/metrics/end_to_end_latency", metrics_qos);
+        pub_metrics_safety_gate_ = this->create_publisher<Metrics>("/metrics/safety_gate", metrics_qos);
+        pub_metrics_control_     = this->create_publisher<Metrics>("/metrics/control", metrics_qos); // Corrigido o tópico
+
+        RCLCPP_INFO(this->get_logger(), "Autoware Controller Node started. (Translation & Metrics mode)");
     }
 
 private:
-    int8_t current_state_ = STATE_ERROR;
-    float warning_velocity_limit_;
-    float emergency_deceleration_;
+    float   vlc_target_            = 0.0f;
+    float   vlc_current_           = 0.0f;
+    float   steering_angle_target_ = 0.0f;
+    float   brake_factor_          = 0.0f;
+    int     gear_change_           = GearCommand::REVERSE;
+    bool    last_engage_cmd_       = false;
+    uint8_t current_mode_          = OperationModeState::UNKNOWN;
 
-    rclcpp::Subscription<Control>::SharedPtr            sub_control_cmd_;
-    rclcpp::Subscription<GearCommand>::SharedPtr        sub_gear_cmd_;
-    rclcpp::Subscription<TurnIndicatorsCommand>::SharedPtr sub_turn_indicators_;
-    rclcpp::Subscription<HazardLightsCommand>::SharedPtr   sub_hazard_lights_;
-    rclcpp::Subscription<Bool>::SharedPtr               sub_engage_cmd_;
-    rclcpp::Subscription<GateMode>::SharedPtr           sub_gate_mode_;
-    rclcpp::Subscription<Int8>::SharedPtr               sub_safety_state_;
+    const double BASE_KP_GAIN = 0.5;
+    const double BRAKE_KP_MAX = 5.0;
+    const double MAX_ACCEL    = 1.0;
+    const double MAX_DECEL    = 5.0;
 
+    rclcpp::Publisher<GateMode>::SharedPtr              pub_gate_mode_;
     rclcpp::Publisher<Control>::SharedPtr               pub_control_cmd_;
     rclcpp::Publisher<GearCommand>::SharedPtr           pub_gear_cmd_;
     rclcpp::Publisher<TurnIndicatorsCommand>::SharedPtr pub_turn_indicators_;
     rclcpp::Publisher<HazardLightsCommand>::SharedPtr   pub_hazard_lights_;
-    rclcpp::Publisher<GateMode>::SharedPtr              pub_gate_mode_;
+    
+    rclcpp::Publisher<Metrics>::SharedPtr               pub_metrics_end_to_end_;
+    rclcpp::Publisher<Metrics>::SharedPtr               pub_metrics_safety_gate_;
+    rclcpp::Publisher<Metrics>::SharedPtr               pub_metrics_control_;
+
+    rclcpp::Subscription<TeleopCommand>::SharedPtr      sub_safe_command_;
+    rclcpp::Subscription<VelocityReport>::SharedPtr     sub_vlc_current_;
+    rclcpp::Subscription<OperationModeState>::SharedPtr sub_operation_mode_;
 
     rclcpp::Client<EngageSrv>::SharedPtr                client_engage_;
-    rclcpp::TimerBase::SharedPtr                        safety_timer_;
 
-    
-    // Atualiza o estado atual com base na mensagem do Monitor
-    void safety_state_callback(const Int8::SharedPtr msg) {
-        current_state_ = msg->data;
+    // Função genérica para aceitar qualquer publicador e os tempos em rclcpp::Time
+    void publish_metric(const rclcpp::Publisher<Metrics>::SharedPtr& pub, uint32_t id, const rclcpp::Time &rx_time, const rclcpp::Time &tx_time)
+    {
+        auto msg = std::make_unique<Metrics>();
+        msg->id = id;
+        msg->tx = tx_time; 
+        msg->rx = rx_time;
+        
+        rclcpp::Duration latency_duration = rx_time - tx_time;
+        msg->latency_ms = latency_duration.seconds() * 1000.0;
+        
+        pub->publish(std::move(msg));
     }
 
-    // Processa os comandos de controlo primário
-    void control_cmd_callback(const Control::SharedPtr msg) {
-        Control out_msg = *msg; // Copia a mensagem original
+    void operation_mode_callback(const OperationModeState::SharedPtr msg)
+    {
+        current_mode_ = msg->mode;
+    }
 
-        switch (current_state_) {
-            case STATE_OK:
-                // Passa o comando sem alterações
-                break;
-            case STATE_WARN:
-                // Limita a velocidade máxima (frente e marcha-atrás)
-                out_msg.longitudinal.velocity = std::clamp(
-                    out_msg.longitudinal.velocity, 
-                    -warning_velocity_limit_, 
-                    warning_velocity_limit_
-                );
-                RCLCPP_WARN_ONCE(this->get_logger(), "Warning state: Limiting velocity.");
-                break;
-            case STATE_ERROR:
-            default:
-                // Força paragem do veículo
-                out_msg.longitudinal.velocity = 0.0;
-                out_msg.longitudinal.acceleration = emergency_deceleration_;
-                out_msg.lateral.steering_tire_angle = 0.0;
-                RCLCPP_ERROR_ONCE(this->get_logger(), "Error state: Stopping vehicle.");
-                break;
+    void vlc_report_callback(const VelocityReport::SharedPtr msg)
+    {
+        vlc_current_ = msg->longitudinal_velocity;
+    }
+
+    void safe_command_callback(const TeleopCommand::SharedPtr msg)
+    {
+        // 1. Regista o momento em que a mensagem entra neste nó
+        auto start_time = this->now();
+
+        // 2. EXTRAÇÃO DE VARIÁVEIS
+        vlc_target_            = msg->target_velocity;
+        steering_angle_target_ = msg->target_steering_angle;
+        brake_factor_          = msg->brake_factor;
+
+        // 3. ENGAGE LOGIC
+        bool engage_cmd = msg->engage_command;
+        if (engage_cmd != last_engage_cmd_) {
+            GateMode gate_msg;
+            gate_msg.data = GateMode::EXTERNAL;
+            pub_gate_mode_->publish(gate_msg);
+
+            if (client_engage_->service_is_ready()) {
+                auto req = std::make_shared<EngageSrv::Request>();
+                req->engage = engage_cmd;
+                client_engage_->async_send_request(req, []([[maybe_unused]] rclcpp::Client<EngageSrv>::SharedFuture) {});
+            }
+            last_engage_cmd_ = engage_cmd;
         }
 
-        // Publica o comando final para o Autoware
-        pub_control_cmd_->publish(out_msg);
-    }
-
-    // Processa mudanças de caixa
-    void gear_cmd_callback(const GearCommand::SharedPtr msg) {
-        if (current_state_ == STATE_OK || current_state_ == STATE_WARN) {
-            pub_gear_cmd_->publish(*msg);
-        }
-    }
-
-    // Processa indicadores de mudança de direção (piscas)
-    void turn_indicators_callback(const TurnIndicatorsCommand::SharedPtr msg) {
-        if (current_state_ == STATE_OK || current_state_ == STATE_WARN) {
-            pub_turn_indicators_->publish(*msg);
-        }
-    }
-
-    void hazard_lights_callback(const HazardLightsCommand::SharedPtr msg){
-        if (current_state_ == STATE_OK || current_state_ == STATE_WARN) {
-            pub_hazard_lights_->publish(*msg);
-        }
-    }
-
-    void safety_timer_callback() {
-        if (current_state_ == STATE_ERROR) {
+        // 4. AUTOWARE TRANSLATION (Se os modos o permitirem)
+        if (current_mode_ == OperationModeState::LOCAL || current_mode_ == OperationModeState::REMOTE) {
+            
+            // --- Sinais luminosos ---
+            TurnIndicatorsCommand turn_cmd;
+            turn_cmd.stamp = start_time;
             HazardLightsCommand hazard_cmd;
-            hazard_cmd.stamp = this->now();
-            hazard_cmd.command = HazardLightsCommand::ENABLE;
+            hazard_cmd.stamp = start_time;
+
+            if (msg->turn_signal == 3 || msg->turn_signal == 4) {
+                turn_cmd.command   = TurnIndicatorsCommand::DISABLE;
+                hazard_cmd.command = HazardLightsCommand::ENABLE;
+            } else {
+                turn_cmd.command   = msg->turn_signal;
+                hazard_cmd.command = HazardLightsCommand::DISABLE;
+            }
+        
+            // --- Mudanças (Gear) ---
+            gear_change_ = msg->gear;
+            GearCommand gear_cmd;
+            gear_cmd.stamp = start_time;
+            switch (gear_change_) {
+                case 0: gear_cmd.command = GearCommand::PARK;    break;
+                case 1: gear_cmd.command = GearCommand::DRIVE;   break;
+                case 2: gear_cmd.command = GearCommand::REVERSE; break;
+            }
+        
+            // --- Controlo de Movimento (Control) ---
+            auto control_cmd = std::make_unique<Control>();
+            control_cmd->stamp = start_time;
+            control_cmd->longitudinal.velocity = vlc_target_;
+
+            double velocity_error   = static_cast<double>(vlc_target_) - std::abs(vlc_current_);
+            double acceleration_cmd = 0.0;
+
+            if (vlc_target_ <= 0.01f && brake_factor_ > 0.01f) {
+                double dynamic_kp = BASE_KP_GAIN + (BRAKE_KP_MAX - BASE_KP_GAIN) * brake_factor_;
+                acceleration_cmd  = std::clamp(dynamic_kp * velocity_error, -MAX_DECEL, 0.0);
+            } else {
+                acceleration_cmd  = std::clamp(BASE_KP_GAIN * velocity_error, -MAX_ACCEL, MAX_ACCEL);
+            }
+
+            if (std::abs(acceleration_cmd)       < 0.0001) acceleration_cmd       = 0.0;
+            if (std::abs(steering_angle_target_) < 0.0001) steering_angle_target_ = 0.0f;
+
+            control_cmd->longitudinal.acceleration   = acceleration_cmd;
+            control_cmd->lateral.steering_tire_angle = steering_angle_target_;
+
+            pub_turn_indicators_->publish(turn_cmd);
             pub_hazard_lights_->publish(hazard_cmd);
-        }
-    }
-
-    void gate_mode_callback(const GateMode::SharedPtr msg) {
-        if (current_state_ != STATE_ERROR) {
-            pub_gate_mode_->publish(*msg);
-        }
-    }
-
-    void engage_cmd_callback(const Bool::SharedPtr msg) {
-        if (current_state_ == STATE_ERROR) {
-            RCLCPP_ERROR(this->get_logger(), "Engage bloqueado: sistema em estado de erro.");
-            return;
+            pub_gear_cmd_->publish(gear_cmd);
+            pub_control_cmd_->publish(std::move(control_cmd));
         }
 
-        if (!client_engage_->service_is_ready()) {
-            RCLCPP_ERROR(this->get_logger(), "Serviço /api/autoware/set/engage indisponível.");
-            return;
-        }
+        // 5. Regista o tempo de conclusão do nó
+        auto end_time = this->now();
 
-        auto req = std::make_shared<EngageSrv::Request>();
-        req->engage = msg->data;
-        client_engage_->async_send_request(
-            req, []([[maybe_unused]] rclcpp::Client<EngageSrv>::SharedFuture) {});
-
-        RCLCPP_INFO(this->get_logger(), "Engage encaminhado: %s", msg->data ? "TRUE" : "FALSE");
+        // 6. PUBLICAÇÃO DAS MÉTRICAS
+        
+        // A) Latência do Salto (Hop): desde a saída do Safety Gate até à entrada neste nó
+        publish_metric(pub_metrics_safety_gate_, msg->id, start_time, rclcpp::Time(msg->header.stamp));
+        
+        // B) Latência de Processamento Interno: o tempo despendido dentro desta função callback
+        publish_metric(pub_metrics_control_, msg->id, end_time, start_time);
+        
+        // C) Latência End-to-End: desde o volante (origin_stamp) até o processamento estar concluído
+        publish_metric(pub_metrics_end_to_end_, msg->id, end_time, rclcpp::Time(msg->origin_stamp));
     }
 };
 
-int main(int argc, char **argv) {
+int main(int argc, char *argv[])
+{
     rclcpp::init(argc, argv);
-    rclcpp::spin(std::make_shared<TeleopSafetyGateNode>());
+    rclcpp::spin(std::make_shared<AutowareControllerNode>());
     rclcpp::shutdown();
     return 0;
 }

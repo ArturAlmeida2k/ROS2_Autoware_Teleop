@@ -1,4 +1,5 @@
 std_msgs/Header header
+builtin_interfaces/Time origin_stamp
 uint32  id
 float32 target_velocity
 float32 brake_factor

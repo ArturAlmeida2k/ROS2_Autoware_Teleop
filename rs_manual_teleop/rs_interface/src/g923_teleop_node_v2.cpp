@@ -57,6 +57,10 @@ private:
   
     void joy_callback(const Joy::SharedPtr msg)
     {
+
+        // Get the time as soon has possible for metrics
+        auto start_time = this->now();
+
         // Check if the joy mensage is complete (it should have 4 axis and 8 buttons)
         if (msg->axes.size() < 6 || msg->buttons.size() < 24) {
             RCLCPP_WARN_ONCE(this->get_logger(), "JOY message incomplete.");
@@ -153,12 +157,10 @@ private:
         // --- 6. PUBLISHING ---  
         auto teleop_msg = std::make_unique<TeleopCommand>();
 
-        teleop_msg->header.stamp = this->now();
+        teleop_msg->header.stamp = start_time;
         teleop_msg->header.frame_id = "g923_teleop";
-
+        teleop_msg->origin_stamp = start_time;
         teleop_msg->id = seq_num_++;
-
-        // Preenchimento dos campos customizados
         teleop_msg->target_velocity = target_vlc;
         teleop_msg->brake_factor = static_cast<float>(normalized_brake);
         teleop_msg->target_steering_angle = target_steering_angle;

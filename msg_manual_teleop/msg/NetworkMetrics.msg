@@ -1,5 +1,5 @@
 uint32  id
-float64 send_time
-float64 receive_time
-float32 latency
+builtin_interfaces/Time tx
+builtin_interfaces/Time rx 
+float64 latency
 int32  lost_pkg

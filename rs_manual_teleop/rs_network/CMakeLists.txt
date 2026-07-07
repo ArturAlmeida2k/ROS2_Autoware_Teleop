@@ -95,7 +95,6 @@ install(TARGETS
   video_decoder_cpp
   video_decoder_cpp_v2
   video_decoder_4x_cpp
-  video_decoder_metadata
   DESTINATION lib/${PROJECT_NAME}
 )
 

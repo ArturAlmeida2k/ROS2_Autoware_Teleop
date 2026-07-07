@@ -3,6 +3,7 @@ import rclpy
 from rclpy.node import Node
 from rclpy.serialization import deserialize_message
 from rclpy.time import Time
+from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy
 import socket
 from msg_manual_teleop.msg import TeleopCommand
 from msg_manual_teleop.msg import NetworkMetrics
@@ -19,8 +20,9 @@ class InputTeleopDecoder(Node):
         self.expected_id_ = None
 
         self.pub_command = self.create_publisher(TeleopCommand, '/teleop/command', 10)
-        self.pub_metrics = self.create_publisher(NetworkMetrics, '/metrics/teleop_commands', 10)
 
+        self.pub_metrics = self.create_publisher(NetworkMetrics, '/metrics/network/teleop_command', 10)
+        
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.bind(('0.0.0.0', self.port))
         self.sock.setblocking(False)
@@ -29,6 +31,28 @@ class InputTeleopDecoder(Node):
 
         self.get_logger().info(f"Command Decoder → {self.port} from {self.allowed_ip}")
 
+    def publish_metrics(self, msg_id, rx_time_msg, tx_time_msg):
+        metrics_msg = NetworkMetrics()
+        metrics_msg.id = msg_id
+
+        metrics_msg.tx = tx_time_msg
+        metrics_msg.rx = rx_time_msg
+
+        tx_time = Time.from_msg(tx_time_msg)
+        rx_time = Time.from_msg(rx_time_msg)
+        latency= rx_time - tx_time
+        metrics_msg.latency_ms = latency.nanoseconds / 1000000.0
+
+        lost = 0
+        if self.expected_id_ is not None and msg_id != self.expected_id_:
+            lost = int(msg_id - self.expected_id_)
+
+        self.expected_id_ = msg_id + 1
+        metrics_msg.lost_pkg = lost
+        
+        # 4. Publicar métricas
+        self.pub_metrics.publish(metrics_msg)
+
     def receive_packet(self):
         while True:
             try:
@@ -36,32 +60,19 @@ class InputTeleopDecoder(Node):
 
                 if addr[0] != self.allowed_ip:
                     continue
+                
+                start_time = self.get_clock().now().to_msg()
 
-                recv_time = self.get_clock().now()
                 msg = deserialize_message(data, TeleopCommand)
+
+                incoming_stamp = msg.header.stamp
+
+                msg.header.stamp = start_time
 
                 self.pub_command.publish(msg)
 
-                send_time = Time.from_msg(msg.header.stamp)
-                send_time_s  = send_time.nanoseconds / 1e9
-                recv_time_s  = recv_time.nanoseconds / 1e9
-                latency_ms   = (recv_time_s - send_time_s) * 1e3
-
-                lost = 0
-                if self.expected_id_ is not None and msg.id != self.expected_id_:
-                    lost = int(msg.id - self.expected_id_)
-
-                self.expected_id_ = msg.id + 1
-
-                metrics_msg = NetworkMetrics()
-                metrics_msg.id           = msg.id
-                metrics_msg.send_time    = float(send_time_s)
-                metrics_msg.receive_time = float(recv_time_s)
-                metrics_msg.latency      = float(latency_ms)
-                metrics_msg.lost_pkg     = lost
-
-                self.pub_metrics.publish(metrics_msg)
-
+                self.publish_metrics(msg.id, start_time, incoming_stamp)
+                
             except BlockingIOError:
                 break
             except Exception as e:

@@ -93,6 +93,8 @@ private:
 
     void joy_callback(const Joy::SharedPtr msg)
     {
+        auto start_time = this->now();
+
         // O comando Xbox necessita de pelo menos 8 eixos e 8 botões
         if (msg->axes.size() < 8 || msg->buttons.size() < 8) {
             RCLCPP_WARN_ONCE(this->get_logger(),
@@ -178,17 +180,16 @@ private:
         // ── 6. PUBLICAÇÃO ──────────────────────────────────────────────────────
         auto teleop_msg = std::make_unique<TeleopCommand>();
 
-        teleop_msg->header.stamp    = this->now();
+        teleop_msg->header.stamp = start_time;
         teleop_msg->header.frame_id = "xbox_teleop";
-
+        teleop_msg->origin_stamp = start_time;
         teleop_msg->id = seq_num_++;
-
-        teleop_msg->target_velocity      = target_vlc;
-        teleop_msg->brake_factor         = static_cast<float>(normalized_brake);
+        teleop_msg->target_velocity = target_vlc;
+        teleop_msg->brake_factor = static_cast<float>(normalized_brake);
         teleop_msg->target_steering_angle = target_steering_angle;
-        teleop_msg->engage_command       = change_engage_state;
-        teleop_msg->gear                 = new_gear;
-        teleop_msg->turn_signal          = turn_signal;
+        teleop_msg->engage_command = change_engage_state;
+        teleop_msg->gear = new_gear;
+        teleop_msg->turn_signal = turn_signal;
 
         pub_filtered_command_->publish(std::move(teleop_msg));
     }

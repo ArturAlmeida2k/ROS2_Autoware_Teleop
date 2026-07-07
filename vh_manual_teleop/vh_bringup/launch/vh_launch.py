@@ -133,12 +133,16 @@ def generate_launch_description():
     bag_dir = os.path.expanduser('~/bags')
     os.makedirs(bag_dir, exist_ok=True)  
     
-    bag_commands_path = os.path.join(bag_dir, f'commands/{datetime.now().strftime("%Y%m%d_%H%M%S")}')
+    bag_commands_path = os.path.join(bag_dir, f'metrics/{datetime.now().strftime("%Y%m%d_%H%M%S")}')
 
-    rosbag_commands_node = ExecuteProcess(
+    rosbag_metrics_node = ExecuteProcess(
         cmd=[
             'ros2', 'bag', 'record',
-            '/metrics/teleop_commands',
+            '/metrics/network/teleop_commands',
+            '/metrics/command_decoder',
+            '/metrics/safety_gate',
+            '/metrics/control',
+            '/metrics/end_to_end_latency',
             '--output', bag_commands_path
         ],
         output='screen'
@@ -160,5 +164,5 @@ def generate_launch_description():
         control_node,
         safety_gate_node,
         topic_monitor_node,
-        rosbag_commands_node
+        rosbag_metrics_node
     ])

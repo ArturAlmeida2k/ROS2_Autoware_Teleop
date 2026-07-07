@@ -4,9 +4,11 @@
 
 #include "msg_manual_teleop/msg/teleop_command.hpp"
 #include "msg_manual_teleop/msg/telemetry_state.hpp" 
+#include "msg_manual_teleop/msg/node_metrics.hpp" 
 
 using TeleopCommand = msg_manual_teleop::msg::TeleopCommand;
 using Telemetry = msg_manual_teleop::msg::TelemetryState;
+using Metrics = msg_manual_teleop::msg::NodeMetrics;
 using namespace std::chrono_literals; 
 
 class ComandGate : public rclcpp::Node
@@ -16,6 +18,12 @@ public:
     {
         // --- 1. Publishers ---
         pub_final_command_ = this->create_publisher<TeleopCommand>("/teleop/command", 10);
+
+        // For metrics
+        rclcpp::QoS metrics_qos(10);       
+        metrics_qos.best_effort();    
+        metrics_qos.durability_volatile();
+        pub_metrics_ = this->create_publisher<Metrics>("/metrics/g923", metrics_qos);
 
         // --- 2. Subscribers ---
         sub_filtered_command_ = this->create_subscription<TeleopCommand>(
@@ -84,6 +92,7 @@ private:
     rclcpp::Subscription<TeleopCommand>::SharedPtr sub_filtered_command_;
     rclcpp::Subscription<Telemetry>::SharedPtr sub_telemetry_;
     rclcpp::Publisher<TeleopCommand>::SharedPtr pub_final_command_;
+    rclcpp::Publisher<Metrics>::SharedPtr pub_metrics_;
     rclcpp::TimerBase::SharedPtr telemetry_watchdog_;
 
     // --- Callback do Watchdog (Perda de Telemetria) ---
@@ -110,15 +119,33 @@ private:
         }
     }
 
+    void publish_metrics(uint32_t id, const rclcpp::Time &rx_time, const builtin_interfaces::msg::Time &tx_msg_time)
+    {
+        rclcpp::Time tx_time(tx_msg_time);
+
+        auto msg = std::make_unique<Metrics>();
+        msg->id = id;
+        msg->tx = tx_time;
+        msg->rx = rx_time;
+        
+        rclcpp::Duration latency = rx_time - tx_time;
+
+        msg->latency_ms = latency.seconds() * 1000.0;
+
+        pub_metrics_->publish(std::move(msg));
+
+    }
 
     // --- Callback Principal de Comandos ---
     void filtered_command_callback(const TeleopCommand::SharedPtr msg)
     {
+        auto start_time = this->now();
+
         auto final_msg = std::make_unique<TeleopCommand>();
 
-        final_msg->header.stamp = msg->header.stamp; 
+        final_msg->header.stamp = start_time; 
         final_msg->header.frame_id = "comand_gate";  
-
+        final_msg->origin_stamp = msg->origin_stamp;
         final_msg->id = msg->id;
 
         // Se não houver telemetria ativa, nem sequer deixamos o Engage funcionar
@@ -131,7 +158,9 @@ private:
             final_msg->turn_signal = 1;
             
             pub_final_command_->publish(std::move(final_msg));
-            return; // Sai imediatamente da função
+            publish_metrics(msg->id, start_time, msg->header.stamp);
+
+            return; 
         }
 
         // -------------------------------------------------------------
@@ -215,6 +244,11 @@ private:
         // 4. PUBLICAÇÃO
         // -------------------------------------------------------------
         pub_final_command_->publish(std::move(final_msg));
+
+
+        // Metrics
+        publish_metrics(msg->id, start_time, msg->header.stamp);
+
     }
 };
 
