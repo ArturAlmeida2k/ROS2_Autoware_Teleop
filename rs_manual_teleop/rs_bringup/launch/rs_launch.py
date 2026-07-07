@@ -173,7 +173,6 @@ def generate_launch_description():
         output='screen'
     )
 
-
     return LaunchDescription([
         device_id_arg,
         use_xbox_arg,
