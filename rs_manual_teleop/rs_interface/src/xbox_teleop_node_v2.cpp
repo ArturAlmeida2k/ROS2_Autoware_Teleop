@@ -54,7 +54,7 @@ public:
         pub_filtered_command_ = this->create_publisher<TeleopCommand>("/teleop/filtered_command", 10);
 
         sub_joy_ = this->create_subscription<Joy>(
-            "/joy", 10,
+            "/joy_throttled", 10,
             std::bind(&XboxTeleopNode::joy_callback, this, std::placeholders::_1));
 
         RCLCPP_INFO(this->get_logger(),

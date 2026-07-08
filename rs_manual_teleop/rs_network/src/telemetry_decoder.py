@@ -28,6 +28,28 @@ class TelemetryDecoder(Node):
 
         self.get_logger().info(f"Telemetry Decoder → {self.port} from {self.allowed_ip}")
 
+    def publish_metrics(self, msg_id, rx_time_msg, tx_time_msg):
+        metrics_msg = NetworkMetrics()
+        metrics_msg.id = msg_id
+
+        metrics_msg.tx = tx_time_msg
+        metrics_msg.rx = rx_time_msg
+
+        tx_time = Time.from_msg(tx_time_msg)
+        rx_time = Time.from_msg(rx_time_msg)
+        latency= rx_time - tx_time
+        metrics_msg.latency_ms = latency.nanoseconds / 1000000.0
+
+        lost = 0
+        if self.expected_id_ is not None and msg_id != self.expected_id_:
+            lost = int(msg_id - self.expected_id_)
+
+        self.expected_id_ = msg_id + 1
+        metrics_msg.lost_pkg = lost
+        
+        # 4. Publicar métricas
+        self.pub_metrics.publish(metrics_msg)
+
     def receive_packet(self):
         while True:
             try:
@@ -35,35 +57,19 @@ class TelemetryDecoder(Node):
 
                 if addr[0] != self.allowed_ip:
                     continue
+                
+                start_time = self.get_clock().now().to_msg()
 
-                recv_time = self.get_clock().now()
                 msg = deserialize_message(data, TelemetryState)
+
+                incoming_stamp = msg.header.stamp
+
+                msg.header.stamp = start_time
 
                 self.pub_telemetry.publish(msg)
 
-                send_time = Time.from_msg(msg.header.stamp)
-                send_time_s  = send_time.nanoseconds / 1e9
-                recv_time_s  = recv_time.nanoseconds / 1e9
-                latency_ms   = (recv_time_s - send_time_s) * 1e3
+                self.publish_metrics(msg.id, start_time, incoming_stamp)
 
-                lost = 0
-                if self.expected_id_ is not None and msg.id != self.expected_id_:
-                    diff = int(msg.id - self.expected_id_)
-                    if diff > 0:
-                        lost = diff                  # pacotes genuinamente perdidos
-                        self.expected_id_ = msg.id + 1   # ← só atualiza se id é superior
-                    # se diff < 0 → pacote atrasado, ignora e não atualiza expected
-                else:
-                    self.expected_id_ = msg.id + 1   # ← caso normal
-                    
-                metrics_msg = NetworkMetrics()
-                metrics_msg.id           = msg.id
-                metrics_msg.send_time    = float(send_time_s)
-                metrics_msg.receive_time = float(recv_time_s)
-                metrics_msg.latency      = float(latency_ms)
-                metrics_msg.lost_pkg     = lost
-
-                self.pub_metrics.publish(metrics_msg)
 
             except BlockingIOError:
                 break

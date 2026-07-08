@@ -70,7 +70,7 @@ def generate_launch_description():
     device_id_config = LaunchConfiguration('device_id')
     use_xbox_config = LaunchConfiguration('use_xbox')
     
-    # 1. Nó do Sistema: Leitura do Joystick
+    # 1. Nó do Sistema: Leitura do Joystick com throttle para 50hz
     joy_node = Node(
         package='joy',
         executable='joy_node',
@@ -79,9 +79,15 @@ def generate_launch_description():
         parameters=[
             {'deadzone': 0.001},
             {'autorepeat_rate': 50.0},
-            {'coalesce_interval': 0.01},
             {'device_id': device_id_config}
         ] 
+    )
+
+    throttle_node = Node(
+        package='topic_tools',
+        executable='throttle',
+        name='joy_throttle',
+        arguments=['messages', '/joy', '60.0', '/joy_throttled']
     )
 
     # 2a. Nó de Mapeamento: Logitech G923 (Ativo se use_xbox for false)
@@ -183,6 +189,7 @@ def generate_launch_description():
         rtt_port_arg,
         camera_port_arg,
         joy_node,
+        throttle_node,
         g923_teleop_node,
         xbox_teleop_node,
         command_gate_node,

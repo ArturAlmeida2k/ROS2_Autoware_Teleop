@@ -47,7 +47,7 @@ private:
     
 
     void metrics_callback(const CommandMetrics::SharedPtr msg) {
-        latest_latency_ms_ = msg->latency; 
+        latest_latency_ms_ = msg->latency_ms; 
         last_msg_time_ = this->now();
     }
 
