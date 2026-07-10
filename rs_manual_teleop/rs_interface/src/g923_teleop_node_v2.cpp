@@ -18,7 +18,7 @@ public:
 
         // Sub to the Joystick
         sub_joy_ = this->create_subscription<Joy>(
-            "/joy", 10, 
+            "/joy_throttled", 10, 
             std::bind(&G923TeleopNode::joy_callback, this, std::placeholders::_1));
 
         RCLCPP_INFO(this->get_logger(), "Nó G923 Teleop iniciado. Mapeamento de controlo ativo. Publicando em /teleop/filtered_command.");

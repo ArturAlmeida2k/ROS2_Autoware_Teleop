@@ -3,6 +3,7 @@ import rclpy
 from rclpy.node import Node
 from rclpy.serialization import deserialize_message
 from rclpy.time import Time
+from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy
 import socket
 from msg_manual_teleop.msg import TelemetryState
 from msg_manual_teleop.msg import NetworkMetrics
@@ -12,13 +13,21 @@ class TelemetryDecoder(Node):
         super().__init__('telemetry_decoder')
         self.declare_parameter('ip_address', '10.0.0.1')
         self.declare_parameter('port', 5006)
+        
         self.allowed_ip = self.get_parameter('ip_address').value
         self.port = self.get_parameter('port').value
 
         self.expected_id_ = None
 
         self.pub_telemetry = self.create_publisher(TelemetryState, '/telemetry/state', 10)
-        self.pub_metrics = self.create_publisher(NetworkMetrics, '/metrics/telemetry', 10)
+
+        metrics_qos = QoSProfile(
+            depth=10,
+            reliability=ReliabilityPolicy.BEST_EFFORT,
+            durability=DurabilityPolicy.VOLATILE
+        )
+
+        self.pub_metrics = self.create_publisher(NetworkMetrics, '/metrics/network/telemetry', metrics_qos)
 
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.bind(('0.0.0.0', self.port))
@@ -69,7 +78,6 @@ class TelemetryDecoder(Node):
                 self.pub_telemetry.publish(msg)
 
                 self.publish_metrics(msg.id, start_time, incoming_stamp)
-
 
             except BlockingIOError:
                 break

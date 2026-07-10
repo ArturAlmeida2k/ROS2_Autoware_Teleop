@@ -21,7 +21,13 @@ class InputTeleopDecoder(Node):
 
         self.pub_command = self.create_publisher(TeleopCommand, '/teleop/command', 10)
 
-        self.pub_metrics = self.create_publisher(NetworkMetrics, '/metrics/network/teleop_commands', 10)
+        metrics_qos = QoSProfile(
+            depth=10,
+            reliability=ReliabilityPolicy.BEST_EFFORT,
+            durability=DurabilityPolicy.VOLATILE
+        )
+
+        self.pub_metrics = self.create_publisher(NetworkMetrics, '/metrics/network/teleop_commands', metrics_qos)
         
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.bind(('0.0.0.0', self.port))

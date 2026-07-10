@@ -106,8 +106,9 @@ private:
         msg->tx = tx_time; 
         msg->rx = rx_time;
         
-        rclcpp::Duration latency_duration = rx_time - tx_time;
-        msg->latency_ms = latency_duration.seconds() * 1000.0;
+        rclcpp::Duration latency = rx_time - tx_time;
+        
+        msg->latency_ms = latency.seconds() * 1000.0;
         
         pub->publish(std::move(msg));
     }

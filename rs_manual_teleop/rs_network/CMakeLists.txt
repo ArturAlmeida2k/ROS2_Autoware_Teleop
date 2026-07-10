@@ -27,12 +27,6 @@ install(PROGRAMS
 )
 
 install(PROGRAMS
-  src/input_teleop_encoder_v2.py
-  DESTINATION lib/${PROJECT_NAME}
-  RENAME input_teleop_encoder_v2
-)
-
-install(PROGRAMS
   src/telemetry_decoder.py
   DESTINATION lib/${PROJECT_NAME}
   RENAME telemetry_decoder

@@ -118,8 +118,8 @@ def generate_launch_description():
 
     input_teleop_encoder_node = Node(
         package="rs_network",
-        executable='input_teleop_encoder_v2', 
-        name='input_teleop_encoder_v2',
+        executable='input_teleop_encoder', 
+        name='input_teleop_encoder',
         output='screen',
         parameters=[{'ip_address': ip_address, 'port': input_port}]
     )
@@ -174,6 +174,11 @@ def generate_launch_description():
             '/metrics/rtt',
             '/metrics/g923',
             '/metrics/command_gate',
+            '/metrics/network/telemetry',
+            '/metrics/telemetry_decoder',
+            '/metrics/telemetry_gui',
+            '/metrics/e2e_telemetry_latency_ms',
+            '/metrics/front_camera',
             '--output', bag_metrics_path
         ],
         output='screen'

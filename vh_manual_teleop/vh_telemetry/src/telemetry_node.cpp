@@ -9,6 +9,8 @@
 #include "autoware_adapi_v1_msgs/msg/operation_mode_state.hpp"
 
 #include "msg_manual_teleop/msg/telemetry_state.hpp"
+#include "msg_manual_teleop/msg/node_metrics.hpp"
+
 
 using VelocityReport       = autoware_vehicle_msgs::msg::VelocityReport;
 using GearReport           = autoware_vehicle_msgs::msg::GearReport;
@@ -16,6 +18,7 @@ using TurnIndicatorsReport = autoware_vehicle_msgs::msg::TurnIndicatorsReport;
 using HazardLightsReport   = autoware_vehicle_msgs::msg::HazardLightsReport;
 using OperationModeState   = autoware_adapi_v1_msgs::msg::OperationModeState;
 using TelemetryState       = msg_manual_teleop::msg::TelemetryState;
+using Metrics              = msg_manual_teleop::msg::NodeMetrics;
 
 class TelemetrySubscriber : public rclcpp::Node {
 public:
@@ -53,6 +56,13 @@ public:
                 state_.hazard = msg->report;
             });
 
+        sub_latency_ = create_subscription<Metrics>(
+            "/metrics/end_to_end_latency", 10,
+            [this](const Metrics::SharedPtr msg){
+                state_.end_2_end_latency_ms = msg->latency_ms;
+            }
+        )
+
         // Publica a 50Hz com o estado mais recente de todos os campos
         timer_ = create_wall_timer(
             std::chrono::milliseconds(20),
@@ -62,12 +72,13 @@ public:
 
 private:
     TelemetryState state_{};
-    rclcpp::Publisher<TelemetryState>::SharedPtr pub_telemetry_;
+    rclcpp::Publisher<TelemetryState>::SharedPtr          pub_telemetry_;
     rclcpp::Subscription<VelocityReport>::SharedPtr       sub_velocity_;
     rclcpp::Subscription<GearReport>::SharedPtr           sub_gear_;
     rclcpp::Subscription<OperationModeState>::SharedPtr   sub_operation_mode_;
     rclcpp::Subscription<TurnIndicatorsReport>::SharedPtr sub_turn_indicators_;
     rclcpp::Subscription<HazardLightsReport>::SharedPtr   sub_hazard_lights_;
+    rclcpp::Subscription<Metrics>::SharedPtr              sub_latency_;
     rclcpp::TimerBase::SharedPtr timer_;
 
     uint32_t seq_num_ = 1;  
@@ -75,6 +86,7 @@ private:
     void publish_and_log() {
         state_.header.stamp    = this->now();
         state_.header.frame_id = "telemetry_node";
+        state_.origin_stamp    = state_.header.stamp;
         state_.id              = seq_num_++;
         pub_telemetry_->publish(state_);
     }

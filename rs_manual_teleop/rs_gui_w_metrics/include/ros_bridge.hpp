@@ -1,0 +1,55 @@
+#pragma once
+#include <QObject>
+#include <rclcpp/rclcpp.hpp>
+#include <sensor_msgs/msg/compressed_image.hpp>
+#include <sensor_msgs/msg/point_cloud2.hpp>
+#include <std_msgs/msg/float64.hpp>
+#include <msg_manual_teleop/msg/telemetry_state.hpp>
+#include <msg_manual_teleop/msg/node_metrics.hpp>
+#include <thread>
+
+
+using PointCloud2 = sensor_msgs::msg::PointCloud2;
+using CompressedImage = sensor_msgs::msg::CompressedImage;
+using TelemetryState  = msg_manual_teleop::msg::TelemetryState;
+using Metrics = msg_manual_teleop::msg::NodeMetrics;
+using Float64 = std_msgs::msg::Float64;
+
+class RosBridge : public QObject, public rclcpp::Node {
+    Q_OBJECT
+public:
+    explicit RosBridge(QObject* parent = nullptr);
+    void spin();
+    void stop();
+
+    void publishTelemetryGuiMetrics(uint32_t id, double original_e2e, int64_t rx_time_ns, int64_t display_time_ns);
+    void publishFrontCameraMetrics(int64_t rx_time_ns, int64_t display_time_ns);
+
+    signals:
+    void telemetryReceived(TelemetryState msg, int64_t receive_time_ns);
+    void imageFrontReceived(CompressedImage::SharedPtr msg, int64_t receive_time_ns);
+
+    void pointCloudReceived(PointCloud2::SharedPtr msg);
+    void imageLeftReceived(CompressedImage::SharedPtr msg);
+    void imageRightReceived(CompressedImage::SharedPtr msg);
+    void imageBackReceived(CompressedImage::SharedPtr msg); 
+private:
+    rclcpp::Subscription<TelemetryState>::SharedPtr   sub_telemetry_;
+
+    rclcpp::Subscription<PointCloud2>::SharedPtr      sub_pointcloud_;
+    
+    rclcpp::Subscription<CompressedImage>::SharedPtr  sub_front_;
+    rclcpp::Subscription<CompressedImage>::SharedPtr  sub_left_;
+    rclcpp::Subscription<CompressedImage>::SharedPtr  sub_right_;
+    rclcpp::Subscription<CompressedImage>::SharedPtr  sub_back_;
+
+    rclcpp::Publisher<Metrics>::SharedPtr pub_telemetry_decoder_;
+    rclcpp::Publisher<Metrics>::SharedPtr pub_telemetry_gui_;
+    rclcpp::Publisher<Float64>::SharedPtr pub_e2e_telemetry_;
+    rclcpp::Publisher<Metrics>::SharedPtr pub_front_camera_;    
+
+    rclcpp::executors::SingleThreadedExecutor         executor_;
+    std::thread                                       spin_thread_;
+
+    void publish_metric(const rclcpp::Publisher<Metrics>::SharedPtr& pub, uint32_t id, const rclcpp::Time &rx_time, const rclcpp::Time &tx_time);
+};
