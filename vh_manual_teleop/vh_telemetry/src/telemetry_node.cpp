@@ -57,17 +57,17 @@ public:
             });
 
         sub_latency_ = create_subscription<Metrics>(
-            "/metrics/end_to_end_latency", 10,
+            "/metrics/e2e_command_latency", 10,
             [this](const Metrics::SharedPtr msg){
-                state_.end_2_end_latency_ms = msg->latency_ms;
-            }
-        )
+                state_.e2e_command_ms = msg->latency_ms;
+            });
 
         // Publica a 50Hz com o estado mais recente de todos os campos
         timer_ = create_wall_timer(
             std::chrono::milliseconds(20),
-            [this]() { publish_and_log(); }
-        );
+            [this]() { 
+                publish_and_log(); 
+            });
     }
 
 private:

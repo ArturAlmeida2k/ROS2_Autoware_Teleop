@@ -61,9 +61,9 @@ public:
         metrics_qos.best_effort();    
         metrics_qos.durability_volatile();
 
-        pub_metrics_end_to_end_  = this->create_publisher<Metrics>("/metrics/end_to_end_latency", metrics_qos);
+        pub_metrics_end_to_end_  = this->create_publisher<Metrics>("/metrics/e2e_command_latency", 10);
         pub_metrics_safety_gate_ = this->create_publisher<Metrics>("/metrics/safety_gate", metrics_qos);
-        pub_metrics_control_     = this->create_publisher<Metrics>("/metrics/control", metrics_qos); // Corrigido o tópico
+        pub_metrics_control_     = this->create_publisher<Metrics>("/metrics/control", metrics_qos); 
 
         RCLCPP_INFO(this->get_logger(), "Autoware Controller Node started. (Translation & Metrics mode)");
     }
