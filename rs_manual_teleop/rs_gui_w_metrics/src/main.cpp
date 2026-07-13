@@ -12,6 +12,8 @@ int main(int argc, char* argv[])
     rclcpp::init(argc, argv);
     QApplication app(argc, argv);
 
+    qRegisterMetaType<int64_t>("int64_t");
+
     // Registos para o Qt::QueuedConnection
     qRegisterMetaType<TelemetryState>("TelemetryState");
     qRegisterMetaType<CompressedImage::SharedPtr>("CompressedImage::SharedPtr");

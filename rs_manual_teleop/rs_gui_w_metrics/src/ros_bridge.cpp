@@ -77,9 +77,9 @@ void RosBridge::publish_metric(const rclcpp::Publisher<Metrics>::SharedPtr& pub,
 // Tópicos 2 e 3 (Telemetria GUI e End-to-End)
 void RosBridge::publishTelemetryGuiMetrics(uint32_t id, const builtin_interfaces::msg::Time &origin_stamp, double e2e_command_ms, int64_t rx_time_ns, int64_t display_time_ns)
 {
-    rclcpp::Time rx_time(rx_time_ns);
-    rclcpp::Time display_time(display_time_ns);
-    rclcpp::Time origin_time(origin_stamp);
+    rclcpp::Time rx_time(rx_time_ns, RCL_ROS_TIME);
+    rclcpp::Time display_time(display_time_ns, RCL_ROS_TIME);
+    rclcpp::Time origin_time(origin_stamp, RCL_ROS_TIME);
 
     // Tópico 2: Latência apenas da interface (Display - Rx)
     publish_metric(pub_telemetry_gui_, id, display_time, rx_time);
@@ -104,8 +104,10 @@ void RosBridge::publishTelemetryGuiMetrics(uint32_t id, const builtin_interfaces
 // Tópico 5 (Câmara Frontal)
 void RosBridge::publishFrontCameraMetrics(int64_t rx_time_ns, int64_t display_time_ns)
 {
-    // Como a imagem comprimida nativa não tem campo ID adaptado na frame_id para int, usa 0
-    publish_metric(pub_front_camera_, 0, rclcpp::Time(display_time_ns), rclcpp::Time(rx_time_ns));
+    rclcpp::Time rx_time(rx_time_ns, RCL_ROS_TIME);
+    rclcpp::Time display_time(display_time_ns, RCL_ROS_TIME);
+
+    publish_metric(pub_front_camera_, 0, display_time, rx_time);
 }
 
 void RosBridge::spin()

@@ -177,7 +177,8 @@ def generate_launch_description():
             '/metrics/network/telemetry',
             '/metrics/telemetry_decoder',
             '/metrics/telemetry_gui',
-            '/metrics/e2e_telemetry_latency_ms',
+            '/metrics/e2e_telemetry_latency',
+            '/metrics/full_latency',
             '/metrics/front_camera',
             '--output', bag_metrics_path
         ],
@@ -200,7 +201,7 @@ def generate_launch_description():
         command_gate_node,
         input_teleop_encoder_node,
         telemetry_decoder_node,
-        rtt_metrics_node,
+        #rtt_metrics_node,
         video_decoder_node,
         video_decoder_4x_node,
         rosbag_metrics_node
