@@ -13,7 +13,6 @@ using PointCloud2 = sensor_msgs::msg::PointCloud2;
 using CompressedImage = sensor_msgs::msg::CompressedImage;
 using TelemetryState  = msg_manual_teleop::msg::TelemetryState;
 using Metrics = msg_manual_teleop::msg::NodeMetrics;
-using Float64 = std_msgs::msg::Float64;
 
 class RosBridge : public QObject, public rclcpp::Node {
     Q_OBJECT
@@ -45,8 +44,9 @@ private:
 
     rclcpp::Publisher<Metrics>::SharedPtr pub_telemetry_decoder_;
     rclcpp::Publisher<Metrics>::SharedPtr pub_telemetry_gui_;
-    rclcpp::Publisher<Float64>::SharedPtr pub_e2e_telemetry_;
-    rclcpp::Publisher<Metrics>::SharedPtr pub_front_camera_;    
+    rclcpp::Publisher<Metrics>::SharedPtr pub_e2e_telemetry_;
+    rclcpp::Publisher<Metrics>::SharedPtr pub_full_latency_;    
+    rclcpp::Publisher<Metrics>::SharedPtr pub_front_camera_;
 
     rclcpp::executors::SingleThreadedExecutor         executor_;
     std::thread                                       spin_thread_;

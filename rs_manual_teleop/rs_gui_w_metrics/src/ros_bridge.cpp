@@ -8,11 +8,11 @@ RosBridge::RosBridge(QObject* parent)
     metrics_qos.durability_volatile();
 
     pub_telemetry_decoder_ = this->create_publisher<Metrics>("/metrics/telemetry_decoder", metrics_qos);
-    pub_telemetry_gui_ = this->create_publisher<Metrics>("/metrics/telemetry_gui", metrics_qos);
-    pub_e2e_telemetry_ = this->create_publisher<Metrics>("/metrics/e2e_telemetry_latency", metrics_qos);
-    pub_full_latency_ = this->create_publisher<Metrics>("/metrics/full_latency", metrics_qos);
-    pub_front_camera_ = this->create_publisher<Metrics>("/metrics/front_camera", metrics_qos);
-
+    pub_telemetry_gui_     = this->create_publisher<Metrics>("/metrics/telemetry_gui", metrics_qos);
+    pub_e2e_telemetry_     = this->create_publisher<Metrics>("/metrics/e2e_telemetry_latency", metrics_qos);
+    pub_full_latency_      = this->create_publisher<Metrics>("/metrics/full_latency", metrics_qos);
+    pub_front_camera_      = this->create_publisher<Metrics>("/metrics/front_camera", metrics_qos);
+    
     sub_telemetry_ = create_subscription<TelemetryState>(
         "/telemetry/state", 10,
         [this](const TelemetryState::SharedPtr msg) {
