@@ -3,7 +3,6 @@
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/compressed_image.hpp>
 #include <sensor_msgs/msg/point_cloud2.hpp>
-#include <std_msgs/msg/float64.hpp>
 #include <msg_manual_teleop/msg/telemetry_state.hpp>
 #include <msg_manual_teleop/msg/node_metrics.hpp>
 #include <thread>
@@ -21,7 +20,7 @@ public:
     void spin();
     void stop();
 
-    void publishTelemetryGuiMetrics(uint32_t id, double original_e2e, int64_t rx_time_ns, int64_t display_time_ns);
+    void publishTelemetryGuiMetrics(uint32_t id, const builtin_interfaces::msg::Time &origin_stamp, double e2e_command, int64_t rx_time_ns, int64_t display_time_ns);
     void publishFrontCameraMetrics(int64_t rx_time_ns, int64_t display_time_ns);
 
     signals:

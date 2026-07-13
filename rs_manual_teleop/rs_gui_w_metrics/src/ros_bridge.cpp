@@ -75,22 +75,33 @@ void RosBridge::publish_metric(const rclcpp::Publisher<Metrics>::SharedPtr& pub,
 }
 
 // Tópicos 2 e 3 (Telemetria GUI e End-to-End)
-void RosBridge::publishTelemetryGuiMetrics(uint32_t id, double original_e2e, int64_t rx_time_ns, int64_t display_time_ns)
+void RosBridge::publishTelemetryGuiMetrics(uint32_t id, const builtin_interfaces::msg::Time &origin_stamp, double e2e_command_ms, int64_t rx_time_ns, int64_t display_time_ns)
 {
     rclcpp::Time rx_time(rx_time_ns);
     rclcpp::Time display_time(display_time_ns);
+    rclcpp::Time origin_time(origin_stamp);
 
-    // Tópico 2
+    // Tópico 2: Latência apenas da interface (Display - Rx)
     publish_metric(pub_telemetry_gui_, id, display_time, rx_time);
 
-    // Tópico 3 (Float64 publicado à parte)
-    double gui_latency_ms = (display_time - rx_time).seconds() * 1000.0;
-    auto msg_e2e = std::make_unique<Float64>();
-    msg_e2e->data = original_e2e + gui_latency_ms; 
-    pub_e2e_telemetry_->publish(std::move(msg_e2e));
+    // Tópico 3: E2E Telemetry = (Display - Origin)
+    // Usamos a função genérica para calcular automaticamente e fazer o publish
+    publish_metric(pub_e2e_telemetry_, id, display_time, origin_time);
+
+    // Tópico 4: Full Latency = E2E Telemetry + E2E Command
+    // Como a full latency é uma soma e não uma simples diferença de tempos, preenchemos o msg à mão
+    double e2e_telemetry_ms = (display_time - origin_time).seconds() * 1000.0;
+    
+    auto msg_full = std::make_unique<Metrics>();
+    msg_full->id = id;
+    msg_full->tx = origin_stamp; 
+    msg_full->rx = display_time; 
+    msg_full->latency_ms = e2e_telemetry_ms + e2e_command_ms;
+    
+    pub_full_latency_->publish(std::move(msg_full));
 }
 
-// Tópico 4 (Câmara Frontal)
+// Tópico 5 (Câmara Frontal)
 void RosBridge::publishFrontCameraMetrics(int64_t rx_time_ns, int64_t display_time_ns)
 {
     // Como a imagem comprimida nativa não tem campo ID adaptado na frame_id para int, usa 0
