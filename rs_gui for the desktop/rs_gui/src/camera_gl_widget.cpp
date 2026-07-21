@@ -29,7 +29,7 @@ static const float QUAD[] = {
 };
 
 // Ponteiro para funções OpenGL 3.3
-static QOpenGLFunctions_3_3_Core* gl33 = nullptr;
+static QOpenGLFunctions_3_3_Core* gl33_ = nullptr;
 
 CameraGLWidget::CameraGLWidget(QWidget* parent)
 : QOpenGLWidget(parent)
@@ -45,19 +45,19 @@ CameraGLWidget::~CameraGLWidget()
     makeCurrent();
     delete texture_;
     delete shader_;
-    if (gl33) {
-        gl33->glDeleteVertexArrays(1, &vao_);
-        gl33->glDeleteBuffers(1, &vbo_);
+    if (gl33_) {
+        gl33_->glDeleteVertexArrays(1, &vao_);
+        gl33_->glDeleteBuffers(1, &vbo_);
     }
     doneCurrent();
 }
 
 void CameraGLWidget::initializeGL()
 {
-    gl33 = QOpenGLContext::currentContext()
+    gl33_ = QOpenGLContext::currentContext()
                ->versionFunctions<QOpenGLFunctions_3_3_Core>();
-    gl33->initializeOpenGLFunctions();
-    gl33->glClearColor(0.05f, 0.05f, 0.08f, 1.f);
+    gl33_->initializeOpenGLFunctions();
+    gl33_->glClearColor(0.05f, 0.05f, 0.08f, 1.f);
 
     setup_shaders();
     setup_quad();
@@ -70,12 +70,12 @@ void CameraGLWidget::initializeGL()
 
 void CameraGLWidget::resizeGL(int w, int h)
 {
-    gl33->glViewport(0, 0, w, h);
+    gl33_->glViewport(0, 0, w, h);
 }
 
 void CameraGLWidget::paintGL()
 {
-    gl33->glClear(GL_COLOR_BUFFER_BIT);
+    gl33_->glClear(GL_COLOR_BUFFER_BIT);
 
     {
         std::lock_guard<std::mutex> lock(frame_mutex_);

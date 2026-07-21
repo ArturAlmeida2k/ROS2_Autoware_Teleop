@@ -50,7 +50,6 @@ static const float CAR_VERTICES[] = {
     -1.0f,  1.0f, 0.0f,  -1.0f,  1.0f, 1.5f
 };
 
-static QOpenGLFunctions_3_3_Core* gl33 = nullptr;
 
 PointCloudGLWidget::PointCloudGLWidget(QWidget* parent) : QOpenGLWidget(parent) {
     QSurfaceFormat fmt;
@@ -64,52 +63,55 @@ PointCloudGLWidget::~PointCloudGLWidget() {
     makeCurrent();
     delete shader_;
     delete car_shader_; 
-    if (gl33) {
-        gl33->glDeleteVertexArrays(1, &vao_);
-        gl33->glDeleteBuffers(1, &vbo_);
-        gl33->glDeleteVertexArrays(1, &car_vao_); 
-        gl33->glDeleteBuffers(1, &car_vbo_);      
+    if (gl33_) {
+        gl33_->glDeleteVertexArrays(1, &vao_);
+        gl33_->glDeleteBuffers(1, &vbo_);
+        gl33_->glDeleteVertexArrays(1, &car_vao_); 
+        gl33_->glDeleteBuffers(1, &car_vbo_);      
     }
     doneCurrent();
 }
 
 void PointCloudGLWidget::initializeGL() {
-    gl33 = QOpenGLContext::currentContext()->versionFunctions<QOpenGLFunctions_3_3_Core>();
-    gl33->initializeOpenGLFunctions();
+    gl33_ = QOpenGLContext::currentContext()->versionFunctions<QOpenGLFunctions_3_3_Core>();
+    gl33_->initializeOpenGLFunctions();
     
-    gl33->glClearColor(0.05f, 0.05f, 0.08f, 1.f);
-    gl33->glEnable(GL_DEPTH_TEST);
-    gl33->glEnable(GL_PROGRAM_POINT_SIZE);
+    gl33_->glClearColor(0.05f, 0.05f, 0.08f, 1.f);
+    gl33_->glEnable(GL_DEPTH_TEST);
+    gl33_->glEnable(GL_PROGRAM_POINT_SIZE);
 
     shader_ = new QOpenGLShaderProgram(this);
     shader_->addShaderFromSourceCode(QOpenGLShader::Vertex, PC_VERT_SRC);
     shader_->addShaderFromSourceCode(QOpenGLShader::Fragment, PC_FRAG_SRC);
     shader_->link();
 
-    gl33->glGenVertexArrays(1, &vao_);
-    gl33->glGenBuffers(1, &vbo_);
+    gl33_->glGenVertexArrays(1, &vao_);
+    gl33_->glGenBuffers(1, &vbo_);
 
     car_shader_ = new QOpenGLShaderProgram(this);
     car_shader_->addShaderFromSourceCode(QOpenGLShader::Vertex, CAR_VERT_SRC);
     car_shader_->addShaderFromSourceCode(QOpenGLShader::Fragment, CAR_FRAG_SRC);
     car_shader_->link();
+    if (!car_shader_->link()) {
+        qWarning() << "Shader link failed:" << car_shader_->log();
+    }
 
-    gl33->glGenVertexArrays(1, &car_vao_);
-    gl33->glGenBuffers(1, &car_vbo_);
-    gl33->glBindVertexArray(car_vao_);
-    gl33->glBindBuffer(GL_ARRAY_BUFFER, car_vbo_);
-    gl33->glBufferData(GL_ARRAY_BUFFER, sizeof(CAR_VERTICES), CAR_VERTICES, GL_STATIC_DRAW);
-    gl33->glEnableVertexAttribArray(0);
-    gl33->glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
-    gl33->glBindVertexArray(0);
+    gl33_->glGenVertexArrays(1, &car_vao_);
+    gl33_->glGenBuffers(1, &car_vbo_);
+    gl33_->glBindVertexArray(car_vao_);
+    gl33_->glBindBuffer(GL_ARRAY_BUFFER, car_vbo_);
+    gl33_->glBufferData(GL_ARRAY_BUFFER, sizeof(CAR_VERTICES), CAR_VERTICES, GL_STATIC_DRAW);
+    gl33_->glEnableVertexAttribArray(0);
+    gl33_->glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+    gl33_->glBindVertexArray(0);
 }
 
 void PointCloudGLWidget::resizeGL(int w, int h) {
-    gl33->glViewport(0, 0, w, h);
+    gl33_->glViewport(0, 0, w, h);
 }
 
 void PointCloudGLWidget::paintGL() {
-    gl33->glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    gl33_->glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     // Calcular Matrizes da Câmara
     QMatrix4x4 proj, view, model;
@@ -126,40 +128,40 @@ void PointCloudGLWidget::paintGL() {
     shader_->bind();
     shader_->setUniformValue("u_MVP", mvp);
 
-    gl33->glBindVertexArray(vao_);
+    gl33_->glBindVertexArray(vao_);
 
     size_t num_points = 0;
     {
         std::lock_guard<std::mutex> lock(frame_mutex_);
         if (dirty_) {
-            gl33->glBindBuffer(GL_ARRAY_BUFFER, vbo_);
-            gl33->glBufferData(GL_ARRAY_BUFFER, points_.size() * sizeof(float), points_.data(), GL_DYNAMIC_DRAW);
+            gl33_->glBindBuffer(GL_ARRAY_BUFFER, vbo_);
+            gl33_->glBufferData(GL_ARRAY_BUFFER, points_.size() * sizeof(float), points_.data(), GL_DYNAMIC_DRAW);
             dirty_ = false;
         }
         num_points = points_.size() / 3;
     }
 
     if (num_points > 0) {
-        gl33->glEnableVertexAttribArray(0);
-        gl33->glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
-        gl33->glDrawArrays(GL_POINTS, 0, num_points);
+        gl33_->glEnableVertexAttribArray(0);
+        gl33_->glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+        gl33_->glDrawArrays(GL_POINTS, 0, num_points);
     }
 
-    gl33->glBindVertexArray(0);
+    gl33_->glBindVertexArray(0);
     shader_->release();
 
     // === NOVO: DESENHAR O CARRO ===
     car_shader_->bind();
     car_shader_->setUniformValue("u_MVP", mvp); // Usamos a mesma matriz da câmara
-    gl33->glBindVertexArray(car_vao_);
+    gl33_->glBindVertexArray(car_vao_);
     
     // Configurar a grossura da linha (opcional)
-    gl33->glLineWidth(2.0f); 
+    gl33_->glLineWidth(2.0f); 
     
     // Desenhar os 24 vértices como Linhas (12 segmentos)
-    gl33->glDrawArrays(GL_LINES, 0, 24); 
+    gl33_->glDrawArrays(GL_LINES, 0, 24); 
     
-    gl33->glBindVertexArray(0);
+    gl33_->glBindVertexArray(0);
     car_shader_->release();
     
 }

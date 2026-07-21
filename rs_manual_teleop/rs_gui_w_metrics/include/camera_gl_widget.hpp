@@ -22,6 +22,7 @@ protected:
     void paintGL() override;
 
 private:
+    QOpenGLFunctions_3_3_Core* gl33_ = nullptr;
     QOpenGLTexture* texture_      = nullptr;
     QOpenGLShaderProgram* shader_       = nullptr;
     unsigned int          vao_          = 0;

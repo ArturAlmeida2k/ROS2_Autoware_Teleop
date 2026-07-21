@@ -142,7 +142,7 @@ def generate_launch_description():
             '/metrics/command_decoder',
             '/metrics/safety_gate',
             '/metrics/control',
-            '/metrics/e2e_comand_latency',
+            '/metrics/e2e_command_latency',
             '/metrics/telemetry_aggregator',
             '--output', bag_commands_path
         ],

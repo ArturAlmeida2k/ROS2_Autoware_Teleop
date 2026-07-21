@@ -50,13 +50,42 @@ private:
     int8_t current_state_ = STATE_ERROR;
     float warning_velocity_limit_;
 
+    bool last_engage_ = false;
+    int last_gear_ = 0;
+
     rclcpp::Subscription<TeleopCommand>::SharedPtr sub_teleop_cmd_;
     rclcpp::Subscription<Int8>::SharedPtr sub_safety_state_;
     rclcpp::Publisher<TeleopCommand>::SharedPtr pub_safe_cmd_;
     rclcpp::Publisher<Metrics>::SharedPtr pub_metrics_;
 
-    void safety_state_callback(const Int8::SharedPtr msg) {
+    void publish_emergency_stop()
+    {
+        auto safe_msg = std::make_unique<TeleopCommand>();
+        safe_msg->header.stamp = this->now();
+        safe_msg->header.frame_id = "safety_gate";
+        safe_msg->id = 0;
+        
+        safe_msg->target_velocity = 0.0f;
+        safe_msg->brake_factor = 1.0f; // Força travagem máxima
+        safe_msg->target_steering_angle = 0.0f;
+        safe_msg->engage_command = last_engage_;
+        safe_msg->gear = last_gear_;
+        safe_msg->turn_signal = 3; // Hazard signal
+        
+        pub_safe_cmd_->publish(std::move(safe_msg));
+        
+        RCLCPP_ERROR_THROTTLE(this->get_logger(), *this->get_clock(), 2000, 
+                              "Network/Safety Error detected! Publishing emergency stop.");
+    }
+
+    void safety_state_callback(const Int8::SharedPtr msg) 
+    {
         current_state_ = msg->data;
+
+        if (current_state_ == STATE_ERROR)
+        {
+            publish_emergency_stop();
+        }
     }
 
     void publish_metrics(uint32_t id, const rclcpp::Time &rx_time, const builtin_interfaces::msg::Time &tx_msg_time)
@@ -76,7 +105,8 @@ private:
 
     }
 
-    void teleop_cmd_callback(const TeleopCommand::SharedPtr msg) {
+    void teleop_cmd_callback(const TeleopCommand::SharedPtr msg)
+    {
         auto start_time = this->now();
 
         auto safe_msg = std::make_unique<TeleopCommand>(*msg);
@@ -85,7 +115,11 @@ private:
         safe_msg->header.stamp = start_time;
         safe_msg->header.frame_id = "safety_gate";
 
-        switch (current_state_) {
+        last_engage_ = msg->engage_command;
+        last_gear_ = msg->gear;
+
+        switch (current_state_)
+        {
             case STATE_OK:
                 // Sem restrições
                 break;
@@ -107,9 +141,7 @@ private:
                 safe_msg->target_velocity = 0.0f;
                 safe_msg->brake_factor = 1.0f; // Força travagem máxima no próximo nó
                 safe_msg->target_steering_angle = 0.0f;
-                safe_msg->engage_command = false;
-                safe_msg->turn_signal = 3; // 3 = Hazard signal na tua lógica original
-                safe_msg->gear = 0; // 0 = Park
+                safe_msg->turn_signal = 3; // 3 = Hazard signal
                 
                 RCLCPP_ERROR_THROTTLE(this->get_logger(), *this->get_clock(), 2000, 
                                       "Error state: Forcing stop and hazard lights.");

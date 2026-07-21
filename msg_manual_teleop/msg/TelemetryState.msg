@@ -8,5 +8,3 @@ bool    engaged
 int32   turn_signal
 int32   hazard
 float64 e2e_command_ms
-
-

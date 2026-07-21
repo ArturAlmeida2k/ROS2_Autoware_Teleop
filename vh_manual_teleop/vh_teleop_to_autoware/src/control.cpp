@@ -8,24 +8,22 @@
 #include "msg_manual_teleop/msg/teleop_command.hpp"
 #include "msg_manual_teleop/msg/node_metrics.hpp"
 #include <autoware_control_msgs/msg/control.hpp>
-#include <tier4_control_msgs/msg/gate_mode.hpp>
 #include <autoware_vehicle_msgs/msg/gear_command.hpp>
 #include <autoware_vehicle_msgs/msg/turn_indicators_command.hpp>
 #include <autoware_vehicle_msgs/msg/hazard_lights_command.hpp>
 #include <autoware_adapi_v1_msgs/msg/operation_mode_state.hpp>
-#include "tier4_external_api_msgs/srv/engage.hpp"
+#include <autoware_adapi_v1_msgs/srv/change_operation_mode.hpp> 
 
-using Control               = autoware_control_msgs::msg::Control;
-using GateMode              = tier4_control_msgs::msg::GateMode;
-using GearCommand           = autoware_vehicle_msgs::msg::GearCommand;
-using Bool                  = std_msgs::msg::Bool;
-using VelocityReport        = autoware_vehicle_msgs::msg::VelocityReport;
-using TurnIndicatorsCommand = autoware_vehicle_msgs::msg::TurnIndicatorsCommand;
-using HazardLightsCommand   = autoware_vehicle_msgs::msg::HazardLightsCommand;
-using OperationModeState    = autoware_adapi_v1_msgs::msg::OperationModeState;
-using EngageSrv             = tier4_external_api_msgs::srv::Engage;
-using TeleopCommand         = msg_manual_teleop::msg::TeleopCommand;
-using Metrics               = msg_manual_teleop::msg::NodeMetrics;
+using Control                = autoware_control_msgs::msg::Control;
+using GearCommand            = autoware_vehicle_msgs::msg::GearCommand;
+using Bool                   = std_msgs::msg::Bool;
+using VelocityReport         = autoware_vehicle_msgs::msg::VelocityReport;
+using TurnIndicatorsCommand  = autoware_vehicle_msgs::msg::TurnIndicatorsCommand;
+using HazardLightsCommand    = autoware_vehicle_msgs::msg::HazardLightsCommand;
+using OperationModeState     = autoware_adapi_v1_msgs::msg::OperationModeState;
+using ChangeOperationModeSrv = autoware_adapi_v1_msgs::srv::ChangeOperationMode; 
+using TeleopCommand          = msg_manual_teleop::msg::TeleopCommand;
+using Metrics                = msg_manual_teleop::msg::NodeMetrics;
 
 class AutowareControllerNode : public rclcpp::Node
 {
@@ -33,7 +31,6 @@ public:
     AutowareControllerNode() : Node("autoware_controller_node")
     {
         // 1. Subscrições
-        // Agora ouve os comandos já validados e filtrados pelo Safety Gate
         sub_safe_command_ = this->create_subscription<TeleopCommand>(
             "/teleop/safe_command", 10,
             std::bind(&AutowareControllerNode::safe_command_callback, this, std::placeholders::_1));
@@ -46,15 +43,15 @@ public:
             "/system/operation_mode/state", 10,
             std::bind(&AutowareControllerNode::operation_mode_callback, this, std::placeholders::_1));
 
-        // 2. Publicadores Autoware
+        // 2. Publicadores Autoware (GateMode removido)
         pub_control_cmd_     = this->create_publisher<Control>("/external/selected/control_cmd", rclcpp::QoS(1));
         pub_gear_cmd_        = this->create_publisher<GearCommand>("/external/selected/gear_cmd", 1);
         pub_turn_indicators_ = this->create_publisher<TurnIndicatorsCommand>("/external/selected/turn_indicators_cmd", 1);
         pub_hazard_lights_   = this->create_publisher<HazardLightsCommand>("/external/selected/hazard_lights_cmd", 1);
-        pub_gate_mode_       = this->create_publisher<GateMode>("/control/gate_mode_cmd", rclcpp::QoS(1));
         
-        // 3. Clientes/Serviços Autoware
-        client_engage_       = this->create_client<EngageSrv>("/api/autoware/set/engage");
+        // 3. Clientes Autoware para alterar os Modos de Operação
+        client_remote_ = this->create_client<ChangeOperationModeSrv>("/api/operation_mode/change_to_remote");
+        client_stop_   = this->create_client<ChangeOperationModeSrv>("/api/operation_mode/change_to_stop");
 
         // 4. Publicadores de Métricas
         rclcpp::QoS metrics_qos(10);       
@@ -65,7 +62,7 @@ public:
         pub_metrics_safety_gate_ = this->create_publisher<Metrics>("/metrics/safety_gate", metrics_qos);
         pub_metrics_control_     = this->create_publisher<Metrics>("/metrics/control", metrics_qos); 
 
-        RCLCPP_INFO(this->get_logger(), "Autoware Controller Node started. (Translation & Metrics mode)");
+        RCLCPP_INFO(this->get_logger(), "Autoware Controller Node started. (Operation Mode: STOP/REMOTE)");
     }
 
 private:
@@ -82,7 +79,6 @@ private:
     const double MAX_ACCEL    = 1.0;
     const double MAX_DECEL    = 5.0;
 
-    rclcpp::Publisher<GateMode>::SharedPtr              pub_gate_mode_;
     rclcpp::Publisher<Control>::SharedPtr               pub_control_cmd_;
     rclcpp::Publisher<GearCommand>::SharedPtr           pub_gear_cmd_;
     rclcpp::Publisher<TurnIndicatorsCommand>::SharedPtr pub_turn_indicators_;
@@ -96,9 +92,9 @@ private:
     rclcpp::Subscription<VelocityReport>::SharedPtr     sub_vlc_current_;
     rclcpp::Subscription<OperationModeState>::SharedPtr sub_operation_mode_;
 
-    rclcpp::Client<EngageSrv>::SharedPtr                client_engage_;
+    rclcpp::Client<ChangeOperationModeSrv>::SharedPtr   client_remote_;
+    rclcpp::Client<ChangeOperationModeSrv>::SharedPtr   client_stop_;
 
-    // Função genérica para aceitar qualquer publicador e os tempos em rclcpp::Time
     void publish_metric(const rclcpp::Publisher<Metrics>::SharedPtr& pub, uint32_t id, const rclcpp::Time &rx_time, const rclcpp::Time &tx_time)
     {
         auto msg = std::make_unique<Metrics>();
@@ -125,39 +121,48 @@ private:
 
     void safe_command_callback(const TeleopCommand::SharedPtr msg)
     {
-        // 1. Regista o momento em que a mensagem entra neste nó
         auto start_time = this->now();
 
-        // 2. EXTRAÇÃO DE VARIÁVEIS
         vlc_target_            = msg->target_velocity;
         steering_angle_target_ = msg->target_steering_angle;
         brake_factor_          = msg->brake_factor;
 
-        // 3. ENGAGE LOGIC
+        // 3. ALTERNÂNCIA DE MODOS (STOP / REMOTE)
         bool engage_cmd = msg->engage_command;
         if (engage_cmd != last_engage_cmd_) {
-            GateMode gate_msg;
-            gate_msg.data = GateMode::EXTERNAL;
-            pub_gate_mode_->publish(gate_msg);
+            if (engage_cmd) {
+                // Pedido para passar a REMOTE
+                if (client_remote_->service_is_ready()) {
+                    auto req = std::make_shared<ChangeOperationModeSrv::Request>();
+                    client_remote_->async_send_request(req, []([[maybe_unused]] rclcpp::Client<ChangeOperationModeSrv>::SharedFuture) {});
+                    RCLCPP_INFO(this->get_logger(), "Requesting mode change to: REMOTE");
+                } else {
+                    RCLCPP_WARN(this->get_logger(), "Remote mode service is not ready!");
+                }
+                last_engage_cmd_ = engage_cmd;
 
-            if (client_engage_->service_is_ready()) {
-                auto req = std::make_shared<EngageSrv::Request>();
-                req->engage = engage_cmd;
-                client_engage_->async_send_request(req, []([[maybe_unused]] rclcpp::Client<EngageSrv>::SharedFuture) {});
+            } else {
+                // Pedido para passar a STOP
+                if (client_stop_->service_is_ready()) {
+                    auto req = std::make_shared<ChangeOperationModeSrv::Request>();
+                    client_stop_->async_send_request(req, []([[maybe_unused]] rclcpp::Client<ChangeOperationModeSrv>::SharedFuture) {});
+                    RCLCPP_INFO(this->get_logger(), "Requesting mode change to: STOP");
+                } else {
+                    RCLCPP_WARN(this->get_logger(), "Stop mode service is not ready!");
+                }
+                last_engage_cmd_ = engage_cmd;
             }
-            last_engage_cmd_ = engage_cmd;
         }
 
-        // 4. AUTOWARE TRANSLATION (Se os modos o permitirem)
-        if (current_mode_ == OperationModeState::LOCAL || current_mode_ == OperationModeState::REMOTE) {
+        // 4. AUTOWARE TRANSLATION
+        if (current_mode_ == OperationModeState::REMOTE) {
             
-            // --- Sinais luminosos ---
             TurnIndicatorsCommand turn_cmd;
             turn_cmd.stamp = start_time;
             HazardLightsCommand hazard_cmd;
             hazard_cmd.stamp = start_time;
 
-            if (msg->turn_signal == 3 || msg->turn_signal == 4) {
+            if (msg->turn_signal == 4) {
                 turn_cmd.command   = TurnIndicatorsCommand::DISABLE;
                 hazard_cmd.command = HazardLightsCommand::ENABLE;
             } else {
@@ -165,7 +170,6 @@ private:
                 hazard_cmd.command = HazardLightsCommand::DISABLE;
             }
         
-            // --- Mudanças (Gear) ---
             gear_change_ = msg->gear;
             GearCommand gear_cmd;
             gear_cmd.stamp = start_time;
@@ -175,7 +179,6 @@ private:
                 case 2: gear_cmd.command = GearCommand::REVERSE; break;
             }
         
-            // --- Controlo de Movimento (Control) ---
             auto control_cmd = std::make_unique<Control>();
             control_cmd->stamp = start_time;
             control_cmd->longitudinal.velocity = vlc_target_;
@@ -206,15 +209,12 @@ private:
         auto end_time = this->now();
 
         // 6. PUBLICAÇÃO DAS MÉTRICAS
-        
-        // A) Latência do Salto (Hop): desde a saída do Safety Gate até à entrada neste nó
-        publish_metric(pub_metrics_safety_gate_, msg->id, start_time, rclcpp::Time(msg->header.stamp));
-        
-        // B) Latência de Processamento Interno: o tempo despendido dentro desta função callback
-        publish_metric(pub_metrics_control_, msg->id, end_time, start_time);
-        
-        // C) Latência End-to-End: desde o volante (origin_stamp) até o processamento estar concluído
-        publish_metric(pub_metrics_end_to_end_, msg->id, end_time, rclcpp::Time(msg->origin_stamp));
+        if (msg->id != 0)
+        {
+            publish_metric(pub_metrics_safety_gate_, msg->id, start_time, rclcpp::Time(msg->header.stamp));
+            publish_metric(pub_metrics_control_, msg->id, end_time, start_time);
+            publish_metric(pub_metrics_end_to_end_, msg->id, end_time, rclcpp::Time(msg->origin_stamp));
+        }
     }
 };
 

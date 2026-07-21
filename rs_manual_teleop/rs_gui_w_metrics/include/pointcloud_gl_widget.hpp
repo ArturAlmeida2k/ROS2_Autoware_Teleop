@@ -29,6 +29,8 @@ protected:
     void wheelEvent(QWheelEvent *event) override;
 
 private:
+    QOpenGLFunctions_3_3_Core* gl33_ = nullptr;
+    
     QOpenGLShaderProgram* shader_ = nullptr;
     unsigned int vao_ = 0;
     unsigned int vbo_ = 0;
