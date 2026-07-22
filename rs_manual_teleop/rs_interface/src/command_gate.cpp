@@ -29,29 +29,22 @@ public:
         sub_filtered_command_ = this->create_subscription<TeleopCommand>(
             "/teleop/filtered_command", 10,
             std::bind(&ComandGate::filtered_command_callback, this, std::placeholders::_1));
-
+        
         sub_telemetry_ = this->create_subscription<Telemetry>(
             "/telemetry/state", 10,
             [this](const Telemetry::SharedPtr msg) {
                 
-                // Reinicia o temporizador sempre que uma mensagem chega
                 telemetry_watchdog_->reset();
-                
-                // Se a telemetria tinha caído, marcamos como ativa novamente
-                if (!telemetry_active_) {
-                    telemetry_active_ = true;
-                }
 
-                // -------------------------------------------------------------
-                // Sincronização Inicial (ocorre apenas na primeira mensagem após arranque ou queda)
-                // -------------------------------------------------------------
-                if (!initial_sync_done_) {
-                    target_engage_state_ = msg->engaged;
+                // Sincronização Inicial ou Reconexão
+                if (!is_telemetry_valid_) {
+                    target_engage_state_ = (msg->mode == 4);
                     target_gear_ = msg->gear;
                     target_turn_signal_ = msg->turn_signal; 
 
-                    initial_sync_done_ = true;
-                    RCLCPP_INFO(this->get_logger(), "Sincronização com a telemetria concluída.");
+                    is_telemetry_valid_ = true;
+                    
+                    RCLCPP_INFO(this->get_logger(), "Telemetria sincronizada. Modo Remoto: %s", target_engage_state_ ? "ATIVO" : "INATIVO");
                 }
 
                 current_mode_ = msg->mode;
@@ -80,8 +73,7 @@ private:
     int current_gear_ = 0;
 
     // --- Variáveis de Retenção de Estado (A tua Lógica) ---
-    bool initial_sync_done_ = false;
-    bool telemetry_active_ = false; 
+    bool is_telemetry_valid_ = false;
     bool target_engage_state_ = false;
     bool last_received_engage_button_ = false;
     int target_gear_ = 0;
@@ -98,19 +90,15 @@ private:
     // --- Callback do Watchdog (Perda de Telemetria) ---
     void telemetry_timeout_callback()
     {
-        // Só faz reset e avisa se a telemetria estivesse ativa antes
-        if (telemetry_active_) {
-            RCLCPP_WARN(this->get_logger(), "Sinal de telemetria perdido! A fazer reset aos estados e a forçar comandos a zero.");
+        if (is_telemetry_valid_) {
+            RCLCPP_WARN(this->get_logger(), "Sinal de telemetria perdido! Comandos suspensos.");
             
-            telemetry_active_ = false;
-            initial_sync_done_ = false; 
+            is_telemetry_valid_ = false;
 
-            // Reset das variáveis de telemetria
-            current_mode_ = 0; // Força a falhar o (current_mode_ == 3 || == 4) no comando
+            current_mode_ = 0; 
             current_velocity_ = 0.0f;
             current_gear_ = 0;
 
-            // Reset dos teus targets
             target_engage_state_ = false;
             last_received_engage_button_ = false; 
             target_gear_ = 0;
@@ -148,18 +136,9 @@ private:
         final_msg->origin_stamp = msg->origin_stamp;
         final_msg->id = msg->id;
 
-        // Se não houver telemetria ativa, nem sequer deixamos o Engage funcionar
-        if (!telemetry_active_) {
-            final_msg->target_velocity = 0.0f;
-            final_msg->brake_factor = 0.0f;
-            final_msg->target_steering_angle = 0.0f;
-            final_msg->engage_command = false;
-            final_msg->gear = 0;
-            final_msg->turn_signal = 1;
-            
-            pub_final_command_->publish(std::move(final_msg));
-            publish_metrics(msg->id, start_time, msg->header.stamp);
-
+        // Se não houver telemetria ativa
+        if (!is_telemetry_valid_) {
+            RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000, "Sem telemetria válida. Comandos suprimidos.");
             return; 
         }
 
@@ -172,8 +151,7 @@ private:
         if (current_engage_button && !last_received_engage_button_) {
             if (current_velocity_ < 0.1f) {
                 target_engage_state_ = !target_engage_state_;
-                RCLCPP_INFO(this->get_logger(), "Toggle Engage recebido. Novo estado objetivo: %s", 
-                            target_engage_state_ ? "TRUE" : "FALSE");
+                RCLCPP_INFO(this->get_logger(), "Toggle Engage recebido. Novo estado objetivo: %s", target_engage_state_ ? "TRUE" : "FALSE");
             } else {
                 RCLCPP_WARN(this->get_logger(), "Tentativa de alterar Engage bloqueada: Veículo em movimento (Velocidade: %.2f)", current_velocity_);
             }
@@ -187,7 +165,7 @@ private:
         // -------------------------------------------------------------
         // 3. VALIDAÇÃO DE MODO E BLOCO DE LÓGICA
         // -------------------------------------------------------------
-        if (current_mode_ == 3 || current_mode_ == 4) {
+        if (current_mode_ == 4) {
             
             final_msg->target_velocity = msg->target_velocity;
             final_msg->brake_factor = msg->brake_factor;
@@ -243,8 +221,8 @@ private:
         // -------------------------------------------------------------
         // 4. PUBLICAÇÃO
         // -------------------------------------------------------------
-        pub_final_command_->publish(std::move(final_msg));
 
+        pub_final_command_->publish(std::move(final_msg));
 
         // Metrics
         publish_metrics(msg->id, start_time, msg->header.stamp);

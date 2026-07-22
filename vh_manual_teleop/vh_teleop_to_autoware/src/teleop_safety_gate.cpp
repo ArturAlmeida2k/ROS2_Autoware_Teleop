@@ -70,7 +70,7 @@ private:
         safe_msg->target_steering_angle = 0.0f;
         safe_msg->engage_command = last_engage_;
         safe_msg->gear = last_gear_;
-        safe_msg->turn_signal = 3; // Hazard signal
+        safe_msg->turn_signal = 4; // Hazard signal
         
         pub_safe_cmd_->publish(std::move(safe_msg));
         
@@ -141,7 +141,7 @@ private:
                 safe_msg->target_velocity = 0.0f;
                 safe_msg->brake_factor = 1.0f; // Força travagem máxima no próximo nó
                 safe_msg->target_steering_angle = 0.0f;
-                safe_msg->turn_signal = 3; // 3 = Hazard signal
+                safe_msg->turn_signal = 4; // Hazard signal
                 
                 RCLCPP_ERROR_THROTTLE(this->get_logger(), *this->get_clock(), 2000, 
                                       "Error state: Forcing stop and hazard lights.");
