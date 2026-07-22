@@ -44,7 +44,7 @@ public:
 
                     is_telemetry_valid_ = true;
                     
-                    RCLCPP_INFO(this->get_logger(), "Telemetria sincronizada. Modo Remoto: %s", target_engage_state_ ? "ATIVO" : "INATIVO");
+                    RCLCPP_INFO(this->get_logger(), "Telemetria sincronizada.");
                 }
 
                 current_mode_ = msg->mode;
@@ -221,7 +221,6 @@ private:
         // -------------------------------------------------------------
         // 4. PUBLICAÇÃO
         // -------------------------------------------------------------
-
         pub_final_command_->publish(std::move(final_msg));
 
         // Metrics
