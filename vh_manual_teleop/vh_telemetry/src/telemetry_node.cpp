@@ -34,7 +34,11 @@ public:
         sub_gear_ = create_subscription<GearReport>(
             "/vehicle/status/gear_status", 10,
             [this](const GearReport::SharedPtr msg) {
-                state_.gear = msg->report;
+                switch (msg->report){
+                    case GearReport::PARK: state_.gear = 0; break;
+                    case GearReport::DRIVE: state_.gear = 1; break;
+                    case GearReport::REVERSE: state_.gear = 2; break;
+                }
             });
 
         sub_operation_mode_ = create_subscription<OperationModeState>(

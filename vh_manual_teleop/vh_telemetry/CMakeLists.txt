@@ -20,19 +20,8 @@ ament_target_dependencies(telemetry_node
   msg_manual_teleop
 )
 
-add_executable(
-  network_latency_logger 
-  src/network_latency_logger.cpp
-)
-
-ament_target_dependencies(network_latency_logger
-  rclcpp
-  std_msgs
-)
-
 install(TARGETS 
   telemetry_node
-  network_latency_logger
   DESTINATION lib/${PROJECT_NAME}
 )
 
