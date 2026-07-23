@@ -106,7 +106,7 @@ private:
         bool drive = msg->buttons[GEAR_DRIVE];
         bool reverse = msg->buttons[GEAR_REVERSE];
         bool park = msg->buttons[PARKING];
-        bool clutch = msg->axes[CLUTCH_BUTTON];
+        bool clutch = msg->buttons[CLUTCH_BUTTON];
 
         int new_gear = 0;
         // Enter Parking(1), Leave Parking(2), Drive(2), Reverse(3)
