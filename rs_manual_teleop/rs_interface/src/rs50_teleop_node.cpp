@@ -29,7 +29,7 @@ private:
 
     // Axis (vals from -1.0 a 1.0)
     const int AXIS_STEERING =  0;   // Sterring Wheel, 0 repose, -1 right, 1 left
-    const int AXIS_THROTTLE = 2;   // Acceleration, 1 repose
+    const int AXIS_THROTTLE = 3;   // Acceleration, 1 repose
     const int AXIS_BRAKE = 4;      // Brake, 1 repose 
     
     const int BUTTON_ENGAGE_1 = 6; // Engage Button 1 -> R2
