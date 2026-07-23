@@ -8,7 +8,6 @@ from datetime import datetime
 
 def generate_launch_description():
    
-    # Argumento para o ID do dispositivo
     device_id_arg = DeclareLaunchArgument(
         'device_id',
         default_value='0',
@@ -16,7 +15,6 @@ def generate_launch_description():
     )
     device_id_config = LaunchConfiguration('device_id')
 
-    # Novo argumento: use_xbox (padrão é falso, ou seja, usa G923)
     controller_arg = DeclareLaunchArgument(
         'controller',
         default_value='rs50',
