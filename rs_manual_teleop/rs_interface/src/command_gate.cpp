@@ -23,7 +23,7 @@ public:
         rclcpp::QoS metrics_qos(10);       
         metrics_qos.best_effort();    
         metrics_qos.durability_volatile();
-        pub_metrics_ = this->create_publisher<Metrics>("/metrics/g923", metrics_qos);
+        pub_metrics_ = this->create_publisher<Metrics>("/metrics/controller", metrics_qos);
 
         // --- 2. Subscribers ---
         sub_filtered_command_ = this->create_subscription<TeleopCommand>(

@@ -14,20 +14,22 @@ def generate_launch_description():
         default_value='0',
         description="ID do dispositivo (Logitech ou Xbox) no sistema"
     )
-    
-    # Novo argumento: use_xbox (padrão é falso, ou seja, usa G923)
-    use_xbox_arg = DeclareLaunchArgument(
-        'use_xbox',
-        default_value='false',
-        description="Se true, utiliza o mapeamento para Xbox. Se false, usa G923."
-    )
+    device_id_config = LaunchConfiguration('device_id')
 
-    video_mode_arg = DeclareLaunchArgument(
-        'video_mode',
-        default_value='none',
-        description="Selecione o encoder de vídeo: 'none' (nenhum), 'standard' (normal), ou '4x'"
+    # Novo argumento: use_xbox (padrão é falso, ou seja, usa G923)
+    controller_arg = DeclareLaunchArgument(
+        'controller',
+        default_value='rs50',
+        description="Escolher o tipo de controlador usado para controlar o carro: 'rs50'(default), 'g923', ou 'xbox'"
     )
-    video_mode = LaunchConfiguration('video_mode')
+    controller = LaunchConfiguration('controller')
+
+    video_arg = DeclareLaunchArgument(
+        'video',
+        default_value='none',
+        description="Selecione o encoder de vídeo: 'none' (nenhum), '1x'(AWSIM), ou '4x'(CARLA)"
+    )
+    video = LaunchConfiguration('video')
 
     
     ip_address_arg = DeclareLaunchArgument(
@@ -51,14 +53,6 @@ def generate_launch_description():
     )
     telemetry_port = LaunchConfiguration('telemetry_port')
 
-    rtt_port_arg = DeclareLaunchArgument(
-        'rtt_port', 
-        default_value='5011', 
-        description="Porta UDP para o rtt_metrics"
-    )
-    rtt_port = LaunchConfiguration('rtt_port')
-
-
     camera_port_arg = DeclareLaunchArgument(
         'camera_port', 
         default_value='5007', 
@@ -67,8 +61,6 @@ def generate_launch_description():
     camera_port = LaunchConfiguration('camera_port')
 
 
-    device_id_config = LaunchConfiguration('device_id')
-    use_xbox_config = LaunchConfiguration('use_xbox')
     
     # 1. Nó do Sistema: Leitura do Joystick com throttle para 50hz
     joy_node = Node(
@@ -90,22 +82,31 @@ def generate_launch_description():
         arguments=['messages', '/joy', '60.0', '/joy_throttled']
     )
 
-    # 2a. Nó de Mapeamento: Logitech G923 (Ativo se use_xbox for false)
-    g923_teleop_node = Node(
+    # 2a. Nó de Mapeamento: Logitech RS50 
+    rs50_teleop_node = Node(
         package="rs_interface",
-        executable='g923_teleop_node_v2',
-        name='g923_teleop_node_v2',
+        executable='rs50_teleop_node',
+        name='rs50_teleop_node',
         output='screen',
-        condition=UnlessCondition(use_xbox_config)
+        condition=IfCondition(PythonExpression(["'", controller, "' == 'rs50'"]))
     )
 
-    # 2b. Nó de Mapeamento: Xbox (Ativo se use_xbox for true)
+    # 2b. Nó de Mapeamento: Logitech G923 
+    g923_teleop_node = Node(
+        package="rs_interface",
+        executable='g923_teleop_node',
+        name='g923_teleop_node',
+        output='screen',
+        condition=IfCondition(PythonExpression(["'", controller, "' == 'g923'"]))
+    )
+
+    # 2c. Nó de Mapeamento: Xbox 
     xbox_teleop_node = Node(
         package="rs_interface",
-        executable='xbox_teleop_node_v2',
-        name='xbox_teleop_node_v2',
+        executable='xbox_teleop_node',
+        name='xbox_teleop_node',
         output='screen',
-        condition=IfCondition(use_xbox_config)
+        condition=IfCondition(PythonExpression(["'", controller, "' == 'xbox'"]))
     )
 
     # 3. Gate e Network
@@ -132,21 +133,13 @@ def generate_launch_description():
         parameters=[{'ip_address': ip_address, 'port': telemetry_port}]
     )
 
-    rtt_metrics_node = Node(
-        package="rs_network",
-        executable='rtt_metrics', 
-        name='rtt_metrics',
-        output='screen',
-        parameters=[{'ip_address': ip_address, 'port': rtt_port}]
-    )
-
     # Nó opcional: video_encoder
     video_decoder_node = Node(
         package='rs_network',
         executable='video_decoder_cpp_v2',
         name='video_decoder_v2',
         output='screen',
-        condition=IfCondition(PythonExpression(["'", video_mode, "' == 'standard'"])),
+        condition=IfCondition(PythonExpression(["'", video, "' == '1x'"])),
         parameters=[{'ip_address': ip_address, 'port': camera_port}]
     )
 
@@ -156,7 +149,7 @@ def generate_launch_description():
         executable='video_decoder_4x_cpp',
         name='video_decoder_4x_cpp',
         output='screen',
-        condition=IfCondition(PythonExpression(["'", video_mode, "' == '4x'"])),
+        condition=IfCondition(PythonExpression(["'", video, "' == '4x'"])),
         parameters=[{'ip_address': ip_address, 'port': camera_port}]
     )
 
@@ -171,8 +164,7 @@ def generate_launch_description():
         cmd=[
             'ros2', 'bag', 'record',
             '/metrics/telemetry',
-            '/metrics/rtt',
-            '/metrics/g923',
+            '/metrics/controller',
             '/metrics/command_gate',
             '/metrics/network/telemetry',
             '/metrics/telemetry_decoder',
@@ -187,21 +179,20 @@ def generate_launch_description():
 
     return LaunchDescription([
         device_id_arg,
-        use_xbox_arg,
-        video_mode_arg,
+        controller_arg,
+        video_arg,
         ip_address_arg,
         input_port_arg,
         telemetry_port_arg,
-        rtt_port_arg,
         camera_port_arg,
         joy_node,
         throttle_node,
+        rs50_teleop_node,
         g923_teleop_node,
         xbox_teleop_node,
         command_gate_node,
         input_teleop_encoder_node,
         telemetry_decoder_node,
-        #rtt_metrics_node,
         video_decoder_node,
         video_decoder_4x_node,
         rosbag_metrics_node
