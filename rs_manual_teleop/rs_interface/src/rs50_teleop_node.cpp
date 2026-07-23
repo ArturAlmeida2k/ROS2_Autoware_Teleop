@@ -81,8 +81,8 @@ private:
         float brake_input = msg->axes[AXIS_BRAKE];
 
         // Change from [-1.0 (Repose) to 1.0 (Fully Pressed)] to [0.0 to 1.0]
-        double normalized_throttle = (throttle_input - 1.0) / 2.0;
-        double normalized_brake = (brake_input - 1.0) / 2.0;
+        double normalized_throttle = abs((throttle_input - 1.0) / 2.0);
+        double normalized_brake = abs((brake_input - 1.0) / 2.0);
         
         float target_vlc = 0.0f;
         
