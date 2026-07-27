@@ -1,6 +1,7 @@
 #pragma once
 #include <QMainWindow>
 #include <QTabWidget> 
+#include <QKeyEvent>
 #include "telemetry_panel.hpp"
 #include "camera_gl_widget.hpp"
 #include "ros_bridge.hpp"
@@ -13,8 +14,12 @@ public:
 
 protected:
     void resizeEvent(QResizeEvent* event) override;
+    void keyPressEvent(QKeyEvent* event) override;
 
 private:
+    void setSingleCameraMode(bool single);         
+    bool is_single_camera_ = true;                 
+
     QTabWidget*     tab_widget_    = nullptr; // O gestor de abas
     QWidget*        tab_quad_view_ = nullptr; // O conteúdo da Aba 1
 

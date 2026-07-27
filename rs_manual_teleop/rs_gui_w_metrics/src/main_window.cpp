@@ -4,6 +4,7 @@
 #include <QLabel>
 #include <QWidget>
 #include <QResizeEvent>
+#include <QTimer>
 
 
 MainWindow::MainWindow(RosBridge* bridge, QWidget* parent)
@@ -99,6 +100,13 @@ MainWindow::MainWindow(RosBridge* bridge, QWidget* parent)
     connect(bridge_, &RosBridge::imageRightReceived, cam_right_, &CameraGLWidget::onImageReceived, Qt::QueuedConnection);
 
     resize(1440, 900);
+    
+    QTimer::singleShot(0, this, [this]() {
+        if (panel_ && cam_front_) {
+            int padding = 20;
+            panel_->move(cam_front_->x() + padding, cam_front_->y() + padding);
+        }
+    });
 }
 
 void MainWindow::resizeEvent(QResizeEvent* event)
@@ -112,4 +120,59 @@ void MainWindow::resizeEvent(QResizeEvent* event)
         
         panel_->move(x, y);
     }
+}
+
+void MainWindow::keyPressEvent(QKeyEvent* event)
+{
+    if (event->key() == Qt::Key_1 && !is_single_camera_) {
+        setSingleCameraMode(true);
+    } 
+    else if (event->key() == Qt::Key_4 && is_single_camera_) {
+        setSingleCameraMode(false);
+    }
+    
+    // Passa o evento para a classe base para não bloquear outros atalhos do Qt
+    QMainWindow::keyPressEvent(event); 
+}
+
+void MainWindow::setSingleCameraMode(bool single)
+{
+    is_single_camera_ = single;
+    auto* grid = qobject_cast<QGridLayout*>(tab_quad_view_->layout());
+    
+    if (!grid) return;
+
+    if (single) {
+        // Ocultar as câmaras secundárias
+        cam_left_->hide();
+        cam_back_->hide();
+        cam_right_->hide();
+
+        // Alterar os "pesos" da grelha para a coluna 1 e linha 0 ocuparem 100% do espaço
+        grid->setColumnStretch(0, 0);
+        grid->setColumnStretch(1, 1);
+        grid->setColumnStretch(2, 0);
+        grid->setRowStretch(0, 1);
+        grid->setRowStretch(1, 0);
+    } else {
+        // Mostrar as câmaras secundárias
+        cam_left_->show();
+        cam_back_->show();
+        cam_right_->show();
+
+        // Restaurar os pesos originais do Quad View
+        grid->setColumnStretch(0, 1);
+        grid->setColumnStretch(1, 4);
+        grid->setColumnStretch(2, 1);
+        grid->setRowStretch(0, 2);
+        grid->setRowStretch(1, 1);
+    }
+
+    // Como a posição da cam_front_ acabou de mudar, precisamos de reposicionar o HUD
+    QTimer::singleShot(50, this, [this]() {
+        if (panel_ && cam_front_) {
+            int padding = 20;
+            panel_->move(cam_front_->x() + padding, cam_front_->y() + padding);
+        }
+    });
 }
