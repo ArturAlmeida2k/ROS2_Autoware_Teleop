@@ -13,21 +13,21 @@ find_package(cv_bridge REQUIRED)
 find_package(OpenCV REQUIRED)
 
 # 2. Compilar o Nó de Captura da Câmara (D435)
-add_executable(camera_capture_node src/camera_capture_node.cpp)
-target_include_directories(camera_capture_node PUBLIC ${OpenCV_INCLUDE_DIRS})
-ament_target_dependencies(camera_capture_node rclcpp sensor_msgs cv_bridge)
-target_link_libraries(camera_capture_node ${OpenCV_LIBRARIES})
+add_executable(camera_capture src/camera_capture.cpp)
+target_include_directories(camera_capture PUBLIC ${OpenCV_INCLUDE_DIRS})
+ament_target_dependencies(camera_capture rclcpp sensor_msgs cv_bridge)
+target_link_libraries(camera_capture ${OpenCV_LIBRARIES})
 
 # 3. Compilar o Nó de Encoding (GStreamer)
-add_executable(video_encoder_node src/video_encoder_node.cpp)
-target_include_directories(video_encoder_node PUBLIC ${OpenCV_INCLUDE_DIRS})
-ament_target_dependencies(video_encoder_node rclcpp sensor_msgs cv_bridge)
-target_link_libraries(video_encoder_node ${OpenCV_LIBRARIES})
+add_executable(video_encode src/video_encode.cpp)
+target_include_directories(video_encode PUBLIC ${OpenCV_INCLUDE_DIRS})
+ament_target_dependencies(video_encode rclcpp sensor_msgs cv_bridge)
+target_link_libraries(video_encode ${OpenCV_LIBRARIES})
 
 # 4. Instalar os executáveis para que o comando 'ros2 run' os encontre
 install(TARGETS
-  camera_capture_node
-  video_encoder_node
+  camera_capture
+  video_encode
   DESTINATION lib/${PROJECT_NAME}
 )
 
