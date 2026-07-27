@@ -24,10 +24,16 @@ target_include_directories(video_encoder PUBLIC ${OpenCV_INCLUDE_DIRS})
 ament_target_dependencies(video_encoder rclcpp sensor_msgs cv_bridge)
 target_link_libraries(video_encoder ${OpenCV_LIBRARIES})
 
+add_executable(camera_streamer_node src/camera_streamer_node.cpp)
+target_include_directories(camera_streamer_node PUBLIC ${OpenCV_INCLUDE_DIRS})
+ament_target_dependencies(camera_streamer_node rclcpp cv_bridge)
+target_link_libraries(camera_streamer_node ${OpenCV_LIBRARIES})
+
 # 4. Instalar os executáveis para que o comando 'ros2 run' os encontre
 install(TARGETS
   camera_capture
   video_encoder
+  camera_streamer_node
   DESTINATION lib/${PROJECT_NAME}
 )
 
