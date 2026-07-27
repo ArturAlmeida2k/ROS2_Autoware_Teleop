@@ -19,15 +19,15 @@ ament_target_dependencies(camera_capture rclcpp sensor_msgs cv_bridge)
 target_link_libraries(camera_capture ${OpenCV_LIBRARIES})
 
 # 3. Compilar o Nó de Encoding (GStreamer)
-add_executable(video_encode src/video_encode.cpp)
-target_include_directories(video_encode PUBLIC ${OpenCV_INCLUDE_DIRS})
-ament_target_dependencies(video_encode rclcpp sensor_msgs cv_bridge)
-target_link_libraries(video_encode ${OpenCV_LIBRARIES})
+add_executable(video_encoder src/video_encoder.cpp)
+target_include_directories(video_encoder PUBLIC ${OpenCV_INCLUDE_DIRS})
+ament_target_dependencies(video_encoder rclcpp sensor_msgs cv_bridge)
+target_link_libraries(video_encoder ${OpenCV_LIBRARIES})
 
 # 4. Instalar os executáveis para que o comando 'ros2 run' os encontre
 install(TARGETS
   camera_capture
-  video_encode
+  video_encoder
   DESTINATION lib/${PROJECT_NAME}
 )
 
