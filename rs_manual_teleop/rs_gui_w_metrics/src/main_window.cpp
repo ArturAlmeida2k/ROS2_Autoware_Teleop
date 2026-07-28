@@ -38,6 +38,20 @@ MainWindow::MainWindow(RosBridge* bridge, QWidget* parent)
     cam_back_  = new CameraGLWidget(5009, tab_quad_view_);
     cam_right_ = new CameraGLWidget(5010, tab_quad_view_);   
 
+    // ==========================================
+    // NOVA ALTERAÇÃO: Ligar os sinais de latência
+    // ==========================================
+    
+    connect(cam_front_, &CameraGLWidget::latencyUpdated, this, [this](uint64_t frame_id, double latency_ms) {
+        // 1. Envia para o ROS 2
+        bridge_->publishFrontCameraMetrics(static_cast<uint32_t>(frame_id), latency_ms);
+        
+        // 2. Atualiza no HUD
+        if (panel_) {
+            panel_->setVideoLatency(latency_ms);
+        }
+    }, Qt::QueuedConnection);
+
     panel_ = new TelemetryPanel(tab_quad_view_); 
 
     grid->addWidget(cam_left_,   0, 0, 2, 1);

@@ -49,6 +49,7 @@ TelemetryPanel::TelemetryPanel(QWidget* parent)
     layout->addWidget(make_card("MODO",              lbl_mode_     = make_value(18)));
     layout->addWidget(make_card("ENGAGE",            lbl_engage_   = make_value(13)));
     layout->addWidget(make_card("SINAL",             lbl_signal_   = make_value(13)));
+    layout->addWidget(make_card("LATÊNCIA VÍDEO (ms)", lbl_latency_  = make_value(18)));
     layout->addStretch();
 }
 
@@ -102,4 +103,19 @@ void TelemetryPanel::onTelemetryReceived(TelemetryState msg)
     else if (msg.hazard == 2)      { lbl_signal_->setText("HAZARD ⚠"); lbl_signal_->setStyleSheet("color:#e67e22; background:transparent;"); }
     else                           { lbl_signal_->setText("–");        lbl_signal_->setStyleSheet("color:#444; background:transparent;"); }
 
+}
+
+void TelemetryPanel::setVideoLatency(double latency_ms)
+{
+    // Formatar com 1 casa decimal
+    lbl_latency_->setText(QString::number(latency_ms, 'f', 1));
+    
+    // Feedback visual (opcional mas útil para teleoperação)
+    if (latency_ms < 100.0) {
+        lbl_latency_->setStyleSheet("color: #2ecc71; background: transparent;"); // Verde
+    } else if (latency_ms < 150.0) {
+        lbl_latency_->setStyleSheet("color: #f39c12; background: transparent;"); // Laranja
+    } else {
+        lbl_latency_->setStyleSheet("color: #e74c3c; background: transparent; font-weight: bold;"); // Vermelho
+    }
 }

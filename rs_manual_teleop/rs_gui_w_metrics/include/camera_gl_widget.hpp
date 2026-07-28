@@ -3,17 +3,22 @@
 #include <QOpenGLFunctions_3_3_Core>
 #include <QOpenGLTexture>
 #include <QOpenGLShaderProgram>
-#include <thread>
-#include <atomic>
 #include <mutex>
 #include <vector>
+
+// Incluir GStreamer
+#include <gst/gst.h>
+#include <gst/app/gstappsink.h>
 
 class CameraGLWidget : public QOpenGLWidget {
     Q_OBJECT
 public:
-    // O construtor agora recebe a porta UDP que esta câmara vai escutar
     explicit CameraGLWidget(int port, QWidget* parent = nullptr);
     ~CameraGLWidget() override;
+
+signals:
+    // Sinal para poderes atualizar labels na MainWindow
+    void latencyUpdated(uint64_t frame_id, double latency_ms);
 
 protected:
     void initializeGL() override;
@@ -33,10 +38,14 @@ private:
     int                  frame_h_ = 0;
     bool                 dirty_   = false;
 
-    // Gestão da thread do GStreamer
-    std::thread          video_thread_;
-    std::atomic<bool>    running_;
-    void video_capture_loop(int port);
+    // Gestão do GStreamer
+    GstElement* pipeline_ = nullptr;
+    void start_pipeline(int port);
+    void stop_pipeline();
+
+    // Callbacks estáticas do GStreamer
+    static GstPadProbeReturn pad_probe_callback(GstPad *pad, GstPadProbeInfo *info, gpointer user_data);
+    static GstFlowReturn on_new_sample(GstElement *sink, gpointer user_data);
 
     void setup_quad();
     void setup_shaders();

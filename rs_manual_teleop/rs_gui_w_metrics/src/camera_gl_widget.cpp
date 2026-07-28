@@ -1,7 +1,8 @@
 #include "camera_gl_widget.hpp"
-#include <opencv2/opencv.hpp>
 #include <QOpenGLFunctions_3_3_Core>
 #include <QDebug>
+#include <chrono>
+#include <cstring>
 
 static const char *VERT_SRC = R"(#version 330 core
 layout(location=0) in vec2 aPos; layout(location=1) in vec2 aUV;
@@ -13,25 +14,24 @@ void main() { FragColor = texture(uTex, vUV); })";
 
 static const float QUAD[] = {-1.f, 1.f, 0.f, 0.f, -1.f, -1.f, 0.f, 1.f, 1.f, -1.f, 1.f, 1.f, -1.f, 1.f, 0.f, 0.f, 1.f, -1.f, 1.f, 1.f, 1.f, 1.f, 1.f, 0.f};
 
-// Construtor: Inicializa a variável atomic e lança a thread GStreamer
 CameraGLWidget::CameraGLWidget(int port, QWidget *parent) 
-    : QOpenGLWidget(parent), running_(true)
+    : QOpenGLWidget(parent)
 {
     QSurfaceFormat fmt;
     fmt.setVersion(3, 3);
     fmt.setProfile(QSurfaceFormat::CoreProfile);
     setFormat(fmt);
 
-    video_thread_ = std::thread(&CameraGLWidget::video_capture_loop, this, port);
+    // Inicializa o GStreamer (seguro chamar várias vezes na mesma app)
+    gst_init(nullptr, nullptr);
+
+    // Inicia a pipeline em pano de fundo
+    start_pipeline(port);
 }
 
-// Destrutor: Para a thread antes de destruir o widget
 CameraGLWidget::~CameraGLWidget()
 {
-    running_ = false;
-    if (video_thread_.joinable()) {
-        video_thread_.join();
-    }
+    stop_pipeline(); // Trava a rede e limpa a memória do GStreamer
     
     makeCurrent();
     delete texture_;
@@ -87,6 +87,7 @@ void CameraGLWidget::paintGL()
     shader_->release();
 }
 
+
 void CameraGLWidget::setup_shaders()
 {
     shader_ = new QOpenGLShaderProgram(this);
@@ -112,41 +113,127 @@ void CameraGLWidget::setup_quad()
     gl33_->glEnableVertexAttribArray(1);
 }
 
-// A função da thread que consome o GStreamer e ignora o ROS
-void CameraGLWidget::video_capture_loop(int port)
+void CameraGLWidget::start_pipeline(int port)
 {
-    // Alterado para format=BGR para agradar às restrições internas do motor OpenCV
-    // NOTA: Se o teu teste de terminal falhou, altera "nvh264dec" para "avdec_h264" nesta string!
-    std::string pipeline =
-        "udpsrc port=" + std::to_string(port) + " caps=\"application/x-rtp, media=(string)video, clock-rate=(int)90000, encoding-name=(string)H264, payload=(int)96\" ! "
-        "rtpjitterbuffer latency=0 ! "
-        "rtph264depay ! h264parse ! nvh264dec ! "
-        "videoconvert ! video/x-raw,format=BGR ! "
-        "appsink sync=false drop=true max-buffers=1";
+    // Pedimos explicitamente 'format=RGB' para ir direto para o OpenGL sem conversões!
+    std::string pipeline_str =
+        "udpsrc port=" + std::to_string(port) + " caps=\"application/x-rtp, media=video, clock-rate=90000, encoding-name=H264, payload=96\" ! "
+        "rtpjitterbuffer latency=0 drop-on-latency=true ! "
+        "rtph264depay ! "
+        "h264parse name=parser ! "
+        "nvh264dec ! "
+        "videoconvert ! "
+        "video/x-raw,format=RGB ! "
+        "appsink name=mysink sync=false drop=true max-buffers=1 emit-signals=true";
 
-    cv::VideoCapture cap(pipeline, cv::CAP_GSTREAMER);
-    if (!cap.isOpened()) {
-        qWarning() << "Falha ao abrir stream UDP na porta" << port;
+    GError *error = nullptr;
+    pipeline_ = gst_parse_launch(pipeline_str.c_str(), &error);
+    if (error) {
+        qWarning() << "Erro GStreamer:" << error->message;
+        g_error_free(error);
         return;
     }
 
-    cv::Mat frame;
-    while (running_) {
-        cap >> frame; 
-        if (frame.empty()) continue;
+    // 1. Injetar Sonda (Pad Probe) para extrair o SEI
+    GstElement *parser = gst_bin_get_by_name(GST_BIN(pipeline_), "parser");
+    GstPad *src_pad = gst_element_get_static_pad(parser, "src");
+    gst_pad_add_probe(src_pad, GST_PAD_PROBE_TYPE_BUFFER,
+                      (GstPadProbeCallback)pad_probe_callback, this, nullptr);
+    gst_object_unref(src_pad);
+    gst_object_unref(parser);
 
-        // Converter de volta para RGB imediatamente após a leitura do OpenCV
-        cv::cvtColor(frame, frame, cv::COLOR_BGR2RGB);
+    // 2. Ligar o evento do AppSink para captar os píxeis
+    GstElement *appsink = gst_bin_get_by_name(GST_BIN(pipeline_), "mysink");
+    g_signal_connect(appsink, "new-sample", G_CALLBACK(on_new_sample), this);
+    gst_object_unref(appsink);
 
+    // Iniciar!
+    gst_element_set_state(pipeline_, GST_STATE_PLAYING);
+}
+
+void CameraGLWidget::stop_pipeline()
+{
+    if (pipeline_) {
+        gst_element_set_state(pipeline_, GST_STATE_NULL);
+        gst_object_unref(pipeline_);
+        pipeline_ = nullptr;
+    }
+}
+
+// Roda numa thread do GStreamer antes de o frame ser descodificado
+GstPadProbeReturn CameraGLWidget::pad_probe_callback(GstPad *pad, GstPadProbeInfo *info, gpointer user_data)
+{
+    auto *widget = static_cast<CameraGLWidget*>(user_data);
+    GstBuffer *buffer = GST_PAD_PROBE_INFO_BUFFER(info);
+    GstMapInfo map;
+    
+    if (gst_buffer_map(buffer, &map, GST_MAP_READ)) {
+        // UUID do TX
+        const uint8_t uuid[16] = {
+            0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 
+            0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF, 0x11
+        };
+
+        for (size_t i = 0; i < map.size - 16; ++i) {
+            if (std::memcmp(map.data + i, uuid, 16) == 0) {
+                size_t str_len = std::min(map.size - i - 16, (size_t)64); 
+                std::string payload(reinterpret_cast<char*>(map.data + i + 16), str_len);
+
+                size_t end_pos = payload.find((char)0x80);
+                if (end_pos != std::string::npos) payload = payload.substr(0, end_pos);
+
+                uint64_t frame_id = 0, ts_ns = 0;
+                if (sscanf(payload.c_str(), "ID:%lu|TS:%lu", &frame_id, &ts_ns) == 2) {
+                    auto now = std::chrono::system_clock::now().time_since_epoch();
+                    uint64_t rx_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(now).count();
+                    double latency_ms = (rx_ns - ts_ns) / 1000000.0;
+                    
+                    // Emite sinal para o Qt (thread-safe, o Qt faz a fila de mensagens)
+                    emit widget->latencyUpdated(frame_id, latency_ms);
+                }
+                break;
+            }
+        }
+        gst_buffer_unmap(buffer, &map);
+    }
+    return GST_PAD_PROBE_OK;
+}
+
+// Roda numa thread do GStreamer após descodificar (Substitui o loop while)
+GstFlowReturn CameraGLWidget::on_new_sample(GstElement *sink, gpointer user_data)
+{
+    auto *widget = static_cast<CameraGLWidget*>(user_data);
+    GstSample *sample;
+    g_signal_emit_by_name(sink, "pull-sample", &sample);
+    
+    if (sample) {
+        GstBuffer *buffer = gst_sample_get_buffer(sample);
+        GstCaps *caps = gst_sample_get_caps(sample);
+        
+        GstStructure *s = gst_caps_get_structure(caps, 0);
+        int width, height;
+        gst_structure_get_int(s, "width", &width);
+        gst_structure_get_int(s, "height", &height);
+
+        GstMapInfo map;
+        gst_buffer_map(buffer, &map, GST_MAP_READ);
+        
+        // Lock e cópia para os buffers do OpenGL
         {
-            std::lock_guard<std::mutex> lock(frame_mutex_);
-            frame_w_ = frame.cols;
-            frame_h_ = frame.rows;
-            pending_frame_.assign(frame.data, frame.data + frame.total() * frame.elemSize());
-            dirty_ = true;
+            std::lock_guard<std::mutex> lock(widget->frame_mutex_);
+            widget->frame_w_ = width;
+            widget->frame_h_ = height;
+            // map.data já vem em RGB formatado, cópia direta
+            widget->pending_frame_.assign(map.data, map.data + map.size);
+            widget->dirty_ = true;
         }
         
-        QMetaObject::invokeMethod(this, "update", Qt::QueuedConnection);
+        // Pede ao Qt para redesenhar o OpenGL na main thread (seguro)
+        QMetaObject::invokeMethod(widget, "update", Qt::QueuedConnection);
+        
+        gst_buffer_unmap(buffer, &map);
+        gst_sample_unref(sample);
+        return GST_FLOW_OK;
     }
-    cap.release();
+    return GST_FLOW_ERROR;
 }

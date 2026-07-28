@@ -11,6 +11,7 @@ RosBridge::RosBridge(QObject* parent)
     pub_telemetry_gui_     = this->create_publisher<Metrics>("/metrics/telemetry_gui", metrics_qos);
     pub_e2e_telemetry_     = this->create_publisher<Metrics>("/metrics/e2e_telemetry_latency", metrics_qos);
     pub_full_latency_      = this->create_publisher<Metrics>("/metrics/full_latency", metrics_qos);
+    pub_front_camera_      = this->create_publisher<Metrics>("/metrics/front_camera", metrics_qos);
     
     sub_telemetry_ = create_subscription<TelemetryState>(
         "/telemetry/state", 10,
@@ -72,6 +73,21 @@ void RosBridge::publishTelemetryGuiMetrics(uint32_t id, const builtin_interfaces
     msg_full->latency_ms = e2e_telemetry_ms + e2e_command_ms;
     
     pub_full_latency_->publish(std::move(msg_full));
+}
+
+// Tópico 5 (Câmara Frontal)
+void RosBridge::publishFrontCameraMetrics(uint32_t frame_id, double latency_ms)
+{
+    auto msg = std::make_unique<Metrics>();
+    msg->id = frame_id;
+    
+    // Opcional: Podes preencher o tx e rx com o tempo atual apenas para não irem a zeros,
+    // mas o que te interessa para os gráficos é o latency_ms real.
+    msg->tx = this->now(); 
+    msg->rx = this->now(); 
+    msg->latency_ms = latency_ms;
+    
+    pub_front_camera_->publish(std::move(msg));
 }
 
 void RosBridge::spin()

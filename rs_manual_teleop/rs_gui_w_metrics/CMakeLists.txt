@@ -12,7 +12,9 @@ find_package(OpenCV REQUIRED)
 
 find_package(Qt5 REQUIRED COMPONENTS Widgets OpenGL)
 find_package(OpenGL REQUIRED)
-find_package(Threads REQUIRED) # ADICIONADO: Necessário para a std::thread
+find_package(PkgConfig REQUIRED)
+
+pkg_check_modules(GST REQUIRED IMPORTED_TARGET gstreamer-1.0 gstreamer-app-1.0)
 
 add_executable(rs_gui
   src/main.cpp
@@ -40,11 +42,13 @@ ament_target_dependencies(rs_gui
 )
 
 target_link_libraries(rs_gui
+  PkgConfig::GST
   Qt5::Widgets
+  Qt5::Core
+  Qt5::Gui
   Qt5::OpenGL
   OpenGL::GL
   ${OpenCV_LIBS}
-  Threads::Threads # ADICIONADO: Link da biblioteca pthread
 )
 
 install(TARGETS rs_gui
