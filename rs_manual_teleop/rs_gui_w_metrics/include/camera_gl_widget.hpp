@@ -5,6 +5,7 @@
 #include <QOpenGLShaderProgram>
 #include <mutex>
 #include <vector>
+#include <queue>
 
 // Incluir GStreamer
 #include <gst/gst.h>
@@ -37,6 +38,12 @@ private:
     int                  frame_w_ = 0;
     int                  frame_h_ = 0;
     bool                 dirty_   = false;
+
+    std::mutex queue_mutex_;
+    std::queue<std::pair<uint64_t, uint64_t>> sei_queue_; 
+
+    uint64_t pending_id_ = 0;
+    uint64_t pending_ts_ = 0;
 
     // Gestão do GStreamer
     GstElement* pipeline_ = nullptr;
