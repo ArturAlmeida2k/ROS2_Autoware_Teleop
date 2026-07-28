@@ -115,11 +115,13 @@ void CameraGLWidget::setup_quad()
 // A função da thread que consome o GStreamer e ignora o ROS
 void CameraGLWidget::video_capture_loop(int port)
 {
+    // Alterado para format=BGR para agradar às restrições internas do motor OpenCV
+    // NOTA: Se o teu teste de terminal falhou, altera "nvh264dec" para "avdec_h264" nesta string!
     std::string pipeline =
         "udpsrc port=" + std::to_string(port) + " caps=\"application/x-rtp, media=(string)video, clock-rate=(int)90000, encoding-name=(string)H264, payload=(int)96\" ! "
         "rtpjitterbuffer latency=0 ! "
         "rtph264depay ! h264parse ! nvh264dec ! "
-        "videoconvert ! video/x-raw,format=RGB ! "
+        "videoconvert ! video/x-raw,format=BGR ! "
         "appsink sync=false drop=true max-buffers=1";
 
     cv::VideoCapture cap(pipeline, cv::CAP_GSTREAMER);
@@ -132,6 +134,9 @@ void CameraGLWidget::video_capture_loop(int port)
     while (running_) {
         cap >> frame; 
         if (frame.empty()) continue;
+
+        // Converter de volta para RGB imediatamente após a leitura do OpenCV
+        cv::cvtColor(frame, frame, cv::COLOR_BGR2RGB);
 
         {
             std::lock_guard<std::mutex> lock(frame_mutex_);
