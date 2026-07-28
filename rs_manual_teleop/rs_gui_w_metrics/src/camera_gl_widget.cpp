@@ -65,7 +65,21 @@ void CameraGLWidget::paintGL() {
     {
         std::lock_guard<std::mutex> lock(frame_mutex_);
         if (dirty_ && !pending_frame_.empty()) {
-            // ... (o teu código original de atualização da textura aqui) ...
+            
+            // =================================================================
+            // O CÓDIGO QUE FALTAVA: Criar e dimensionar a textura do OpenGL
+            // =================================================================
+            if (!texture_->isCreated() || texture_->width() != frame_w_ || texture_->height() != frame_h_) {
+                if (texture_->isCreated()) {
+                    texture_->destroy();
+                }
+                texture_->create();
+                texture_->setSize(frame_w_, frame_h_);
+                texture_->setFormat(QOpenGLTexture::RGB8_UNorm);
+                texture_->allocateStorage(QOpenGLTexture::RGB, QOpenGLTexture::UInt8);
+            }
+            // =================================================================
+
             texture_->setData(QOpenGLTexture::RGB, QOpenGLTexture::UInt8, static_cast<const void *>(pending_frame_.data()));
             
             // Salvar para calcular latência
@@ -97,7 +111,6 @@ void CameraGLWidget::paintGL() {
         emit latencyUpdated(id_to_emit, full_latency_ms);
     }
 }
-
 
 void CameraGLWidget::setup_shaders()
 {
