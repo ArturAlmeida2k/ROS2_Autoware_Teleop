@@ -33,11 +33,11 @@ MainWindow::MainWindow(RosBridge* bridge, QWidget* parent)
     grid->setSpacing(2); 
 
     // O pai agora é o tab_quad_view_
-    cam_left_  = new CameraGLWidget(tab_quad_view_);
-    cam_front_ = new CameraGLWidget(tab_quad_view_);
-    cam_back_  = new CameraGLWidget(tab_quad_view_);
-    cam_right_ = new CameraGLWidget(tab_quad_view_);
-    
+    cam_left_  = new CameraGLWidget(5007, tab_quad_view_);
+    cam_front_ = new CameraGLWidget(5008, tab_quad_view_);
+    cam_back_  = new CameraGLWidget(5009, tab_quad_view_);
+    cam_right_ = new CameraGLWidget(5010, tab_quad_view_);   
+
     panel_ = new TelemetryPanel(tab_quad_view_); 
 
     grid->addWidget(cam_left_,   0, 0, 2, 1);
@@ -86,18 +86,6 @@ MainWindow::MainWindow(RosBridge* bridge, QWidget* parent)
         // Se no teu ficheiro .msg for 'e2e_command_ms' ou algo parecido, altera aqui:
         bridge_->publishTelemetryGuiMetrics(msg.id, msg.origin_stamp, msg.e2e_command_ms, rx_time_ns, display_time_ns);
     }, Qt::QueuedConnection);
-
-
-    // Front Camera (Ativa o Tópico 4)
-    connect(bridge_, &RosBridge::imageFrontReceived, this, [this](CompressedImage::SharedPtr msg, int64_t rx_time_ns) {
-        cam_front_->onImageReceived(msg);
-        int64_t display_time_ns = rclcpp::Clock().now().nanoseconds();
-        bridge_->publishFrontCameraMetrics(rx_time_ns, display_time_ns);
-    }, Qt::QueuedConnection);
-
-    connect(bridge_, &RosBridge::imageLeftReceived,  cam_left_,  &CameraGLWidget::onImageReceived, Qt::QueuedConnection);
-    connect(bridge_, &RosBridge::imageBackReceived,  cam_back_,  &CameraGLWidget::onImageReceived, Qt::QueuedConnection);
-    connect(bridge_, &RosBridge::imageRightReceived, cam_right_, &CameraGLWidget::onImageReceived, Qt::QueuedConnection);
 
     resize(1440, 900);
     
