@@ -12,6 +12,7 @@ find_package(OpenCV REQUIRED)
 
 find_package(Qt5 REQUIRED COMPONENTS Widgets OpenGL)
 find_package(OpenGL REQUIRED)
+find_package(Threads REQUIRED) # ADICIONADO: Necessário para a std::thread
 
 add_executable(rs_gui
   src/main.cpp
@@ -27,7 +28,10 @@ add_executable(rs_gui
   include/pointcloud_gl_widget.hpp
 )
 
-target_include_directories(rs_gui PRIVATE include)
+target_include_directories(rs_gui PRIVATE 
+  include
+  ${OpenCV_INCLUDE_DIRS} # ADICIONADO: Garante acesso rápido aos headers do OpenCV
+)
 
 ament_target_dependencies(rs_gui
   rclcpp
@@ -40,6 +44,7 @@ target_link_libraries(rs_gui
   Qt5::OpenGL
   OpenGL::GL
   ${OpenCV_LIBS}
+  Threads::Threads # ADICIONADO: Link da biblioteca pthread
 )
 
 install(TARGETS rs_gui

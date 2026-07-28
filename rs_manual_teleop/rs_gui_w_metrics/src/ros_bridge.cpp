@@ -11,7 +11,6 @@ RosBridge::RosBridge(QObject* parent)
     pub_telemetry_gui_     = this->create_publisher<Metrics>("/metrics/telemetry_gui", metrics_qos);
     pub_e2e_telemetry_     = this->create_publisher<Metrics>("/metrics/e2e_telemetry_latency", metrics_qos);
     pub_full_latency_      = this->create_publisher<Metrics>("/metrics/full_latency", metrics_qos);
-    pub_front_camera_      = this->create_publisher<Metrics>("/metrics/front_camera", metrics_qos);
     
     sub_telemetry_ = create_subscription<TelemetryState>(
         "/telemetry/state", 10,
@@ -29,32 +28,6 @@ RosBridge::RosBridge(QObject* parent)
         rclcpp::SensorDataQoS(),
         [this](const PointCloud2::SharedPtr msg) {
             emit pointCloudReceived(msg);
-        });
-        
-    sub_front_ = create_subscription<CompressedImage>(
-        "/camera/front/compressed", rclcpp::SensorDataQoS(),
-        [this](const CompressedImage::SharedPtr msg) {
-            rclcpp::Time tempo_rececao = this->now();
-
-            emit imageFrontReceived(msg, tempo_rececao.nanoseconds());
-        });
-    
-    sub_left_ = create_subscription<CompressedImage>(
-        "/camera/left/compressed", rclcpp::SensorDataQoS(),
-        [this](const CompressedImage::SharedPtr msg) {
-            emit imageLeftReceived(msg);
-        });
-    
-    sub_right_ = create_subscription<CompressedImage>(
-        "/camera/right/compressed", rclcpp::SensorDataQoS(),
-        [this](const CompressedImage::SharedPtr msg) {
-            emit imageRightReceived(msg);
-        });
-    
-    sub_back_ = create_subscription<CompressedImage>(
-        "/camera/back/compressed", rclcpp::SensorDataQoS(),
-        [this](const CompressedImage::SharedPtr msg) {
-            emit imageBackReceived(msg);
         });
 
     executor_.add_node(get_node_base_interface());
@@ -99,15 +72,6 @@ void RosBridge::publishTelemetryGuiMetrics(uint32_t id, const builtin_interfaces
     msg_full->latency_ms = e2e_telemetry_ms + e2e_command_ms;
     
     pub_full_latency_->publish(std::move(msg_full));
-}
-
-// Tópico 5 (Câmara Frontal)
-void RosBridge::publishFrontCameraMetrics(int64_t rx_time_ns, int64_t display_time_ns)
-{
-    rclcpp::Time rx_time(rx_time_ns, RCL_ROS_TIME);
-    rclcpp::Time display_time(display_time_ns, RCL_ROS_TIME);
-
-    publish_metric(pub_front_camera_, 0, display_time, rx_time);
 }
 
 void RosBridge::spin()

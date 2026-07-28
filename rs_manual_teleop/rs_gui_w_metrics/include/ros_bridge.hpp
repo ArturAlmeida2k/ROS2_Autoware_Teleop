@@ -1,7 +1,6 @@
 #pragma once
 #include <QObject>
 #include <rclcpp/rclcpp.hpp>
-#include <sensor_msgs/msg/compressed_image.hpp>
 #include <sensor_msgs/msg/point_cloud2.hpp>
 #include <msg_manual_teleop/msg/telemetry_state.hpp>
 #include <msg_manual_teleop/msg/node_metrics.hpp>
@@ -9,7 +8,6 @@
 
 
 using PointCloud2 = sensor_msgs::msg::PointCloud2;
-using CompressedImage = sensor_msgs::msg::CompressedImage;
 using TelemetryState  = msg_manual_teleop::msg::TelemetryState;
 using Metrics = msg_manual_teleop::msg::NodeMetrics;
 
@@ -25,21 +23,12 @@ public:
 
     signals:
     void telemetryReceived(TelemetryState msg, int64_t receive_time_ns);
-    void imageFrontReceived(CompressedImage::SharedPtr msg, int64_t receive_time_ns);
 
     void pointCloudReceived(PointCloud2::SharedPtr msg);
-    void imageLeftReceived(CompressedImage::SharedPtr msg);
-    void imageRightReceived(CompressedImage::SharedPtr msg);
-    void imageBackReceived(CompressedImage::SharedPtr msg); 
 private:
     rclcpp::Subscription<TelemetryState>::SharedPtr   sub_telemetry_;
 
     rclcpp::Subscription<PointCloud2>::SharedPtr      sub_pointcloud_;
-    
-    rclcpp::Subscription<CompressedImage>::SharedPtr  sub_front_;
-    rclcpp::Subscription<CompressedImage>::SharedPtr  sub_left_;
-    rclcpp::Subscription<CompressedImage>::SharedPtr  sub_right_;
-    rclcpp::Subscription<CompressedImage>::SharedPtr  sub_back_;
 
     rclcpp::Publisher<Metrics>::SharedPtr pub_telemetry_decoder_;
     rclcpp::Publisher<Metrics>::SharedPtr pub_telemetry_gui_;
