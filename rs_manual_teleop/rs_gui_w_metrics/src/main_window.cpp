@@ -33,8 +33,8 @@ MainWindow::MainWindow(RosBridge* bridge, QWidget* parent)
     grid->setSpacing(2); 
 
     // O pai agora é o tab_quad_view_
-    cam_left_  = new CameraGLWidget(5007, tab_quad_view_);
-    cam_front_ = new CameraGLWidget(5008, tab_quad_view_);
+    cam_left_  = new CameraGLWidget(5008, tab_quad_view_);
+    cam_front_ = new CameraGLWidget(5007, tab_quad_view_);
     cam_back_  = new CameraGLWidget(5009, tab_quad_view_);
     cam_right_ = new CameraGLWidget(5010, tab_quad_view_);   
 

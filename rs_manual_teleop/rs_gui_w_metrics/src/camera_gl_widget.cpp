@@ -31,7 +31,7 @@ CameraGLWidget::CameraGLWidget(int port, QWidget *parent)
 
 CameraGLWidget::~CameraGLWidget()
 {
-    stop_pipeline(); // Trava a rede e limpa a memória do GStreamer
+    stop_pipeline(); 
     
     makeCurrent();
     delete texture_;
@@ -145,13 +145,13 @@ void CameraGLWidget::setup_quad()
 
 void CameraGLWidget::start_pipeline(int port)
 {
-    // Pedimos explicitamente 'format=RGB' para ir direto para o OpenGL sem conversões!
+    // Pedimos explicitamente 'format=RGB' e forçamos o descodificador de CPU (avdec_h264)
     std::string pipeline_str =
         "udpsrc port=" + std::to_string(port) + " caps=\"application/x-rtp, media=video, clock-rate=90000, encoding-name=H264, payload=96\" ! "
         "rtpjitterbuffer latency=0 drop-on-latency=true ! "
         "rtph264depay ! "
         "h264parse name=parser ! "
-        "nvh264dec low-latency=true ! "
+        "avdec_h264 ! " // <--- Descodificador de software (CPU)
         "videoconvert n-threads=8 ! "
         "video/x-raw,format=RGB ! "
         "appsink name=mysink sync=false drop=true max-buffers=1 emit-signals=true";
