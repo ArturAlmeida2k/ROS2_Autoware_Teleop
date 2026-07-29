@@ -109,13 +109,13 @@ void CameraGLWidget::paintGL() {
     shader_->release();
 
     // CÁLCULO FINAL: A imagem acabou de ser processada pelo GPU e vai aparecer!
-    // if (id_to_emit > 0 && ts_to_emit > 0) {
-    //     auto now = std::chrono::system_clock::now().time_since_epoch();
-    //     uint64_t render_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(now).count();
-    //     double full_latency_ms = (render_ns - ts_to_emit) / 1000000.0;
+    if (id_to_emit > 0 && ts_to_emit > 0) {
+        auto now = std::chrono::system_clock::now().time_since_epoch();
+        uint64_t render_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(now).count();
+        double full_latency_ms = (render_ns - ts_to_emit) / 1000000.0;
         
-    //     emit latencyUpdated(id_to_emit, full_latency_ms);
-    // }
+        emit latencyUpdated(id_to_emit, full_latency_ms);
+    }
 }
 
 void CameraGLWidget::setup_shaders()
@@ -211,16 +211,7 @@ GstPadProbeReturn CameraGLWidget::pad_probe_callback(GstPad *pad, GstPadProbeInf
 
                 uint64_t frame_id = 0, ts_ns = 0;
                 if (sscanf(payload.c_str(), "ID:%lu|TS:%lu", &frame_id, &ts_ns) == 2) {
-                    
-                    // 1. CÁLCULO IMEDIATO: O pacote acabou de bater no PC!
-                    auto now = std::chrono::system_clock::now().time_since_epoch();
-                    uint64_t rx_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(now).count();
-                    double network_latency_ms = (rx_ns - ts_ns) / 1000000.0;
-                    
-                    // 2. Emitir o sinal logo aqui
-                    emit widget->latencyUpdated(frame_id, network_latency_ms);
-
-                    // 3. Continuar a guardar na fila para o vídeo continuar a fluir normalmente para o ecrã
+                    // NOVA PARTE: Em vez de emitir, guarda na fila
                     std::lock_guard<std::mutex> lock(widget->queue_mutex_);
                     widget->sei_queue_.push({frame_id, ts_ns});
                 }
