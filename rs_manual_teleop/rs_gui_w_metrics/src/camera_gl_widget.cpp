@@ -151,7 +151,7 @@ void CameraGLWidget::start_pipeline(int port)
         "rtpjitterbuffer latency=0 drop-on-latency=true ! "
         "rtph264depay ! "
         "h264parse name=parser ! "
-        "nvh264dec ! "
+        "nvh264dec low-latency=true ! "
         "videoconvert n-threads=8 ! "
         "video/x-raw,format=RGB ! "
         "appsink name=mysink sync=false drop=true max-buffers=1 emit-signals=true";
