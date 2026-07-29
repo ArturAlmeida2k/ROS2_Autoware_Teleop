@@ -242,26 +242,28 @@ GstFlowReturn CameraGLWidget::on_new_sample(GstElement *sink, gpointer user_data
         gst_buffer_map(buffer, &map, GST_MAP_READ);
         
         uint64_t current_id = 0, current_ts = 0;
-        
-        // Retirar o timestamp correspondente a este frame da fila
-        std::lock_guard<std::mutex> lock(widget->queue_mutex_);
-        if (!widget->sei_queue_.empty()) {
-            current_id = widget->sei_queue_.front().first;
-            current_ts = widget->sei_queue_.front().second;
-            widget->sei_queue_.pop();
+        {
+            // Retirar o timestamp correspondente a este frame da fila
+            std::lock_guard<std::mutex> lock(widget->queue_mutex_);
+            if (!widget->sei_queue_.empty()) {
+                current_id = widget->sei_queue_.front().first;
+                current_ts = widget->sei_queue_.front().second;
+                widget->sei_queue_.pop();
+            }
         }
 
-        // Lock do OpenGL frame
-        std::lock_guard<std::mutex> lock(widget->frame_mutex_);
-        widget->frame_w_ = width;
-        widget->frame_h_ = height;
-        widget->pending_frame_.assign(map.data, map.data + map.size);
-        
-        // Passar o timestamp para o Qt desenhar
-        widget->pending_id_ = current_id;
-        widget->pending_ts_ = current_ts;
-        widget->dirty_ = true;
-        
+        {
+            // Lock do OpenGL frame
+            std::lock_guard<std::mutex> lock(widget->frame_mutex_);
+            widget->frame_w_ = width;
+            widget->frame_h_ = height;
+            widget->pending_frame_.assign(map.data, map.data + map.size);
+            
+            // Passar o timestamp para o Qt desenhar
+            widget->pending_id_ = current_id;
+            widget->pending_ts_ = current_ts;
+            widget->dirty_ = true;
+        }
         QMetaObject::invokeMethod(widget, "update", Qt::QueuedConnection);
         
         gst_buffer_unmap(buffer, &map);
