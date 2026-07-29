@@ -58,35 +58,41 @@ void CameraGLWidget::initializeGL()
 void CameraGLWidget::resizeGL(int w, int h) { gl33_->glViewport(0, 0, w, h); }
 
 void CameraGLWidget::paintGL() {
+    static std::vector<uint8_t> local_frame; 
+    int local_w = 0, local_h = 0;
     uint64_t id_to_emit = 0;
     uint64_t ts_to_emit = 0;
-
+    bool has_new_frame = false;   
+    
     gl33_->glClear(GL_COLOR_BUFFER_BIT);
-    {
-        std::lock_guard<std::mutex> lock(frame_mutex_);
-        if (dirty_ && !pending_frame_.empty()) {
-            
-            // =================================================================
-            // O CÓDIGO QUE FALTAVA: Criar e dimensionar a textura do OpenGL
-            // =================================================================
-            if (!texture_->isCreated() || texture_->width() != frame_w_ || texture_->height() != frame_h_) {
-                if (texture_->isCreated()) {
-                    texture_->destroy();
-                }
-                texture_->create();
-                texture_->setSize(frame_w_, frame_h_);
-                texture_->setFormat(QOpenGLTexture::RGB8_UNorm);
-                texture_->allocateStorage(QOpenGLTexture::RGB, QOpenGLTexture::UInt8);
-            }
-            // =================================================================
+    
+    std::lock_guard<std::mutex> lock(frame_mutex_);
+    if (dirty_ && !pending_frame_.empty()) {
+        
+        // Magia do C++: Troca a memória instantaneamente em vez de copiar!
+        local_frame.swap(pending_frame_); 
+        
+        local_w = frame_w_;
+        local_h = frame_h_;
+        id_to_emit = pending_id_;
+        ts_to_emit = pending_ts_;
+        dirty_ = false;
+        has_new_frame = true;
+    }    
 
-            texture_->setData(QOpenGLTexture::RGB, QOpenGLTexture::UInt8, static_cast<const void *>(pending_frame_.data()));
-            
-            // Salvar para calcular latência
-            id_to_emit = pending_id_;
-            ts_to_emit = pending_ts_;
-            dirty_ = false;
+    if (has_new_frame) {
+        if (!texture_->isCreated() || texture_->width() != local_w || texture_->height() != local_h) {
+            if (texture_->isCreated()) {
+                texture_->destroy();
+            }
+            texture_->create();
+            texture_->setSize(local_w, local_h);
+            texture_->setFormat(QOpenGLTexture::RGB8_UNorm);
+            texture_->allocateStorage(QOpenGLTexture::RGB, QOpenGLTexture::UInt8);
         }
+
+        // Fazer upload para a placa gráfica usando a nossa cópia local
+        texture_->setData(QOpenGLTexture::RGB, QOpenGLTexture::UInt8, static_cast<const void *>(local_frame.data()));
     }
     
     if (!texture_->isCreated()) return;
@@ -146,7 +152,7 @@ void CameraGLWidget::start_pipeline(int port)
         "rtph264depay ! "
         "h264parse name=parser ! "
         "nvh264dec ! "
-        "videoconvert ! "
+        "videoconvert n-threads=8 ! "
         "video/x-raw,format=RGB ! "
         "appsink name=mysink sync=false drop=true max-buffers=1 emit-signals=true";
 
@@ -238,27 +244,23 @@ GstFlowReturn CameraGLWidget::on_new_sample(GstElement *sink, gpointer user_data
         uint64_t current_id = 0, current_ts = 0;
         
         // Retirar o timestamp correspondente a este frame da fila
-        {
-            std::lock_guard<std::mutex> lock(widget->queue_mutex_);
-            if (!widget->sei_queue_.empty()) {
-                current_id = widget->sei_queue_.front().first;
-                current_ts = widget->sei_queue_.front().second;
-                widget->sei_queue_.pop();
-            }
+        std::lock_guard<std::mutex> lock(widget->queue_mutex_);
+        if (!widget->sei_queue_.empty()) {
+            current_id = widget->sei_queue_.front().first;
+            current_ts = widget->sei_queue_.front().second;
+            widget->sei_queue_.pop();
         }
 
         // Lock do OpenGL frame
-        {
-            std::lock_guard<std::mutex> lock(widget->frame_mutex_);
-            widget->frame_w_ = width;
-            widget->frame_h_ = height;
-            widget->pending_frame_.assign(map.data, map.data + map.size);
-            
-            // Passar o timestamp para o Qt desenhar
-            widget->pending_id_ = current_id;
-            widget->pending_ts_ = current_ts;
-            widget->dirty_ = true;
-        }
+        std::lock_guard<std::mutex> lock(widget->frame_mutex_);
+        widget->frame_w_ = width;
+        widget->frame_h_ = height;
+        widget->pending_frame_.assign(map.data, map.data + map.size);
+        
+        // Passar o timestamp para o Qt desenhar
+        widget->pending_id_ = current_id;
+        widget->pending_ts_ = current_ts;
+        widget->dirty_ = true;
         
         QMetaObject::invokeMethod(widget, "update", Qt::QueuedConnection);
         
