@@ -145,13 +145,28 @@ void CameraGLWidget::setup_quad()
 
 void CameraGLWidget::start_pipeline(int port)
 {
-    // Pedimos explicitamente 'format=RGB' e forçamos o descodificador de CPU (avdec_h264)
+    // 1. Verificar qual descodificador está disponível no sistema atual
+    std::string decoder_str;
+    GstElementFactory *nv_factory = gst_element_factory_find("nvh264dec");
+    
+    if (nv_factory) {
+        // GPU Nvidia encontrada!
+        decoder_str = "nvh264dec low-latency=true ! ";
+        gst_object_unref(nv_factory); // Limpar a memória da pesquisa
+        qInfo() << "GPU Nvidia detetada na porta" << port << "- A usar Aceleração de Hardware (nvh264dec).";
+    } else {
+        // Sem GPU Nvidia. Fallback para CPU!
+        decoder_str = "avdec_h264 ! "; 
+        qWarning() << "GPU Nvidia não encontrada na porta" << port << "- Fallback para CPU (avdec_h264).";
+    }
+
+    // 2. Montar a pipeline dinamicamente com o descodificador escolhido
     std::string pipeline_str =
         "udpsrc port=" + std::to_string(port) + " caps=\"application/x-rtp, media=video, clock-rate=90000, encoding-name=H264, payload=96\" ! "
         "rtpjitterbuffer latency=0 drop-on-latency=true ! "
         "rtph264depay ! "
         "h264parse name=parser ! "
-        "avdec_h264 ! " // <--- Descodificador de software (CPU)
+        + decoder_str + // <--- Injeta aqui o nvh264dec ou avdec_h264
         "videoconvert n-threads=8 ! "
         "video/x-raw,format=RGB ! "
         "appsink name=mysink sync=false drop=true max-buffers=1 emit-signals=true";
@@ -164,7 +179,7 @@ void CameraGLWidget::start_pipeline(int port)
         return;
     }
 
-    // 1. Injetar Sonda (Pad Probe) para extrair o SEI
+    // 3. Injetar Sonda (Pad Probe) para extrair o SEI
     GstElement *parser = gst_bin_get_by_name(GST_BIN(pipeline_), "parser");
     GstPad *src_pad = gst_element_get_static_pad(parser, "src");
     gst_pad_add_probe(src_pad, GST_PAD_PROBE_TYPE_BUFFER,
@@ -172,7 +187,7 @@ void CameraGLWidget::start_pipeline(int port)
     gst_object_unref(src_pad);
     gst_object_unref(parser);
 
-    // 2. Ligar o evento do AppSink para captar os píxeis
+    // 4. Ligar o evento do AppSink para captar os píxeis
     GstElement *appsink = gst_bin_get_by_name(GST_BIN(pipeline_), "mysink");
     g_signal_connect(appsink, "new-sample", G_CALLBACK(on_new_sample), this);
     gst_object_unref(appsink);
