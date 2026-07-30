@@ -16,6 +16,7 @@ find_package(PkgConfig REQUIRED)
 pkg_check_modules(GSTREAMER REQUIRED gstreamer-1.0 gstreamer-app-1.0 gstreamer-video-1.0)
 
 include_directories(${GSTREAMER_INCLUDE_DIRS})
+link_directories(${GSTREAMER_LIBRARY_DIRS})
 
 # --- Nó 1 Câmara ---
 add_executable(
@@ -33,6 +34,7 @@ ament_target_dependencies(
 target_link_libraries(
   video_encoder
   ${OpenCV_LIBS}
+  ${GSTREAMER_LIBRARIES}
 )
 
 # --- Nó 4 Câmaras ---
