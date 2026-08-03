@@ -112,7 +112,7 @@ private:
         // Enter Parking(1), Leave Parking(2), Drive(2), Reverse(3)
 
         if (clutch){
-            if (park == 1) {
+            if (park) {
                 new_gear = 1;
             }           
             else if (drive) {
