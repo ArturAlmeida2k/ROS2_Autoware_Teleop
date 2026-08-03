@@ -151,7 +151,7 @@ void CameraGLWidget::start_pipeline(int port)
     
     if (nv_factory) {
         // GPU Nvidia encontrada!
-        decoder_str = "nvh264dec low-latency=true ! ";
+        decoder_str = "nvh264dec  max-display-delay=0 ! ";
         gst_object_unref(nv_factory); // Limpar a memória da pesquisa
         qInfo() << "GPU Nvidia detetada na porta" << port << "- A usar Aceleração de Hardware (nvh264dec).";
     } else {
@@ -217,7 +217,8 @@ GstPadProbeReturn CameraGLWidget::pad_probe_callback(GstPad *pad, GstPadProbeInf
             0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF, 0x11
         };
 
-        for (size_t i = 0; i < map.size - 16; ++i) {
+        size_t search_limit = std::min(map.size - 16, (size_t)128);
+        for (size_t i = 0; i < search_limit - 16; ++i) {
             if (std::memcmp(map.data + i, uuid, 16) == 0) {
                 size_t str_len = std::min(map.size - i - 16, (size_t)64); 
                 std::string payload(reinterpret_cast<char*>(map.data + i + 16), str_len);
