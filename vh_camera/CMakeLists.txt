@@ -20,8 +20,6 @@ target_link_libraries(camera_streamer_node ${OpenCV_LIBRARIES})
 
 # 4. Instalar os executáveis para que o comando 'ros2 run' os encontre
 install(TARGETS
-  camera_capture
-  video_encoder
   camera_streamer_node
   DESTINATION lib/${PROJECT_NAME}
 )
