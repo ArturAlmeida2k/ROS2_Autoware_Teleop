@@ -2,20 +2,29 @@
 #include <sensor_msgs/msg/compressed_image.hpp>
 #include <gst/gst.h>
 #include <gst/app/gstappsrc.h>
+#include <string>
 
 class H264Streamer : public rclcpp::Node {
 public:
     H264Streamer() : Node("h264_streamer"), pipeline_(nullptr), appsrc_(nullptr) {
-        // Inicializar GStreamer
+        
+        // 1. Declarar Parâmetros
+        this->declare_parameter<std::string>("ip_address", "192.168.94.99");
+        this->declare_parameter<int>("port", 5007);
+
+        std::string ip_address = this->get_parameter("ip_address").as_string();
+        int port = this->get_parameter("port").as_int();
+
+        // 2. Inicializar GStreamer
         gst_init(nullptr, nullptr);
 
-        // Pipeline — sem encoding, só empacotamento RTP
+        // 3. Pipeline dinâmico
         std::string pipeline_str =
             "appsrc name=mysrc is-live=true do-timestamp=true format=time "
             "caps=video/x-h264,stream-format=byte-stream,alignment=au ! "
             "h264parse config-interval=-1 ! "
-            "rtph264pay pt=96 mtu=1400 aggregate-mode=zero-latency ! "
-            "udpsink host=192.168.94.202 port=5006 sync=false";
+            "rtph264pay pt=96 mtu=1400 ! "
+            "udpsink host=" + ip_address + " port=" + std::to_string(port) + " sync=false";
 
         GError *error = nullptr;
         pipeline_ = gst_parse_launch(pipeline_str.c_str(), &error);
@@ -34,7 +43,7 @@ public:
             std::bind(&H264Streamer::image_callback, this, std::placeholders::_1)
         );
 
-        RCLCPP_INFO(this->get_logger(), "H264Streamer iniciado. A enviar para 10.0.0.2:5006");
+        RCLCPP_INFO(this->get_logger(), "H264Streamer iniciado. A enviar vídeo para %s:%d", ip_address.c_str(), port);
     }
 
     ~H264Streamer() {
@@ -57,19 +66,14 @@ private:
         gst_buffer_map(buffer, &map, GST_MAP_WRITE);
         memcpy(map.data, msg->data.data(), msg->data.size());
         gst_buffer_unmap(buffer, &map);
-
-        // Timestamp do buffer
-        GST_BUFFER_PTS(buffer) = 
-            (guint64)msg->header.stamp.sec * GST_SECOND + 
-            (guint64)msg->header.stamp.nanosec;
-
+        
         // Enviar para o pipeline
         GstFlowReturn ret;
         g_signal_emit_by_name(appsrc_, "push-buffer", buffer, &ret);
         gst_buffer_unref(buffer);
 
         if (ret != GST_FLOW_OK) {
-            RCLCPP_WARN(this->get_logger(), "Erro ao enviar buffer: %d", ret);
+            RCLCPP_WARN(this->get_logger(), "Erro ao enviar buffer para o GStreamer: %d", ret);
         }
     }
 
