@@ -7,16 +7,18 @@
 #include <mutex>
 #include <vector>
 #include <chrono>
+#include <thread>
+#include <atomic>
 
 class CameraStreamerNode : public rclcpp::Node {
 public:
-    CameraStreamerNode() : Node("camera_streamer_node"), pipeline_initialized_(false), frame_counter_(1) {
-        // Parâmetros
+    CameraStreamerNode() : Node("camera_streamer_node"), pipeline_initialized_(false), frame_counter_(1), running_(true) {
+        // ... (Declaração de parâmetros mantém-se igual) ...
         this->declare_parameter<int>("camera_id", 0);
         this->declare_parameter<int>("width", 1280);
         this->declare_parameter<int>("height", 720);
         this->declare_parameter<int>("fps", 30);
-        this->declare_parameter<std::string>("ip_address", "192.168.1.50");
+        this->declare_parameter<std::string>("ip_address", "127.0.0.1");
         this->declare_parameter<int>("port", 5007);
         this->declare_parameter<int>("bitrate", 5000);
 
@@ -28,33 +30,34 @@ public:
         port_         = this->get_parameter("port").as_int();
         bitrate_      = this->get_parameter("bitrate").as_int();
 
-        // Inicializar GStreamer
         gst_init(nullptr, nullptr);
 
-        // 1. Abrir a Câmara
+        // 1. Configuração agressiva da Câmara (Zero Buffering)
         cap_.open(camera_id, cv::CAP_V4L2);
-        if (!cap_.isOpened()) {
-            RCLCPP_ERROR(this->get_logger(), "Falha ao abrir a camara ID: %d", camera_id);
-            return;
-        }
+        if (!cap_.isOpened()) return;
+        
         cap_.set(cv::CAP_PROP_FRAME_WIDTH, width);
         cap_.set(cv::CAP_PROP_FRAME_HEIGHT, height);
         cap_.set(cv::CAP_PROP_FPS, fps);
+        // OBRIGATÓRIO: Forçar o Linux a guardar apenas 1 frame de cada vez
+        cap_.set(cv::CAP_PROP_BUFFERSIZE, 1);
+        // Tentar forçar MJPEG para evitar estrangulamento de USB a 1080p
+        cap_.set(cv::CAP_PROP_FOURCC, cv::VideoWriter::fourcc('M', 'J', 'P', 'G'));
 
         // 2. Inicializar Pipeline Nativa
         init_gstreamer_pipeline(width, height, fps, bitrate_);
 
         RCLCPP_INFO(this->get_logger(), "A transmitir video e SEI para %s:%d", ip_address_.c_str(), port_);
 
-        // 3. Loop de Captura (Lê e Envia Imediatamente)
-        int timer_ms = 1000 / fps;
-        timer_ = this->create_wall_timer(
-            std::chrono::milliseconds(timer_ms),
-            std::bind(&CameraStreamerNode::capture_and_send, this)
-        );
+        // 3. Lançar Thread de Captura (Lê à velocidade pura do hardware)
+        capture_thread_ = std::thread(&CameraStreamerNode::capture_loop, this);
     }
 
     ~CameraStreamerNode() {
+        running_ = false;
+        if (capture_thread_.joinable()) {
+            capture_thread_.join();
+        }
         if (cap_.isOpened()) cap_.release();
         if (pipeline_) {
             gst_element_set_state(pipeline_, GST_STATE_NULL);
@@ -64,7 +67,8 @@ public:
 
 private:
     cv::VideoCapture cap_;
-    rclcpp::TimerBase::SharedPtr timer_;
+    std::thread capture_thread_;
+    std::atomic<bool> running_;
 
     std::string ip_address_;
     int port_;
@@ -79,6 +83,7 @@ private:
     uint64_t frame_counter_;
 
     void init_gstreamer_pipeline(int width, int height, int fps, int bitrate) {
+        // ... (Mantém o mesmo código init_gstreamer_pipeline da versão anterior) ...
         std::string caps_str = "video/x-raw,format=BGR,width=" + std::to_string(width) +
                                ",height=" + std::to_string(height) + ",framerate=" + std::to_string(fps) + "/1";
 
@@ -88,7 +93,7 @@ private:
             "queue ! "
             "video/x-raw,format=I420 ! "
             "x264enc tune=zerolatency speed-preset=ultrafast sliced-threads=true threads=2 key-int-max=15 intra-refresh=true bitrate=" + std::to_string(bitrate) + " ! "
-            "h264parse config-interval=-1 name=parser ! "
+            "h264parse config-interval=1 name=parser ! "
             "video/x-h264,stream-format=byte-stream,alignment=au ! "
             "rtph264pay pt=96 mtu=1400 aggregate-mode=zero-latency ! "
             "udpsink host=" + ip_address_ + " port=" + std::to_string(port_) + " sync=false async=false";
@@ -103,7 +108,6 @@ private:
 
         appsrc_ = gst_bin_get_by_name(GST_BIN(pipeline_), "mysrc");
 
-        // Instalar o injetor SEI
         GstElement *parser = gst_bin_get_by_name(GST_BIN(pipeline_), "parser");
         GstPad *src_pad = gst_element_get_static_pad(parser, "src");
         gst_pad_add_probe(src_pad, GST_PAD_PROBE_TYPE_BUFFER, (GstPadProbeCallback)pad_probe_callback, this, nullptr);
@@ -114,39 +118,40 @@ private:
         pipeline_initialized_ = true;
     }
 
-    void capture_and_send() {
+    // A NOVA THREAD: Bloqueia na linha "cap_ >> frame" e processa de imediato!
+    void capture_loop() {
         cv::Mat frame;
-        cap_ >> frame; // 1. Puxa do hardware
+        while (running_ && rclcpp::ok()) {
+            cap_ >> frame; // Fica aqui parado à espera do hardware. Zero atraso!
+            
+            if (frame.empty()) continue;
 
-        if (frame.empty()) return;
+            auto now = std::chrono::system_clock::now().time_since_epoch();
+            uint64_t ts_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(now).count();
+            uint64_t current_id = frame_counter_++;
 
-        // 2. Regista o tempo EXATO de captura do frame pelo SO
-        auto now = std::chrono::system_clock::now().time_since_epoch();
-        uint64_t ts_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(now).count();
-        uint64_t current_id = frame_counter_++;
+            guint size = frame.total() * frame.elemSize();
+            GstBuffer *buffer = gst_buffer_new_allocate(nullptr, size, nullptr);
+            GstMapInfo map;
 
-        // 3. Converter OpenCV Mat para GstBuffer
-        guint size = frame.total() * frame.elemSize();
-        GstBuffer *buffer = gst_buffer_new_allocate(nullptr, size, nullptr);
-        GstMapInfo map;
+            gst_buffer_map(buffer, &map, GST_MAP_WRITE);
+            std::memcpy(map.data, frame.data, size);
+            gst_buffer_unmap(buffer, &map);
 
-        gst_buffer_map(buffer, &map, GST_MAP_WRITE);
-        std::memcpy(map.data, frame.data, size);
-        gst_buffer_unmap(buffer, &map);
+            GstFlowReturn ret;
+            g_signal_emit_by_name(appsrc_, "push-buffer", buffer, &ret);
 
-        // 4. Enviar para a pipeline H.264
-        GstFlowReturn ret;
-        g_signal_emit_by_name(appsrc_, "push-buffer", buffer, &ret);
-
-        if (ret == GST_FLOW_OK) {
-            // Se aceitou, colocamos o carimbo de tempo na fila para ser apanhado pelo SEI
-            std::lock_guard<std::mutex> lock(queue_mutex_);
-            metadata_queue_.push({current_id, ts_ns});
+            if (ret == GST_FLOW_OK) {
+                std::lock_guard<std::mutex> lock(queue_mutex_);
+                metadata_queue_.push({current_id, ts_ns});
+            }
+            gst_buffer_unref(buffer);
         }
-        gst_buffer_unref(buffer);
     }
 
+    // ... (Mantém a função pad_probe_callback igual) ...
     static GstPadProbeReturn pad_probe_callback(GstPad * /*pad*/, GstPadProbeInfo *info, gpointer user_data) {
+        // ... (código existente da função de callback) ...
         auto *node = static_cast<CameraStreamerNode*>(user_data);
         GstBuffer *buffer = GST_PAD_PROBE_INFO_BUFFER(info);
 
