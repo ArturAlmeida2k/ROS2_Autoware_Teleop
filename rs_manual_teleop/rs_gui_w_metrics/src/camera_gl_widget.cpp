@@ -173,13 +173,13 @@ void CameraGLWidget::start_pipeline(int port)
     // 2. Montar a pipeline dinamicamente com o descodificador escolhido
     std::string pipeline_str =
         "udpsrc port=" + std::to_string(port) + " caps=\"application/x-rtp, media=video, clock-rate=90000, encoding-name=H264, payload=96\" ! "
-        "rtpjitterbuffer latency=0 drop-on-latency=true ! "
+        // O rtpjitterbuffer foi REMOVIDO daqui para eliminar o memory/CPU leak!
         "rtph264depay ! "
         "h264parse name=parser ! "
         + decoder_str + // <--- Injeta aqui o nvh264dec ou avdec_h264
         "videoconvert n-threads=8 ! "
         "video/x-raw,format=RGB ! "
-        "appsink name=mysink sync=false emit-signals=true";
+        "appsink name=mysink sync=false drop=true max-buffers=1 emit-signals=true";
 
     GError *error = nullptr;
     pipeline_ = gst_parse_launch(pipeline_str.c_str(), &error);
@@ -238,17 +238,14 @@ GstPadProbeReturn CameraGLWidget::pad_probe_callback(GstPad *pad, GstPadProbeInf
                 uint64_t frame_id = 0, ts_ns = 0;
                 if (sscanf(payload.c_str(), "ID:%lu|TS:%lu", &frame_id, &ts_ns) == 2) {
                     std::lock_guard<std::mutex> lock(widget->queue_mutex_);
-                    widget->sei_queue_.push({frame_id, ts_ns});
                     
-                    // PRINT: Detetar o crescimento do backlog
-                    size_t q_size = widget->sei_queue_.size();
-                    qDebug() << "[GStreamer Probe] Novo pacote na rede. Tamanho da fila C++:" << q_size;
-                    
-                    if (q_size > 5) {
-                        qWarning() << "   -> [ALERTA] A fila está a crescer (" << q_size << " pacotes)!";
-                        qWarning() << "   -> CAUSA POSSÍVEL: O GStreamer está a receber pacotes UDP mais rápido do que o ecrã (Qt) consegue desenhar.";
-                        qWarning() << "   -> CONSEQUÊNCIA: O GStreamer vai inundar a fila de eventos do Qt com pedidos, consumindo CPU e atrasando a imagem.";
+                    // Limpar a fila para impedir que o atraso fique dessincronizado
+                    // Se o appsink deitar frames ao lixo, nós apagamos os tempos deles aqui.
+                    while (widget->sei_queue_.size() >= 2) {
+                        widget->sei_queue_.pop();
                     }
+                    
+                    widget->sei_queue_.push({frame_id, ts_ns});
                 }
                 break;
             }
@@ -278,6 +275,7 @@ GstFlowReturn CameraGLWidget::on_new_sample(GstElement *sink, gpointer user_data
         
         uint64_t current_id = 0, current_ts = 0;
         {
+            // Retirar o timestamp correspondente a este frame da fila
             std::lock_guard<std::mutex> lock(widget->queue_mutex_);
             if (!widget->sei_queue_.empty()) {
                 current_id = widget->sei_queue_.front().first;
@@ -286,7 +284,6 @@ GstFlowReturn CameraGLWidget::on_new_sample(GstElement *sink, gpointer user_data
             }
         }
 
-        bool needs_update = false; // <-- NOVA FLAG: Controlo de "flood" do Qt
         {
             std::lock_guard<std::mutex> lock(widget->frame_mutex_);
             widget->frame_w_ = width;
