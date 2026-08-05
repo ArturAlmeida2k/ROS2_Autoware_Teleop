@@ -278,22 +278,16 @@ GstFlowReturn CameraGLWidget::on_new_sample(GstElement *sink, gpointer user_data
         
         uint64_t current_id = 0, current_ts = 0;
         {
-            // Retirar o timestamp correspondente a este frame da fila
             std::lock_guard<std::mutex> lock(widget->queue_mutex_);
             if (!widget->sei_queue_.empty()) {
                 current_id = widget->sei_queue_.front().first;
                 current_ts = widget->sei_queue_.front().second;
                 widget->sei_queue_.pop();
-                
-                qDebug() << "[GStreamer Sink] Frame consumido. A pedir ao Qt para desenhar... Fila restante:" << widget->sei_queue_.size();
-            } else {
-                qWarning() << "[GStreamer Sink] AVISO: Frame processado mas a fila estava VAZIA!";
             }
         }
 
-        bool needs_update = false;
+        bool needs_update = false; // <-- NOVA FLAG: Controlo de "flood" do Qt
         {
-            // Lock do OpenGL frame
             std::lock_guard<std::mutex> lock(widget->frame_mutex_);
             widget->frame_w_ = width;
             widget->frame_h_ = height;
@@ -303,28 +297,17 @@ GstFlowReturn CameraGLWidget::on_new_sample(GstElement *sink, gpointer user_data
             widget->pending_id_ = current_id;
             widget->pending_ts_ = current_ts;
             
-            // COMPRESSÃO DE EVENTOS: Previne o CPU de subir para os 100%
-            // Só enviamos mensagem para a Main Thread se ela não tiver já um desenho pendente
+            // COMPRESSÃO DE EVENTOS: Só sinaliza se o Qt não tiver já uma imagem pendente!
             if (!widget->dirty_) {
                 widget->dirty_ = true;
-                needs_update = true; 
+                needs_update = true;
             }
         }
         
-        // Fim do "flood" do Qt. 
+        // Em vez de inundar o Qt a cada frame, só enviamos o sinal se for estritamente necessário.
         if (needs_update) {
             QMetaObject::invokeMethod(widget, "update", Qt::QueuedConnection);
         }
-        
-        gst_buffer_unmap(buffer, &map);
-        gst_sample_unref(sample);
-        return GST_FLOW_OK;
-    }
-    return GST_FLOW_ERROR;
-}
-        
-        // Aqui está o "flood" do Qt. Cada frame pede para atualizar, independentemente de o Qt estar ocupado.
-        QMetaObject::invokeMethod(widget, "update", Qt::QueuedConnection);
         
         gst_buffer_unmap(buffer, &map);
         gst_sample_unref(sample);
