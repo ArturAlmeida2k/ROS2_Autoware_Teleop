@@ -5,14 +5,30 @@
 #include <cstring>
 
 static const char *VERT_SRC = R"(#version 330 core
-layout(location=0) in vec2 aPos; layout(location=1) in vec2 aUV;
-out vec2 vUV; void main() { gl_Position = vec4(aPos, 0.0, 1.0); vUV = aUV; })";
+layout(location=0) in vec2 aPos;
+layout(location=1) in vec2 aUV;
+out vec2 vUV;
+void main() {
+    gl_Position = vec4(aPos, 0.0, 1.0);
+    vUV = aUV;
+})";
 
 static const char *FRAG_SRC = R"(#version 330 core
-in vec2 vUV; out vec4 FragColor; uniform sampler2D uTex;
-void main() { FragColor = texture(uTex, vUV); })";
+in vec2 vUV;
+out vec4 FragColor;
+uniform sampler2D uTex;
+void main() {
+    FragColor = texture(uTex, vUV);
+})";
 
-static const float QUAD[] = {-1.f, 1.f, 0.f, 0.f, -1.f, -1.f, 0.f, 1.f, 1.f, -1.f, 1.f, 1.f, -1.f, 1.f, 0.f, 0.f, 1.f, -1.f, 1.f, 1.f, 1.f, 1.f, 1.f, 0.f};
+static const float QUAD[] = {
+    -1.f,  1.f, 0.f, 0.f,
+    -1.f, -1.f, 0.f, 1.f,
+     1.f, -1.f, 1.f, 1.f,
+    -1.f,  1.f, 0.f, 0.f,
+     1.f, -1.f, 1.f, 1.f,
+     1.f,  1.f, 1.f, 0.f
+};
 
 CameraGLWidget::CameraGLWidget(int port, QWidget *parent) 
     : QOpenGLWidget(parent)
@@ -49,15 +65,20 @@ void CameraGLWidget::initializeGL()
     gl33_->initializeOpenGLFunctions();
     setup_shaders();
     setup_quad();
+    
     texture_ = new QOpenGLTexture(QOpenGLTexture::Target2D);
     texture_->setMinificationFilter(QOpenGLTexture::Linear);
     texture_->setMagnificationFilter(QOpenGLTexture::Linear);
     texture_->setWrapMode(QOpenGLTexture::ClampToEdge);
 }
 
-void CameraGLWidget::resizeGL(int w, int h) { gl33_->glViewport(0, 0, w, h); }
+void CameraGLWidget::resizeGL(int w, int h)
+{
+    gl33_->glViewport(0, 0, w, h);
+}
 
-void CameraGLWidget::paintGL() {
+void CameraGLWidget::paintGL()
+{
     static std::vector<uint8_t> local_frame; 
     int local_w = 0, local_h = 0;
     uint64_t id_to_emit = 0;
@@ -68,7 +89,6 @@ void CameraGLWidget::paintGL() {
     
     std::lock_guard<std::mutex> lock(frame_mutex_);
     if (dirty_ && !pending_frame_.empty()) {
-        
         // Magia do C++: Troca a memória instantaneamente em vez de copiar!
         local_frame.swap(pending_frame_); 
         
@@ -124,8 +144,8 @@ void CameraGLWidget::setup_shaders()
     shader_->addShaderFromSourceCode(QOpenGLShader::Vertex, VERT_SRC);
     shader_->addShaderFromSourceCode(QOpenGLShader::Fragment, FRAG_SRC);
     shader_->link();
-    if (!shader_->link()) 
-    {
+    
+    if (!shader_->link()) {
         qWarning() << "Shader link failed:" << shader_->log();
     }
 }
@@ -137,8 +157,10 @@ void CameraGLWidget::setup_quad()
     gl33_->glBindVertexArray(vao_);
     gl33_->glBindBuffer(GL_ARRAY_BUFFER, vbo_);
     gl33_->glBufferData(GL_ARRAY_BUFFER, sizeof(QUAD), QUAD, GL_STATIC_DRAW);
+    
     gl33_->glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void *)0);
     gl33_->glEnableVertexAttribArray(0);
+    
     gl33_->glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void *)(2 * sizeof(float)));
     gl33_->glEnableVertexAttribArray(1);
 }
@@ -151,7 +173,7 @@ void CameraGLWidget::start_pipeline(int port)
     
     if (nv_factory) {
         // GPU Nvidia encontrada!
-        decoder_str = "nvh264dec  max-display-delay=0 ! ";
+        decoder_str = "nvh264dec max-display-delay=0 ! ";
         gst_object_unref(nv_factory); // Limpar a memória da pesquisa
         qInfo() << "GPU Nvidia detetada na porta" << port << "- A usar Aceleração de Hardware (nvh264dec).";
     } else {
@@ -162,17 +184,23 @@ void CameraGLWidget::start_pipeline(int port)
 
     // 2. Montar a pipeline dinamicamente com o descodificador escolhido
     std::string pipeline_str =
-        "udpsrc port=" + std::to_string(port) + " caps=\"application/x-rtp, media=video, clock-rate=90000, encoding-name=H264, payload=96\" ! "
+        "udpsrc port=" + std::to_string(port) + " "
+        "caps=\"application/x-rtp, media=video, clock-rate=90000, encoding-name=H264, payload=96\" ! "
         "rtpjitterbuffer latency=0 drop-on-latency=true ! "
+        // NOVO: isola o rtpjitterbuffer do ritmo do decode a jusante.
+        // Sem isto, se o decode atrasar mesmo que ligeiramente, o rtpjitterbuffer
+        // acumula buffers indefinidamente (não tem limite de tamanho próprio).
+        "queue leaky=downstream max-size-buffers=5 max-size-bytes=0 max-size-time=0 ! "
         "rtph264depay ! "
         "h264parse name=parser ! "
-        + decoder_str + // <--- Injeta aqui o nvh264dec ou avdec_h264
+        + decoder_str +
         "videoconvert n-threads=8 ! "
         "video/x-raw,format=RGB ! "
-        "appsink name=mysink sync=false drop=true max-buffers=1 emit-signals=true";
+        "appsink name=mysink sync=false emit-signals=true";
 
     GError *error = nullptr;
     pipeline_ = gst_parse_launch(pipeline_str.c_str(), &error);
+    
     if (error) {
         qWarning() << "Erro GStreamer:" << error->message;
         g_error_free(error);
@@ -184,6 +212,7 @@ void CameraGLWidget::start_pipeline(int port)
     GstPad *src_pad = gst_element_get_static_pad(parser, "src");
     gst_pad_add_probe(src_pad, GST_PAD_PROBE_TYPE_BUFFER,
                       (GstPadProbeCallback)pad_probe_callback, this, nullptr);
+                      
     gst_object_unref(src_pad);
     gst_object_unref(parser);
 
@@ -206,44 +235,34 @@ void CameraGLWidget::stop_pipeline()
 }
 
 // Roda numa thread do GStreamer antes de o frame ser descodificado
-GstPadProbeReturn CameraGLWidget::pad_probe_callback(GstPad *pad, GstPadProbeInfo *info, gpointer user_data) {
+GstPadProbeReturn CameraGLWidget::pad_probe_callback(GstPad *pad, GstPadProbeInfo *info, gpointer user_data)
+{
     auto *widget = static_cast<CameraGLWidget*>(user_data);
     GstBuffer *buffer = GST_PAD_PROBE_INFO_BUFFER(info);
     GstMapInfo map;
-
-    // Guarda o PTS deste buffer ANTES do decode — vai ser a chave de correlação
-    GstClockTime pts = GST_BUFFER_PTS(buffer);
-
+    
     if (gst_buffer_map(buffer, &map, GST_MAP_READ)) {
         const uint8_t uuid[16] = {
-            0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88,
+            0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 
             0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF, 0x11
         };
 
         size_t search_limit = std::min(map.size - 16, (size_t)128);
         for (size_t i = 0; i < search_limit - 16; ++i) {
             if (std::memcmp(map.data + i, uuid, 16) == 0) {
-                size_t str_len = std::min(map.size - i - 16, (size_t)64);
+                size_t str_len = std::min(map.size - i - 16, (size_t)64); 
                 std::string payload(reinterpret_cast<char*>(map.data + i + 16), str_len);
+                
                 size_t end_pos = payload.find((char)0x80);
-                if (end_pos != std::string::npos) payload = payload.substr(0, end_pos);
+                if (end_pos != std::string::npos) {
+                    payload = payload.substr(0, end_pos);
+                }
 
                 uint64_t frame_id = 0, ts_ns = 0;
-                if (sscanf(payload.c_str(), "ID:%lu|TS:%lu", &frame_id, &ts_ns) == 2 &&
-                    pts != GST_CLOCK_TIME_NONE) {
+                if (sscanf(payload.c_str(), "ID:%lu|TS:%lu", &frame_id, &ts_ns) == 2) {
+                    // NOVA PARTE: Em vez de emitir, guarda na fila
                     std::lock_guard<std::mutex> lock(widget->queue_mutex_);
-                    widget->sei_map_[pts] = {frame_id, ts_ns};
-
-                    // Limpeza de entradas órfãs (frames que o decoder nunca produziu):
-                    // remove tudo mais antigo que ~500ms em relação a este PTS,
-                    // evitando crescimento ilimitado do mapa.
-                    if (pts > 500 * GST_MSECOND) {
-                        GstClockTime cutoff = pts - 500 * GST_MSECOND;
-                        auto it = widget->sei_map_.begin();
-                        while (it != widget->sei_map_.end() && it->first < cutoff) {
-                            it = widget->sei_map_.erase(it);
-                        }
-                    }
+                    widget->sei_queue_.push({frame_id, ts_ns});
                 }
                 break;
             }
@@ -253,51 +272,51 @@ GstPadProbeReturn CameraGLWidget::pad_probe_callback(GstPad *pad, GstPadProbeInf
     return GST_PAD_PROBE_OK;
 }
 
-GstFlowReturn CameraGLWidget::on_new_sample(GstElement *sink, gpointer user_data) {
+// Roda numa thread do GStreamer após descodificar (Substitui o loop while)
+GstFlowReturn CameraGLWidget::on_new_sample(GstElement *sink, gpointer user_data)
+{
     auto *widget = static_cast<CameraGLWidget*>(user_data);
     GstSample *sample;
     g_signal_emit_by_name(sink, "pull-sample", &sample);
-
+    
     if (sample) {
         GstBuffer *buffer = gst_sample_get_buffer(sample);
         GstCaps *caps = gst_sample_get_caps(sample);
-
+        
         GstStructure *s = gst_caps_get_structure(caps, 0);
         int width, height;
         gst_structure_get_int(s, "width", &width);
         gst_structure_get_int(s, "height", &height);
 
-        // O PTS do buffer DECODIFICADO — deve corresponder ao PTS que
-        // guardámos no probe, já que o decoder preserva PTS 1:1.
-        GstClockTime out_pts = GST_BUFFER_PTS(buffer);
-
         GstMapInfo map;
         gst_buffer_map(buffer, &map, GST_MAP_READ);
-
+        
         uint64_t current_id = 0, current_ts = 0;
         {
+            // Retirar o timestamp correspondente a este frame da fila
             std::lock_guard<std::mutex> lock(widget->queue_mutex_);
-            auto it = widget->sei_map_.find(out_pts);
-            if (it != widget->sei_map_.end()) {
-                current_id = it->second.first;
-                current_ts = it->second.second;
-                widget->sei_map_.erase(it);
+            if (!widget->sei_queue_.empty()) {
+                current_id = widget->sei_queue_.front().first;
+                current_ts = widget->sei_queue_.front().second;
+                widget->sei_queue_.pop();
             }
-            // Se não encontrar (PTS não bateu certo), simplesmente não emite
-            // latência para este frame em vez de usar dados errados de outro frame.
         }
 
         {
+            // Lock do OpenGL frame
             std::lock_guard<std::mutex> lock(widget->frame_mutex_);
             widget->frame_w_ = width;
             widget->frame_h_ = height;
             widget->pending_frame_.assign(map.data, map.data + map.size);
+            
+            // Passar o timestamp para o Qt desenhar
             widget->pending_id_ = current_id;
             widget->pending_ts_ = current_ts;
             widget->dirty_ = true;
         }
+        
         QMetaObject::invokeMethod(widget, "update", Qt::QueuedConnection);
-
+        
         gst_buffer_unmap(buffer, &map);
         gst_sample_unref(sample);
         return GST_FLOW_OK;
