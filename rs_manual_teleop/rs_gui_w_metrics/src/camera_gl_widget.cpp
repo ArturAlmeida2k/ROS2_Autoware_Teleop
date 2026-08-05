@@ -187,13 +187,9 @@ void CameraGLWidget::start_pipeline(int port)
         "udpsrc port=" + std::to_string(port) + " "
         "caps=\"application/x-rtp, media=video, clock-rate=90000, encoding-name=H264, payload=96\" ! "
         "rtpjitterbuffer latency=0 drop-on-latency=true ! "
-        // NOVO: isola o rtpjitterbuffer do ritmo do decode a jusante.
-        // Sem isto, se o decode atrasar mesmo que ligeiramente, o rtpjitterbuffer
-        // acumula buffers indefinidamente (não tem limite de tamanho próprio).
-        "queue leaky=downstream max-size-buffers=5 max-size-bytes=0 max-size-time=0 ! "
         "rtph264depay ! "
         "h264parse name=parser ! "
-        + decoder_str +
+        + decoder_str + // <--- Injeta aqui o nvh264dec ou avdec_h264
         "videoconvert n-threads=8 ! "
         "video/x-raw,format=RGB ! "
         "appsink name=mysink sync=false emit-signals=true";
