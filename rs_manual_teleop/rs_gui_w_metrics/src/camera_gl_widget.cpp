@@ -151,7 +151,7 @@ void CameraGLWidget::start_pipeline(int port)
     
     if (nv_factory) {
         // GPU Nvidia encontrada!
-        decoder_str = "nvh264dec max-display-delay=0 ! ";
+        decoder_str = "nvh264dec  max-display-delay=0 ! ";
         gst_object_unref(nv_factory); // Limpar a memória da pesquisa
         qInfo() << "GPU Nvidia detetada na porta" << port << "- A usar Aceleração de Hardware (nvh264dec).";
     } else {
@@ -169,7 +169,7 @@ void CameraGLWidget::start_pipeline(int port)
         + decoder_str + // <--- Injeta aqui o nvh264dec ou avdec_h264
         "videoconvert n-threads=8 ! "
         "video/x-raw,format=RGB ! "
-        "appsink name=mysink sync=false drop=true max-buffers=1 emit-signals=true";
+        "appsink name=mysink sync=false emit-signals=true";
 
     GError *error = nullptr;
     pipeline_ = gst_parse_launch(pipeline_str.c_str(), &error);
@@ -227,15 +227,9 @@ GstPadProbeReturn CameraGLWidget::pad_probe_callback(GstPad *pad, GstPadProbeInf
 
                 uint64_t frame_id = 0, ts_ns = 0;
                 if (sscanf(payload.c_str(), "ID:%lu|TS:%lu", &frame_id, &ts_ns) == 2) {
-                    
-                    // EXTRAIR O PTS DA IMAGEM
-                    GstClockTime pts = GST_BUFFER_PTS(buffer);
-                    
-                    if (GST_CLOCK_TIME_IS_VALID(pts)) {
-                        std::lock_guard<std::mutex> lock(widget->queue_mutex_);
-                        // Guardar no dicionário associado a esta exata "matrícula"
-                        widget->pts_map_[pts] = {frame_id, ts_ns};
-                    }
+                    // NOVA PARTE: Em vez de emitir, guarda na fila
+                    std::lock_guard<std::mutex> lock(widget->queue_mutex_);
+                    widget->sei_queue_.push({frame_id, ts_ns});
                 }
                 break;
             }
@@ -264,22 +258,13 @@ GstFlowReturn CameraGLWidget::on_new_sample(GstElement *sink, gpointer user_data
         gst_buffer_map(buffer, &map, GST_MAP_READ);
         
         uint64_t current_id = 0, current_ts = 0;
-        
-        // EXTRAIR O PTS DA IMAGEM PRONTA
-        GstClockTime pts = GST_BUFFER_PTS(buffer);
-
-        if (GST_CLOCK_TIME_IS_VALID(pts)) {
+        {
+            // Retirar o timestamp correspondente a este frame da fila
             std::lock_guard<std::mutex> lock(widget->queue_mutex_);
-            
-            // Procurar no dicionário a matrícula exata desta imagem
-            auto it = widget->pts_map_.find(pts);
-            if (it != widget->pts_map_.end()) {
-                current_id = it->second.first;
-                current_ts = it->second.second;
-                
-                // Limpeza 100% segura: Apagamos este frame e todos os mais antigos (órfãos) 
-                // que possam ter ficado no mapa por terem sido deitados ao lixo
-                widget->pts_map_.erase(widget->pts_map_.begin(), std::next(it));
+            if (!widget->sei_queue_.empty()) {
+                current_id = widget->sei_queue_.front().first;
+                current_ts = widget->sei_queue_.front().second;
+                widget->sei_queue_.pop();
             }
         }
 
