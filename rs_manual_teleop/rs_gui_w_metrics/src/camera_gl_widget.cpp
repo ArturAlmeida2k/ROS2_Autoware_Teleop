@@ -284,6 +284,8 @@ GstFlowReturn CameraGLWidget::on_new_sample(GstElement *sink, gpointer user_data
             }
         }
 
+        bool needs_update = false; // <-- A declaração que faltava!
+
         {
             std::lock_guard<std::mutex> lock(widget->frame_mutex_);
             widget->frame_w_ = width;
