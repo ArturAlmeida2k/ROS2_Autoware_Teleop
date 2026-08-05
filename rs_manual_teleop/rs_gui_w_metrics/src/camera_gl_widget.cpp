@@ -114,6 +114,16 @@ void CameraGLWidget::paintGL() {
         uint64_t render_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(now).count();
         double full_latency_ms = (render_ns - ts_to_emit) / 1000000.0;
         
+        // PRINT: Info normal sobre a atualização do ecrã
+        qDebug() << "[Qt Paint] Ecrã atualizado! Latência visual:" << full_latency_ms << "ms";
+        
+        // PRINT: Alerta se a latência começar a acumular devido a sobrecarga
+        if (full_latency_ms > 150.0) {
+            qWarning() << "   -> [ALERTA] Latência visual alta (" << full_latency_ms << "ms)!";
+            qWarning() << "   -> CAUSA POSSÍVEL: Sem 'drop=true', imagens antigas estão a ser forçadas a passar pelo CPU (videoconvert) e Qt.";
+            qWarning() << "   -> CONSEQUÊNCIA: O CPU fica sobrecarregado a processar o passado e o vídeo fica dessincronizado.";
+        }
+        
         emit latencyUpdated(id_to_emit, full_latency_ms);
     }
 }
@@ -227,9 +237,18 @@ GstPadProbeReturn CameraGLWidget::pad_probe_callback(GstPad *pad, GstPadProbeInf
 
                 uint64_t frame_id = 0, ts_ns = 0;
                 if (sscanf(payload.c_str(), "ID:%lu|TS:%lu", &frame_id, &ts_ns) == 2) {
-                    // NOVA PARTE: Em vez de emitir, guarda na fila
                     std::lock_guard<std::mutex> lock(widget->queue_mutex_);
                     widget->sei_queue_.push({frame_id, ts_ns});
+                    
+                    // PRINT: Detetar o crescimento do backlog
+                    size_t q_size = widget->sei_queue_.size();
+                    qDebug() << "[GStreamer Probe] Novo pacote na rede. Tamanho da fila C++:" << q_size;
+                    
+                    if (q_size > 5) {
+                        qWarning() << "   -> [ALERTA] A fila está a crescer (" << q_size << " pacotes)!";
+                        qWarning() << "   -> CAUSA POSSÍVEL: O GStreamer está a receber pacotes UDP mais rápido do que o ecrã (Qt) consegue desenhar.";
+                        qWarning() << "   -> CONSEQUÊNCIA: O GStreamer vai inundar a fila de eventos do Qt com pedidos, consumindo CPU e atrasando a imagem.";
+                    }
                 }
                 break;
             }
@@ -265,6 +284,10 @@ GstFlowReturn CameraGLWidget::on_new_sample(GstElement *sink, gpointer user_data
                 current_id = widget->sei_queue_.front().first;
                 current_ts = widget->sei_queue_.front().second;
                 widget->sei_queue_.pop();
+                
+                qDebug() << "[GStreamer Sink] Frame consumido. A pedir ao Qt para desenhar... Fila restante:" << widget->sei_queue_.size();
+            } else {
+                qWarning() << "[GStreamer Sink] AVISO: Frame processado mas a fila estava VAZIA!";
             }
         }
 
@@ -280,6 +303,8 @@ GstFlowReturn CameraGLWidget::on_new_sample(GstElement *sink, gpointer user_data
             widget->pending_ts_ = current_ts;
             widget->dirty_ = true;
         }
+        
+        // Aqui está o "flood" do Qt. Cada frame pede para atualizar, independentemente de o Qt estar ocupado.
         QMetaObject::invokeMethod(widget, "update", Qt::QueuedConnection);
         
         gst_buffer_unmap(buffer, &map);
