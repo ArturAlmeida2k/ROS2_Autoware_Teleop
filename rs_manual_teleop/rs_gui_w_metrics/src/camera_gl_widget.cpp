@@ -291,6 +291,7 @@ GstFlowReturn CameraGLWidget::on_new_sample(GstElement *sink, gpointer user_data
             }
         }
 
+        bool needs_update = false;
         {
             // Lock do OpenGL frame
             std::lock_guard<std::mutex> lock(widget->frame_mutex_);
@@ -301,8 +302,26 @@ GstFlowReturn CameraGLWidget::on_new_sample(GstElement *sink, gpointer user_data
             // Passar o timestamp para o Qt desenhar
             widget->pending_id_ = current_id;
             widget->pending_ts_ = current_ts;
-            widget->dirty_ = true;
+            
+            // COMPRESSÃO DE EVENTOS: Previne o CPU de subir para os 100%
+            // Só enviamos mensagem para a Main Thread se ela não tiver já um desenho pendente
+            if (!widget->dirty_) {
+                widget->dirty_ = true;
+                needs_update = true; 
+            }
         }
+        
+        // Fim do "flood" do Qt. 
+        if (needs_update) {
+            QMetaObject::invokeMethod(widget, "update", Qt::QueuedConnection);
+        }
+        
+        gst_buffer_unmap(buffer, &map);
+        gst_sample_unref(sample);
+        return GST_FLOW_OK;
+    }
+    return GST_FLOW_ERROR;
+}
         
         // Aqui está o "flood" do Qt. Cada frame pede para atualizar, independentemente de o Qt estar ocupado.
         QMetaObject::invokeMethod(widget, "update", Qt::QueuedConnection);
