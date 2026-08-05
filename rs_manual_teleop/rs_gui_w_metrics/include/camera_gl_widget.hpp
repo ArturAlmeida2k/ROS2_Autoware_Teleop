@@ -6,6 +6,7 @@
 #include <mutex>
 #include <vector>
 #include <queue>
+#include <map>
 #include <gst/gst.h>
 #include <gst/app/gstappsink.h>
 
@@ -38,7 +39,7 @@ private:
     bool                 dirty_   = false;
 
     std::mutex queue_mutex_;
-    std::queue<std::pair<uint64_t, uint64_t>> sei_queue_; 
+    std::map<GstClockTime, std::pair<uint64_t, uint64_t>> sei_map_;  // chave: PTS do buffer
 
     uint64_t pending_id_ = 0;
     uint64_t pending_ts_ = 0;

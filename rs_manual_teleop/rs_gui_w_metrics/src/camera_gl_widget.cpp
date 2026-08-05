@@ -114,16 +114,6 @@ void CameraGLWidget::paintGL() {
         uint64_t render_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(now).count();
         double full_latency_ms = (render_ns - ts_to_emit) / 1000000.0;
         
-        // PRINT: Info normal sobre a atualização do ecrã
-        qDebug() << "[Qt Paint] Ecrã atualizado! Latência visual:" << full_latency_ms << "ms";
-        
-        // PRINT: Alerta se a latência começar a acumular devido a sobrecarga
-        if (full_latency_ms > 150.0) {
-            qWarning() << "   -> [ALERTA] Latência visual alta (" << full_latency_ms << "ms)!";
-            qWarning() << "   -> CAUSA POSSÍVEL: Sem 'drop=true', imagens antigas estão a ser forçadas a passar pelo CPU (videoconvert) e Qt.";
-            qWarning() << "   -> CONSEQUÊNCIA: O CPU fica sobrecarregado a processar o passado e o vídeo fica dessincronizado.";
-        }
-        
         emit latencyUpdated(id_to_emit, full_latency_ms);
     }
 }
@@ -173,7 +163,7 @@ void CameraGLWidget::start_pipeline(int port)
     // 2. Montar a pipeline dinamicamente com o descodificador escolhido
     std::string pipeline_str =
         "udpsrc port=" + std::to_string(port) + " caps=\"application/x-rtp, media=video, clock-rate=90000, encoding-name=H264, payload=96\" ! "
-        // O rtpjitterbuffer foi REMOVIDO daqui para eliminar o memory/CPU leak!
+        "rtpjitterbuffer latency=0 drop-on-latency=true ! "
         "rtph264depay ! "
         "h264parse name=parser ! "
         + decoder_str + // <--- Injeta aqui o nvh264dec ou avdec_h264
@@ -220,32 +210,40 @@ GstPadProbeReturn CameraGLWidget::pad_probe_callback(GstPad *pad, GstPadProbeInf
     auto *widget = static_cast<CameraGLWidget*>(user_data);
     GstBuffer *buffer = GST_PAD_PROBE_INFO_BUFFER(info);
     GstMapInfo map;
-    
+
+    // Guarda o PTS deste buffer ANTES do decode — vai ser a chave de correlação
+    GstClockTime pts = GST_BUFFER_PTS(buffer);
+
     if (gst_buffer_map(buffer, &map, GST_MAP_READ)) {
         const uint8_t uuid[16] = {
-            0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 
+            0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88,
             0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF, 0x11
         };
 
         size_t search_limit = std::min(map.size - 16, (size_t)128);
         for (size_t i = 0; i < search_limit - 16; ++i) {
             if (std::memcmp(map.data + i, uuid, 16) == 0) {
-                size_t str_len = std::min(map.size - i - 16, (size_t)64); 
+                size_t str_len = std::min(map.size - i - 16, (size_t)64);
                 std::string payload(reinterpret_cast<char*>(map.data + i + 16), str_len);
                 size_t end_pos = payload.find((char)0x80);
                 if (end_pos != std::string::npos) payload = payload.substr(0, end_pos);
 
                 uint64_t frame_id = 0, ts_ns = 0;
-                if (sscanf(payload.c_str(), "ID:%lu|TS:%lu", &frame_id, &ts_ns) == 2) {
+                if (sscanf(payload.c_str(), "ID:%lu|TS:%lu", &frame_id, &ts_ns) == 2 &&
+                    pts != GST_CLOCK_TIME_NONE) {
                     std::lock_guard<std::mutex> lock(widget->queue_mutex_);
-                    
-                    // Limpar a fila para impedir que o atraso fique dessincronizado
-                    // Se o appsink deitar frames ao lixo, nós apagamos os tempos deles aqui.
-                    while (widget->sei_queue_.size() >= 2) {
-                        widget->sei_queue_.pop();
+                    widget->sei_map_[pts] = {frame_id, ts_ns};
+
+                    // Limpeza de entradas órfãs (frames que o decoder nunca produziu):
+                    // remove tudo mais antigo que ~500ms em relação a este PTS,
+                    // evitando crescimento ilimitado do mapa.
+                    if (pts > 500 * GST_MSECOND) {
+                        GstClockTime cutoff = pts - 500 * GST_MSECOND;
+                        auto it = widget->sei_map_.begin();
+                        while (it != widget->sei_map_.end() && it->first < cutoff) {
+                            it = widget->sei_map_.erase(it);
+                        }
                     }
-                    
-                    widget->sei_queue_.push({frame_id, ts_ns});
                 }
                 break;
             }
@@ -255,59 +253,51 @@ GstPadProbeReturn CameraGLWidget::pad_probe_callback(GstPad *pad, GstPadProbeInf
     return GST_PAD_PROBE_OK;
 }
 
-// Roda numa thread do GStreamer após descodificar (Substitui o loop while)
 GstFlowReturn CameraGLWidget::on_new_sample(GstElement *sink, gpointer user_data) {
     auto *widget = static_cast<CameraGLWidget*>(user_data);
     GstSample *sample;
     g_signal_emit_by_name(sink, "pull-sample", &sample);
-    
+
     if (sample) {
         GstBuffer *buffer = gst_sample_get_buffer(sample);
         GstCaps *caps = gst_sample_get_caps(sample);
-        
+
         GstStructure *s = gst_caps_get_structure(caps, 0);
         int width, height;
         gst_structure_get_int(s, "width", &width);
         gst_structure_get_int(s, "height", &height);
 
+        // O PTS do buffer DECODIFICADO — deve corresponder ao PTS que
+        // guardámos no probe, já que o decoder preserva PTS 1:1.
+        GstClockTime out_pts = GST_BUFFER_PTS(buffer);
+
         GstMapInfo map;
         gst_buffer_map(buffer, &map, GST_MAP_READ);
-        
+
         uint64_t current_id = 0, current_ts = 0;
         {
-            // Retirar o timestamp correspondente a este frame da fila
             std::lock_guard<std::mutex> lock(widget->queue_mutex_);
-            if (!widget->sei_queue_.empty()) {
-                current_id = widget->sei_queue_.front().first;
-                current_ts = widget->sei_queue_.front().second;
-                widget->sei_queue_.pop();
+            auto it = widget->sei_map_.find(out_pts);
+            if (it != widget->sei_map_.end()) {
+                current_id = it->second.first;
+                current_ts = it->second.second;
+                widget->sei_map_.erase(it);
             }
+            // Se não encontrar (PTS não bateu certo), simplesmente não emite
+            // latência para este frame em vez de usar dados errados de outro frame.
         }
-
-        bool needs_update = false; // <-- A declaração que faltava!
 
         {
             std::lock_guard<std::mutex> lock(widget->frame_mutex_);
             widget->frame_w_ = width;
             widget->frame_h_ = height;
             widget->pending_frame_.assign(map.data, map.data + map.size);
-            
-            // Passar o timestamp para o Qt desenhar
             widget->pending_id_ = current_id;
             widget->pending_ts_ = current_ts;
-            
-            // COMPRESSÃO DE EVENTOS: Só sinaliza se o Qt não tiver já uma imagem pendente!
-            if (!widget->dirty_) {
-                widget->dirty_ = true;
-                needs_update = true;
-            }
+            widget->dirty_ = true;
         }
-        
-        // Em vez de inundar o Qt a cada frame, só enviamos o sinal se for estritamente necessário.
-        if (needs_update) {
-            QMetaObject::invokeMethod(widget, "update", Qt::QueuedConnection);
-        }
-        
+        QMetaObject::invokeMethod(widget, "update", Qt::QueuedConnection);
+
         gst_buffer_unmap(buffer, &map);
         gst_sample_unref(sample);
         return GST_FLOW_OK;
