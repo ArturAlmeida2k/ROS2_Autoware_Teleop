@@ -189,7 +189,12 @@ void CameraGLWidget::start_pipeline(int port)
         "rtpjitterbuffer latency=0 drop-on-latency=true ! "
         "rtph264depay ! "
         "h264parse name=parser ! "
-        + decoder_str + // <--- Injeta aqui o nvh264dec ou avdec_h264
+        "video/x-h264,stream-format=byte-stream,alignment=au ! "
+        // AQUI, não antes do depay: opera sobre Access Units completos,
+        // nunca sobre fragmentos RTP — descartar um frame inteiro é seguro,
+        // descartar um fragmento corrompe o bitstream.
+        "queue leaky=downstream max-size-buffers=5 max-size-bytes=0 max-size-time=0 ! "
+        + decoder_str +
         "videoconvert n-threads=8 ! "
         "video/x-raw,format=RGB ! "
         "appsink name=mysink sync=false emit-signals=true";
