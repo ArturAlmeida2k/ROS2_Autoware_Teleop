@@ -19,7 +19,6 @@ public:
                            running_(true),
                            frame_counter_(1) {
 
-        // Declaração de parâmetros ROS 2
         this->declare_parameter<int>("camera_id", 2);
         this->declare_parameter<int>("width", 1920);
         this->declare_parameter<int>("height", 1080);
@@ -36,11 +35,9 @@ public:
         port_         = this->get_parameter("port").as_int();
         bitrate_      = this->get_parameter("bitrate").as_int();
 
-        // Inicialização do GStreamer e silenciador de avisos do OpenCV
         gst_init(nullptr, nullptr);
         cv::utils::logging::setLogLevel(cv::utils::logging::LOG_LEVEL_ERROR);
 
-        // Pipeline GStreamer otimizada para leitura rápida via V4L2/MJPEG
         std::string cam_pipeline =
             "v4l2src device=/dev/video" + std::to_string(camera_id) + " ! "
             "image/jpeg,width=" + std::to_string(width) + ",height=" + std::to_string(height) +
@@ -54,15 +51,12 @@ public:
             return;
         }
 
-        // Inicializar a pipeline de envio de rede
         init_gstreamer_pipeline(width, height, fps, bitrate_);
 
-        // Iniciar thread de captura contínua
         capture_thread_ = std::thread(&CameraStreamerNode::capture_loop, this);
     }
 
     ~CameraStreamerNode() {
-        // Parar a thread de forma segura e evitar race conditions
         running_ = false;
 
         if (capture_thread_.joinable()) {
@@ -81,7 +75,7 @@ public:
             gst_element_set_state(pipeline_, GST_STATE_NULL);
             gst_object_unref(pipeline_);
         }
-        
+
         RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Encerramento limpo concluído.");
     }
 
@@ -96,7 +90,9 @@ private:
     GstElement *pipeline_;
     GstElement *appsrc_;
 
-    std::queue<std::pair<uint64_t, uint64_t>> metadata_queue_;
+    // Guarda só o frame_id — o timestamp para a métrica de rede é tirado
+    // diretamente no pad_probe_callback (pós-encode), não aqui na captura.
+    std::queue<uint64_t> frame_id_queue_;
     std::mutex queue_mutex_;
     std::atomic<bool> running_;
     uint64_t frame_counter_;
@@ -105,7 +101,6 @@ private:
         std::string caps_str = "video/x-raw,format=BGR,width=" + std::to_string(width) +
                                ",height=" + std::to_string(height) + ",framerate=" + std::to_string(fps) + "/1";
 
-        // Pipeline de codificação e envio UDP com zero-latency
         std::string pipeline_str =
             "appsrc name=mysrc is-live=true do-timestamp=true format=time caps=\"" + caps_str + "\" ! "
             "videoconvert ! "
@@ -128,7 +123,6 @@ private:
 
         appsrc_ = gst_bin_get_by_name(GST_BIN(pipeline_), "mysrc");
 
-        // Instalar sonda SEI no parser
         GstElement *parser = gst_bin_get_by_name(GST_BIN(pipeline_), "parser");
         GstPad *src_pad = gst_element_get_static_pad(parser, "src");
         gst_pad_add_probe(src_pad, GST_PAD_PROBE_TYPE_BUFFER, (GstPadProbeCallback)pad_probe_callback, this, nullptr);
@@ -145,21 +139,11 @@ private:
             cv::Mat frame;
             while (running_ && rclcpp::ok()) {
 
-                static auto last_capture = std::chrono::steady_clock::now();
-                auto now2 = std::chrono::steady_clock::now();
-                double interval_ms = std::chrono::duration<double, std::milli>(now2 - last_capture).count();
-                last_capture = now2;
-                RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 2000,
-                                    "Intervalo captura: %.1fms", interval_ms);
-                
-                cap_ >> frame; // Aguarda pelo próximo frame do hardware
-                
+                cap_ >> frame;
+
                 if (!running_) break;
                 if (frame.empty()) continue;
 
-                // Registo de timestamp exato no momento de receção pelo software
-                auto now = std::chrono::system_clock::now().time_since_epoch();
-                uint64_t ts_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(now).count();
                 uint64_t current_id = frame_counter_++;
 
                 guint size = frame.total() * frame.elemSize();
@@ -175,7 +159,7 @@ private:
 
                 if (ret == GST_FLOW_OK) {
                     std::lock_guard<std::mutex> lock(queue_mutex_);
-                    metadata_queue_.push({current_id, ts_ns});
+                    frame_id_queue_.push(current_id);
                 }
                 gst_buffer_unref(buffer);
             }
@@ -189,41 +173,31 @@ private:
         GstBuffer *buffer = GST_PAD_PROBE_INFO_BUFFER(info);
 
         uint64_t frame_id = 0;
-        uint64_t ts_ns = 0;
 
         {
             std::lock_guard<std::mutex> lock(node->queue_mutex_);
-            
-            // Limpeza de metadados órfãos para evitar desincronização em caso de drop de frames
-            while (node->metadata_queue_.size() > 2) {
-                node->metadata_queue_.pop();
+            while (node->frame_id_queue_.size() > 2) {
+                node->frame_id_queue_.pop();
             }
-
-            if (!node->metadata_queue_.empty()) {
-                frame_id = node->metadata_queue_.front().first;
-                ts_ns = node->metadata_queue_.front().second;
-                node->metadata_queue_.pop();
+            if (!node->frame_id_queue_.empty()) {
+                frame_id = node->frame_id_queue_.front();
+                node->frame_id_queue_.pop();
             } else {
                 return GST_PAD_PROBE_OK;
             }
         }
 
-        // Cálculo do tempo de processamento interno do software
-        auto out_now = std::chrono::system_clock::now().time_since_epoch();
-        uint64_t out_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(out_now).count();
-        double processing_ms = (out_ns - ts_ns) / 1000000.0;
+        // ÚNICO timestamp publicado: pós-encode, mesmo ponto de partida da rede.
+        auto now = std::chrono::system_clock::now().time_since_epoch();
+        uint64_t ts_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(now).count();
 
-        RCLCPP_INFO_THROTTLE(node->get_logger(), *node->get_clock(), 1000,
-                              "[Software G2G] Tempo interno: %.2f ms", processing_ms);
+        std::string payload = "ID:" + std::to_string(frame_id) + "|TS:" + std::to_string(ts_ns) + (char)0x80;
+        size_t payload_size = 16 + payload.length();
 
-        // Construção do SEI NALU com metadados de tempo
         std::vector<uint8_t> sei_nalu;
         sei_nalu.push_back(0x00); sei_nalu.push_back(0x00); sei_nalu.push_back(0x00); sei_nalu.push_back(0x01);
         sei_nalu.push_back(0x06);
         sei_nalu.push_back(0x05);
-
-        std::string payload = "ID:" + std::to_string(frame_id) + "|TS:" + std::to_string(ts_ns) + (char)0x80;
-        size_t payload_size = 16 + payload.length();
 
         size_t s = payload_size;
         while (s >= 255) { sei_nalu.push_back(0xFF); s -= 255; }
@@ -244,7 +218,6 @@ private:
         std::memcpy(new_map.data, sei_nalu.data(), sei_nalu.size());
         std::memcpy(new_map.data + sei_nalu.size(), old_map.data, old_map.size);
 
-        // Corrigido para gst_buffer_unmap corretamente
         gst_buffer_unmap(new_buf, &new_map);
         gst_buffer_unmap(buffer, &old_map);
 
