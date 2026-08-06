@@ -45,7 +45,6 @@ CameraGLWidget::CameraGLWidget(int port, QWidget *parent)
 CameraGLWidget::~CameraGLWidget()
 {
     stop_pipeline();
-
     makeCurrent();
     delete texture_;
     delete shader_;
@@ -79,7 +78,7 @@ void CameraGLWidget::paintGL()
     static std::vector<uint8_t> local_frame;
     int local_w = 0, local_h = 0;
     uint64_t id_to_emit = 0;
-    double latency_to_emit = 0.0;
+    uint64_t ts_to_emit = 0;
     bool has_new_frame = false;
 
     gl33_->glClear(GL_COLOR_BUFFER_BIT);
@@ -87,26 +86,22 @@ void CameraGLWidget::paintGL()
     std::lock_guard<std::mutex> lock(frame_mutex_);
     if (dirty_ && !pending_frame_.empty()) {
         local_frame.swap(pending_frame_);
-
         local_w = frame_w_;
         local_h = frame_h_;
         id_to_emit = pending_id_;
-        latency_to_emit = pending_network_latency_ms_;  // já calculado no pad_probe, valor de REDE apenas
+        ts_to_emit = pending_ts_;
         dirty_ = false;
         has_new_frame = true;
     }
 
     if (has_new_frame) {
         if (!texture_->isCreated() || texture_->width() != local_w || texture_->height() != local_h) {
-            if (texture_->isCreated()) {
-                texture_->destroy();
-            }
+            if (texture_->isCreated()) texture_->destroy();
             texture_->create();
             texture_->setSize(local_w, local_h);
             texture_->setFormat(QOpenGLTexture::RGB8_UNorm);
             texture_->allocateStorage(QOpenGLTexture::RGB, QOpenGLTexture::UInt8);
         }
-
         texture_->setData(QOpenGLTexture::RGB, QOpenGLTexture::UInt8, static_cast<const void *>(local_frame.data()));
     }
 
@@ -115,16 +110,17 @@ void CameraGLWidget::paintGL()
     shader_->bind();
     texture_->bind();
     gl33_->glBindVertexArray(vao_);
-
     gl33_->glDrawArrays(GL_TRIANGLES, 0, 6);
-
     gl33_->glBindVertexArray(0);
     texture_->release();
     shader_->release();
 
-    // Emite SÓ a latência de rede — nada de captura, decode ou render somados.
-    if (id_to_emit > 0) {
-        emit latencyUpdated(id_to_emit, latency_to_emit);
+    // Latência completa: captura -> render, tal como na versão original.
+    if (id_to_emit > 0 && ts_to_emit > 0) {
+        auto now = std::chrono::system_clock::now().time_since_epoch();
+        uint64_t render_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(now).count();
+        double full_latency_ms = (render_ns - ts_to_emit) / 1000000.0;
+        emit latencyUpdated(id_to_emit, full_latency_ms);
     }
 }
 
@@ -134,10 +130,7 @@ void CameraGLWidget::setup_shaders()
     shader_->addShaderFromSourceCode(QOpenGLShader::Vertex, VERT_SRC);
     shader_->addShaderFromSourceCode(QOpenGLShader::Fragment, FRAG_SRC);
     shader_->link();
-
-    if (!shader_->link()) {
-        qWarning() << "Shader link failed:" << shader_->log();
-    }
+    if (!shader_->link()) qWarning() << "Shader link failed:" << shader_->log();
 }
 
 void CameraGLWidget::setup_quad()
@@ -147,37 +140,24 @@ void CameraGLWidget::setup_quad()
     gl33_->glBindVertexArray(vao_);
     gl33_->glBindBuffer(GL_ARRAY_BUFFER, vbo_);
     gl33_->glBufferData(GL_ARRAY_BUFFER, sizeof(QUAD), QUAD, GL_STATIC_DRAW);
-
     gl33_->glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void *)0);
     gl33_->glEnableVertexAttribArray(0);
-
     gl33_->glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void *)(2 * sizeof(float)));
     gl33_->glEnableVertexAttribArray(1);
 }
 
 void CameraGLWidget::start_pipeline(int port)
 {
-    std::string decoder_str;
-    GstElementFactory *nv_factory = gst_element_factory_find("nvh264dec");
-
-    if (nv_factory) {
-        decoder_str = "nvh264dec max-display-delay=0 ! ";
-        gst_object_unref(nv_factory);
-        qInfo() << "GPU Nvidia detetada na porta" << port << "- A usar Aceleração de Hardware (nvh264dec).";
-    } else {
-        decoder_str = "avdec_h264 ! ";
-        qWarning() << "GPU Nvidia não encontrada na porta" << port << "- Fallback para CPU (avdec_h264).";
-    }
-
+    // SEM decoder nenhum — nem nvh264dec nem avdec_h264. Vídeo raw, só depay.
+    // AJUSTA width/height/sampling abaixo para bater certo com o que testaste
+    // no gst-launch e com os parâmetros do teu TX.
     std::string pipeline_str =
         "udpsrc port=" + std::to_string(port) + " "
-        "caps=\"application/x-rtp, media=video, clock-rate=90000, encoding-name=H264, payload=96\" ! "
+        "caps=\"application/x-rtp,media=video,clock-rate=90000,encoding-name=RAW,"
+        "sampling=BGR,width=(string)1280,height=(string)720,depth=(string)8,"
+        "colorimetry=(string)SMPTE240M,payload=96\" ! "
         "rtpjitterbuffer latency=0 drop-on-latency=true ! "
-        "rtph264depay ! "
-        "h264parse name=parser ! "
-        "video/x-h264,stream-format=byte-stream,alignment=au ! "
-        "queue leaky=downstream max-size-buffers=5 max-size-bytes=0 max-size-time=0 ! "
-        + decoder_str +
+        "rtpvrawdepay ! "
         "videoconvert n-threads=8 ! "
         "video/x-raw,format=RGB ! "
         "appsink name=mysink sync=false emit-signals=true";
@@ -190,14 +170,6 @@ void CameraGLWidget::start_pipeline(int port)
         g_error_free(error);
         return;
     }
-
-    GstElement *parser = gst_bin_get_by_name(GST_BIN(pipeline_), "parser");
-    GstPad *src_pad = gst_element_get_static_pad(parser, "src");
-    gst_pad_add_probe(src_pad, GST_PAD_PROBE_TYPE_BUFFER,
-                      (GstPadProbeCallback)pad_probe_callback, this, nullptr);
-
-    gst_object_unref(src_pad);
-    gst_object_unref(parser);
 
     GstElement *appsink = gst_bin_get_by_name(GST_BIN(pipeline_), "mysink");
     g_signal_connect(appsink, "new-sample", G_CALLBACK(on_new_sample), this);
@@ -213,51 +185,6 @@ void CameraGLWidget::stop_pipeline()
         gst_object_unref(pipeline_);
         pipeline_ = nullptr;
     }
-}
-
-// Ponto exato pós-rede, pré-decode. A latência calculada aqui é SÓ de rede:
-// udpsink (TX) -> rede -> udpsrc -> rtpjitterbuffer -> rtph264depay -> h264parse.
-GstPadProbeReturn CameraGLWidget::pad_probe_callback(GstPad *pad, GstPadProbeInfo *info, gpointer user_data)
-{
-    auto *widget = static_cast<CameraGLWidget*>(user_data);
-    GstBuffer *buffer = GST_PAD_PROBE_INFO_BUFFER(info);
-    GstMapInfo map;
-
-    if (gst_buffer_map(buffer, &map, GST_MAP_READ)) {
-        const uint8_t uuid[16] = {
-            0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88,
-            0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF, 0x11
-        };
-
-        size_t search_limit = std::min(map.size - 16, (size_t)128);
-        for (size_t i = 0; i < search_limit - 16; ++i) {
-            if (std::memcmp(map.data + i, uuid, 16) == 0) {
-                size_t str_len = std::min(map.size - i - 16, (size_t)64);
-                std::string payload(reinterpret_cast<char*>(map.data + i + 16), str_len);
-
-                size_t end_pos = payload.find((char)0x80);
-                if (end_pos != std::string::npos) {
-                    payload = payload.substr(0, end_pos);
-                }
-
-                uint64_t frame_id = 0, ts_ns = 0;
-                if (sscanf(payload.c_str(), "ID:%lu|TS:%lu", &frame_id, &ts_ns) == 2) {
-
-                    auto now = std::chrono::system_clock::now().time_since_epoch();
-                    uint64_t now_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(now).count();
-                    double network_latency_ms = (now_ns - ts_ns) / 1000000.0;
-
-                    qDebug() << "Frame" << frame_id << "- Latencia REDE:" << network_latency_ms << "ms";
-
-                    std::lock_guard<std::mutex> lock(widget->queue_mutex_);
-                    widget->sei_queue_.push({frame_id, network_latency_ms});
-                }
-                break;
-            }
-        }
-        gst_buffer_unmap(buffer, &map);
-    }
-    return GST_PAD_PROBE_OK;
 }
 
 GstFlowReturn CameraGLWidget::on_new_sample(GstElement *sink, gpointer user_data)
@@ -284,25 +211,21 @@ GstFlowReturn CameraGLWidget::on_new_sample(GstElement *sink, gpointer user_data
         GstMapInfo map;
         gst_buffer_map(buffer, &map, GST_MAP_READ);
 
-        uint64_t current_id = 0;
-        double current_latency = 0.0;
-        {
-            std::lock_guard<std::mutex> lock(widget->queue_mutex_);
-            if (!widget->sei_queue_.empty()) {
-                current_id = widget->sei_queue_.front().first;
-                current_latency = widget->sei_queue_.front().second;
-                widget->sei_queue_.pop();
-            }
-        }
+        // Sem SEI/NALU — lê o header diretamente dos primeiros bytes do frame,
+        // exatamente onde foi escrito no TX.
+        uint64_t current_id = 0, current_ts = 0;
+        std::string header(reinterpret_cast<char*>(map.data), std::min(map.size, (gsize)64));
+        size_t null_pos = header.find('\0');
+        if (null_pos != std::string::npos) header = header.substr(0, null_pos);
+        sscanf(header.c_str(), "ID:%lu|TS:%lu", &current_id, &current_ts);
 
         {
             std::lock_guard<std::mutex> lock(widget->frame_mutex_);
             widget->frame_w_ = width;
             widget->frame_h_ = height;
             widget->pending_frame_.assign(map.data, map.data + map.size);
-
             widget->pending_id_ = current_id;
-            widget->pending_network_latency_ms_ = current_latency;
+            widget->pending_ts_ = current_ts;
             widget->dirty_ = true;
         }
 
