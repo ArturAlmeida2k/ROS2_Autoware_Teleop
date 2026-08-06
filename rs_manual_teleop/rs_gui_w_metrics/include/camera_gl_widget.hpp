@@ -49,6 +49,9 @@ private:
     int frame_w_ = 0, frame_h_ = 0;
     bool dirty_ = false;
 
+    uint64_t pending_id_ = 0;
+    uint64_t pending_ts_ = 0;
+
     // SEI extraído pela sonda, antes do decode
     std::mutex queue_mutex_;
     std::queue<std::pair<uint64_t, uint64_t>> sei_queue_;

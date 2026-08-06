@@ -36,6 +36,7 @@ CameraGLWidget::CameraGLWidget(int port, QWidget *parent)
     QSurfaceFormat fmt;
     fmt.setVersion(3, 3);
     fmt.setProfile(QSurfaceFormat::CoreProfile);
+    fmt.setSwapInterval(0);  // vsync desligado — mantém o fix
     setFormat(fmt);
 
     gst_init(nullptr, nullptr);
@@ -77,6 +78,8 @@ void CameraGLWidget::paintGL()
 {
     static std::vector<uint8_t> local_frame;
     int local_w = 0, local_h = 0;
+    uint64_t id_to_emit = 0;
+    uint64_t ts_to_emit = 0;
     bool has_new_frame = false;
 
     gl33_->glClear(GL_COLOR_BUFFER_BIT);
@@ -87,6 +90,8 @@ void CameraGLWidget::paintGL()
             local_frame.swap(pending_frame_);
             local_w = frame_w_;
             local_h = frame_h_;
+            id_to_emit = pending_id_;
+            ts_to_emit = pending_ts_;
             dirty_ = false;
             has_new_frame = true;
         }
@@ -113,7 +118,16 @@ void CameraGLWidget::paintGL()
     texture_->release();
     shader_->release();
 
-    // A latência já NÃO é calculada nem emitida aqui — ver on_new_sample.
+    // DE VOLTA: latência calculada aqui, DEPOIS do render (mas antes do
+    // swapBuffers real do driver — o Qt faz o swap automaticamente a seguir
+    // ao retorno de paintGL). Serve para testar se setSwapInterval(0)
+    // eliminou o serrote na origem.
+    if (id_to_emit > 0 && ts_to_emit > 0) {
+        auto now = std::chrono::system_clock::now().time_since_epoch();
+        uint64_t render_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(now).count();
+        double full_latency_ms = (render_ns - ts_to_emit) / 1000000.0;
+        emit latencyUpdated(id_to_emit, full_latency_ms);
+    }
 }
 
 void CameraGLWidget::setup_shaders()
@@ -235,8 +249,8 @@ GstPadProbeReturn CameraGLWidget::pad_probe_callback(GstPad *pad, GstPadProbeInf
     return GST_PAD_PROBE_OK;
 }
 
-// Roda na thread do GStreamer, depois do decode — mede/emite latência AQUI,
-// fora do event loop/vsync do Qt (paintGL só desenha).
+// Roda na thread do GStreamer, depois do decode. Já não calcula latência —
+// só entrega o frame + metadados pendentes para o paintGL desenhar e medir.
 GstFlowReturn CameraGLWidget::on_new_sample(GstElement *sink, gpointer user_data)
 {
     auto *widget = static_cast<CameraGLWidget*>(user_data);
@@ -265,19 +279,13 @@ GstFlowReturn CameraGLWidget::on_new_sample(GstElement *sink, gpointer user_data
             }
         }
 
-        // Latência calculada e emitida AQUI — na thread do GStreamer.
-        if (current_id > 0 && current_ts > 0) {
-            auto now = std::chrono::system_clock::now().time_since_epoch();
-            uint64_t now_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(now).count();
-            double latency_ms = (now_ns - current_ts) / 1000000.0;
-            emit widget->latencyUpdated(current_id, latency_ms);
-        }
-
         {
             std::lock_guard<std::mutex> lock(widget->frame_mutex_);
             widget->frame_w_ = width;
             widget->frame_h_ = height;
             widget->pending_frame_.assign(map.data, map.data + map.size);
+            widget->pending_id_ = current_id;
+            widget->pending_ts_ = current_ts;
             widget->dirty_ = true;
         }
 
