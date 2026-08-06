@@ -3,7 +3,6 @@
 #include <QDebug>
 #include <chrono>
 #include <cstring>
-#include <algorithm>
 
 static const char *VERT_SRC = R"(#version 330 core
 layout(location=0) in vec2 aPos;
@@ -115,7 +114,6 @@ void CameraGLWidget::paintGL()
     shader_->release();
 
     // A latência já NÃO é calculada nem emitida aqui — ver on_new_sample.
-    // paintGL fica limitado apenas ao desenho, fora do caminho de medição.
 }
 
 void CameraGLWidget::setup_shaders()
@@ -142,14 +140,27 @@ void CameraGLWidget::setup_quad()
 
 void CameraGLWidget::start_pipeline(int port)
 {
-    // Ajusta width/height/sampling conforme o teu TX (por defeito 1280x720 BGR raw).
+    std::string decoder_str;
+    GstElementFactory *nv_factory = gst_element_factory_find("nvh264dec");
+
+    if (nv_factory) {
+        decoder_str = "nvh264dec max-display-delay=0 ! ";
+        gst_object_unref(nv_factory);
+        qInfo() << "GPU Nvidia detetada na porta" << port << "- A usar Aceleração de Hardware (nvh264dec).";
+    } else {
+        decoder_str = "avdec_h264 ! ";
+        qWarning() << "GPU Nvidia não encontrada na porta" << port << "- Fallback para CPU (avdec_h264).";
+    }
+
     std::string pipeline_str =
         "udpsrc port=" + std::to_string(port) + " "
-        "caps=\"application/x-rtp,media=video,clock-rate=90000,encoding-name=RAW,"
-        "sampling=BGR,width=(string)1280,height=(string)720,depth=(string)8,"
-        "colorimetry=(string)SMPTE240M,payload=96\" ! "
+        "caps=\"application/x-rtp, media=video, clock-rate=90000, encoding-name=H264, payload=96\" ! "
         "rtpjitterbuffer latency=0 drop-on-latency=true ! "
-        "rtpvrawdepay name=rawdepay ! "
+        "rtph264depay ! "
+        "h264parse name=parser ! "
+        "video/x-h264,stream-format=byte-stream,alignment=au ! "
+        "queue leaky=downstream max-size-buffers=5 max-size-bytes=0 max-size-time=0 ! "
+        + decoder_str +
         "videoconvert n-threads=8 ! "
         "video/x-raw,format=RGB ! "
         "appsink name=mysink sync=false emit-signals=true";
@@ -163,15 +174,13 @@ void CameraGLWidget::start_pipeline(int port)
         return;
     }
 
-    // Sonda ANTES do videoconvert — lê o header enquanto os bytes ainda estão
-    // intactos (BGR original), evitando a corrupção causada pela troca de
-    // canais BGR->RGB feita pelo videoconvert a jusante.
-    GstElement *rawdepay = gst_bin_get_by_name(GST_BIN(pipeline_), "rawdepay");
-    GstPad *src_pad = gst_element_get_static_pad(rawdepay, "src");
+    GstElement *parser = gst_bin_get_by_name(GST_BIN(pipeline_), "parser");
+    GstPad *src_pad = gst_element_get_static_pad(parser, "src");
     gst_pad_add_probe(src_pad, GST_PAD_PROBE_TYPE_BUFFER,
                       (GstPadProbeCallback)pad_probe_callback, this, nullptr);
+
     gst_object_unref(src_pad);
-    gst_object_unref(rawdepay);
+    gst_object_unref(parser);
 
     GstElement *appsink = gst_bin_get_by_name(GST_BIN(pipeline_), "mysink");
     g_signal_connect(appsink, "new-sample", G_CALLBACK(on_new_sample), this);
@@ -189,40 +198,50 @@ void CameraGLWidget::stop_pipeline()
     }
 }
 
-// Lê o header de texto ANTES da conversão de cor corromper os bytes.
-GstPadProbeReturn CameraGLWidget::pad_probe_callback(GstPad * /*pad*/, GstPadProbeInfo *info, gpointer user_data)
+// Roda na thread do GStreamer, antes do decode — extrai o SEI.
+GstPadProbeReturn CameraGLWidget::pad_probe_callback(GstPad *pad, GstPadProbeInfo *info, gpointer user_data)
 {
     auto *widget = static_cast<CameraGLWidget*>(user_data);
     GstBuffer *buffer = GST_PAD_PROBE_INFO_BUFFER(info);
     GstMapInfo map;
 
     if (gst_buffer_map(buffer, &map, GST_MAP_READ)) {
-        std::string header(reinterpret_cast<char*>(map.data), std::min(map.size, (gsize)64));
-        size_t null_pos = header.find('\0');
-        if (null_pos != std::string::npos) header = header.substr(0, null_pos);
+        const uint8_t uuid[16] = {
+            0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88,
+            0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF, 0x11
+        };
 
-        uint64_t frame_id = 0, ts_ns = 0;
-        if (sscanf(header.c_str(), "ID:%lu|TS:%lu", &frame_id, &ts_ns) == 2) {
-            std::lock_guard<std::mutex> lock(widget->queue_mutex_);
-            widget->latest_id_ = frame_id;
-            widget->latest_ts_ = ts_ns;
+        size_t search_limit = std::min(map.size - 16, (size_t)128);
+        for (size_t i = 0; i < search_limit - 16; ++i) {
+            if (std::memcmp(map.data + i, uuid, 16) == 0) {
+                size_t str_len = std::min(map.size - i - 16, (size_t)64);
+                std::string payload(reinterpret_cast<char*>(map.data + i + 16), str_len);
+
+                size_t end_pos = payload.find((char)0x80);
+                if (end_pos != std::string::npos) {
+                    payload = payload.substr(0, end_pos);
+                }
+
+                uint64_t frame_id = 0, ts_ns = 0;
+                if (sscanf(payload.c_str(), "ID:%lu|TS:%lu", &frame_id, &ts_ns) == 2) {
+                    std::lock_guard<std::mutex> lock(widget->queue_mutex_);
+                    widget->sei_queue_.push({frame_id, ts_ns});
+                }
+                break;
+            }
         }
         gst_buffer_unmap(buffer, &map);
     }
     return GST_PAD_PROBE_OK;
 }
 
+// Roda na thread do GStreamer, depois do decode — mede/emite latência AQUI,
+// fora do event loop/vsync do Qt (paintGL só desenha).
 GstFlowReturn CameraGLWidget::on_new_sample(GstElement *sink, gpointer user_data)
 {
     auto *widget = static_cast<CameraGLWidget*>(user_data);
     GstSample *sample;
     g_signal_emit_by_name(sink, "pull-sample", &sample);
-
-    static auto last_sample = std::chrono::steady_clock::now();
-    auto now_interval = std::chrono::steady_clock::now();
-    double interval_ms = std::chrono::duration<double, std::milli>(now_interval - last_sample).count();
-    last_sample = now_interval;
-    qDebug() << "Intervalo appsink:" << interval_ms << "ms";
 
     if (sample) {
         GstBuffer *buffer = gst_sample_get_buffer(sample);
@@ -236,16 +255,17 @@ GstFlowReturn CameraGLWidget::on_new_sample(GstElement *sink, gpointer user_data
         GstMapInfo map;
         gst_buffer_map(buffer, &map, GST_MAP_READ);
 
-        uint64_t current_id, current_ts;
+        uint64_t current_id = 0, current_ts = 0;
         {
             std::lock_guard<std::mutex> lock(widget->queue_mutex_);
-            current_id = widget->latest_id_;
-            current_ts = widget->latest_ts_;
+            if (!widget->sei_queue_.empty()) {
+                current_id = widget->sei_queue_.front().first;
+                current_ts = widget->sei_queue_.front().second;
+                widget->sei_queue_.pop();
+            }
         }
 
-        // Latência calculada e emitida AQUI — na thread do GStreamer, fora
-        // do event loop/vsync do Qt. Isto vai para o mesmo latencyUpdated
-        // que já publicas no tópico ROS/bag, sem alterar esse mecanismo.
+        // Latência calculada e emitida AQUI — na thread do GStreamer.
         if (current_id > 0 && current_ts > 0) {
             auto now = std::chrono::system_clock::now().time_since_epoch();
             uint64_t now_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(now).count();
