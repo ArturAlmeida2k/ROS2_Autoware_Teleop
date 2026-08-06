@@ -144,6 +144,13 @@ private:
         try {
             cv::Mat frame;
             while (running_ && rclcpp::ok()) {
+
+                static auto last_capture = std::chrono::steady_clock::now();
+                auto now2 = std::chrono::steady_clock::now();
+                double interval_ms = std::chrono::duration<double, std::milli>(now2 - last_capture).count();
+                last_capture = now2;
+                RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 2000,
+                                    "Intervalo captura: %.1fms", interval_ms);
                 
                 cap_ >> frame; // Aguarda pelo próximo frame do hardware
                 

@@ -280,6 +280,13 @@ GstFlowReturn CameraGLWidget::on_new_sample(GstElement *sink, gpointer user_data
     GstSample *sample;
     g_signal_emit_by_name(sink, "pull-sample", &sample);
     
+
+    static auto last_sample = std::chrono::steady_clock::now();
+    auto now = std::chrono::steady_clock::now();
+    double interval_ms = std::chrono::duration<double, std::milli>(now - last_sample).count();
+    last_sample = now;
+    qDebug() << "Intervalo appsink:" << interval_ms << "ms";  
+      
     if (sample) {
         GstBuffer *buffer = gst_sample_get_buffer(sample);
         GstCaps *caps = gst_sample_get_caps(sample);
