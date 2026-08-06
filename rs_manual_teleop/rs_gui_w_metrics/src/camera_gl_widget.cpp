@@ -78,21 +78,19 @@ void CameraGLWidget::paintGL()
 {
     static std::vector<uint8_t> local_frame;
     int local_w = 0, local_h = 0;
-    uint64_t id_to_emit = 0;
-    uint64_t ts_to_emit = 0;
     bool has_new_frame = false;
 
     gl33_->glClear(GL_COLOR_BUFFER_BIT);
 
-    std::lock_guard<std::mutex> lock(frame_mutex_);
-    if (dirty_ && !pending_frame_.empty()) {
-        local_frame.swap(pending_frame_);
-        local_w = frame_w_;
-        local_h = frame_h_;
-        id_to_emit = pending_id_;
-        ts_to_emit = pending_ts_;
-        dirty_ = false;
-        has_new_frame = true;
+    {
+        std::lock_guard<std::mutex> lock(frame_mutex_);
+        if (dirty_ && !pending_frame_.empty()) {
+            local_frame.swap(pending_frame_);
+            local_w = frame_w_;
+            local_h = frame_h_;
+            dirty_ = false;
+            has_new_frame = true;
+        }
     }
 
     if (has_new_frame) {
@@ -116,13 +114,8 @@ void CameraGLWidget::paintGL()
     texture_->release();
     shader_->release();
 
-    // Latência completa: captura -> render.
-    if (id_to_emit > 0 && ts_to_emit > 0) {
-        auto now = std::chrono::system_clock::now().time_since_epoch();
-        uint64_t render_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(now).count();
-        double full_latency_ms = (render_ns - ts_to_emit) / 1000000.0;
-        emit latencyUpdated(id_to_emit, full_latency_ms);
-    }
+    // A latência já NÃO é calculada nem emitida aqui — ver on_new_sample.
+    // paintGL fica limitado apenas ao desenho, fora do caminho de medição.
 }
 
 void CameraGLWidget::setup_shaders()
@@ -149,7 +142,7 @@ void CameraGLWidget::setup_quad()
 
 void CameraGLWidget::start_pipeline(int port)
 {
-    // Ajusta width/height/sampling conforme o teu TX (por defeito 1280x720 BGR).
+    // Ajusta width/height/sampling conforme o teu TX (por defeito 1280x720 BGR raw).
     std::string pipeline_str =
         "udpsrc port=" + std::to_string(port) + " "
         "caps=\"application/x-rtp,media=video,clock-rate=90000,encoding-name=RAW,"
@@ -226,9 +219,9 @@ GstFlowReturn CameraGLWidget::on_new_sample(GstElement *sink, gpointer user_data
     g_signal_emit_by_name(sink, "pull-sample", &sample);
 
     static auto last_sample = std::chrono::steady_clock::now();
-    auto now = std::chrono::steady_clock::now();
-    double interval_ms = std::chrono::duration<double, std::milli>(now - last_sample).count();
-    last_sample = now;
+    auto now_interval = std::chrono::steady_clock::now();
+    double interval_ms = std::chrono::duration<double, std::milli>(now_interval - last_sample).count();
+    last_sample = now_interval;
     qDebug() << "Intervalo appsink:" << interval_ms << "ms";
 
     if (sample) {
@@ -243,8 +236,6 @@ GstFlowReturn CameraGLWidget::on_new_sample(GstElement *sink, gpointer user_data
         GstMapInfo map;
         gst_buffer_map(buffer, &map, GST_MAP_READ);
 
-        // Lê os valores já extraídos pela sonda (não faz parsing aqui —
-        // a esta altura os bytes já foram convertidos BGR->RGB).
         uint64_t current_id, current_ts;
         {
             std::lock_guard<std::mutex> lock(widget->queue_mutex_);
@@ -252,13 +243,21 @@ GstFlowReturn CameraGLWidget::on_new_sample(GstElement *sink, gpointer user_data
             current_ts = widget->latest_ts_;
         }
 
+        // Latência calculada e emitida AQUI — na thread do GStreamer, fora
+        // do event loop/vsync do Qt. Isto vai para o mesmo latencyUpdated
+        // que já publicas no tópico ROS/bag, sem alterar esse mecanismo.
+        if (current_id > 0 && current_ts > 0) {
+            auto now = std::chrono::system_clock::now().time_since_epoch();
+            uint64_t now_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(now).count();
+            double latency_ms = (now_ns - current_ts) / 1000000.0;
+            emit widget->latencyUpdated(current_id, latency_ms);
+        }
+
         {
             std::lock_guard<std::mutex> lock(widget->frame_mutex_);
             widget->frame_w_ = width;
             widget->frame_h_ = height;
             widget->pending_frame_.assign(map.data, map.data + map.size);
-            widget->pending_id_ = current_id;
-            widget->pending_ts_ = current_ts;
             widget->dirty_ = true;
         }
 

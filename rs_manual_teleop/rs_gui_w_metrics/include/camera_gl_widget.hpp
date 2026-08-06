@@ -42,12 +42,10 @@ private:
     // GStreamer
     GstElement *pipeline_ = nullptr;
 
-    // Frame pendente para render
+    // Frame pendente para render (paintGL só desenha, não calcula latência)
     std::mutex frame_mutex_;
     std::vector<uint8_t> pending_frame_;
     int frame_w_ = 0, frame_h_ = 0;
-    uint64_t pending_id_ = 0;
-    uint64_t pending_ts_ = 0;
     bool dirty_ = false;
 
     // Header extraído pela sonda, antes do videoconvert corromper os bytes
