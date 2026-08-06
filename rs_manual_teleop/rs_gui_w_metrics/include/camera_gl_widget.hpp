@@ -8,6 +8,7 @@
 #include <mutex>
 #include <vector>
 #include <cstdint>
+#include <queue>
 
 class CameraGLWidget : public QOpenGLWidget {
     Q_OBJECT
