@@ -18,7 +18,7 @@ public:
                            frame_counter_(1) {
 
         this->declare_parameter<int>("camera_id", 2);
-        this->declare_parameter<int>("width", 1280);   // 720p por defeito — 1080p raw excede Gigabit
+        this->declare_parameter<int>("width", 1280);   // 720p — 1080p raw excede Gigabit
         this->declare_parameter<int>("height", 720);
         this->declare_parameter<int>("fps", 30);
         this->declare_parameter<std::string>("ip_address", "127.0.0.1");
@@ -120,10 +120,9 @@ private:
                 gst_buffer_map(buffer, &map, GST_MAP_WRITE);
                 std::memcpy(map.data, frame.data, size);
 
-                // Sem NALU/SEI (vídeo raw não tem essa estrutura): embutimos o
-                // timestamp diretamente nos primeiros bytes do buffer de pixels.
-                // Corrompe visualmente um pequeno risco no canto superior esquerdo
-                // — irrelevante para este teste de diagnóstico de latência/jitter.
+                // Header de texto embutido nos primeiros bytes do buffer de pixels
+                // (sem NALU/SEI em raw). Fica visível como um pequeno risco no canto
+                // superior esquerdo — irrelevante para este teste de diagnóstico.
                 std::string header = "ID:" + std::to_string(current_id) + "|TS:" + std::to_string(ts_ns);
                 if (map.size > header.size() + 1) {
                     std::memcpy(map.data, header.c_str(), header.size());

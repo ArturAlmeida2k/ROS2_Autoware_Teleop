@@ -3,6 +3,7 @@
 #include <QDebug>
 #include <chrono>
 #include <cstring>
+#include <algorithm>
 
 static const char *VERT_SRC = R"(#version 330 core
 layout(location=0) in vec2 aPos;
@@ -115,7 +116,7 @@ void CameraGLWidget::paintGL()
     texture_->release();
     shader_->release();
 
-    // Latência completa: captura -> render, tal como na versão original.
+    // Latência completa: captura -> render.
     if (id_to_emit > 0 && ts_to_emit > 0) {
         auto now = std::chrono::system_clock::now().time_since_epoch();
         uint64_t render_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(now).count();
@@ -148,16 +149,14 @@ void CameraGLWidget::setup_quad()
 
 void CameraGLWidget::start_pipeline(int port)
 {
-    // SEM decoder nenhum — nem nvh264dec nem avdec_h264. Vídeo raw, só depay.
-    // AJUSTA width/height/sampling abaixo para bater certo com o que testaste
-    // no gst-launch e com os parâmetros do teu TX.
+    // Ajusta width/height/sampling conforme o teu TX (por defeito 1280x720 BGR).
     std::string pipeline_str =
         "udpsrc port=" + std::to_string(port) + " "
         "caps=\"application/x-rtp,media=video,clock-rate=90000,encoding-name=RAW,"
         "sampling=BGR,width=(string)1280,height=(string)720,depth=(string)8,"
         "colorimetry=(string)SMPTE240M,payload=96\" ! "
         "rtpjitterbuffer latency=0 drop-on-latency=true ! "
-        "rtpvrawdepay ! "
+        "rtpvrawdepay name=rawdepay ! "
         "videoconvert n-threads=8 ! "
         "video/x-raw,format=RGB ! "
         "appsink name=mysink sync=false emit-signals=true";
@@ -170,6 +169,16 @@ void CameraGLWidget::start_pipeline(int port)
         g_error_free(error);
         return;
     }
+
+    // Sonda ANTES do videoconvert — lê o header enquanto os bytes ainda estão
+    // intactos (BGR original), evitando a corrupção causada pela troca de
+    // canais BGR->RGB feita pelo videoconvert a jusante.
+    GstElement *rawdepay = gst_bin_get_by_name(GST_BIN(pipeline_), "rawdepay");
+    GstPad *src_pad = gst_element_get_static_pad(rawdepay, "src");
+    gst_pad_add_probe(src_pad, GST_PAD_PROBE_TYPE_BUFFER,
+                      (GstPadProbeCallback)pad_probe_callback, this, nullptr);
+    gst_object_unref(src_pad);
+    gst_object_unref(rawdepay);
 
     GstElement *appsink = gst_bin_get_by_name(GST_BIN(pipeline_), "mysink");
     g_signal_connect(appsink, "new-sample", G_CALLBACK(on_new_sample), this);
@@ -185,6 +194,29 @@ void CameraGLWidget::stop_pipeline()
         gst_object_unref(pipeline_);
         pipeline_ = nullptr;
     }
+}
+
+// Lê o header de texto ANTES da conversão de cor corromper os bytes.
+GstPadProbeReturn CameraGLWidget::pad_probe_callback(GstPad * /*pad*/, GstPadProbeInfo *info, gpointer user_data)
+{
+    auto *widget = static_cast<CameraGLWidget*>(user_data);
+    GstBuffer *buffer = GST_PAD_PROBE_INFO_BUFFER(info);
+    GstMapInfo map;
+
+    if (gst_buffer_map(buffer, &map, GST_MAP_READ)) {
+        std::string header(reinterpret_cast<char*>(map.data), std::min(map.size, (gsize)64));
+        size_t null_pos = header.find('\0');
+        if (null_pos != std::string::npos) header = header.substr(0, null_pos);
+
+        uint64_t frame_id = 0, ts_ns = 0;
+        if (sscanf(header.c_str(), "ID:%lu|TS:%lu", &frame_id, &ts_ns) == 2) {
+            std::lock_guard<std::mutex> lock(widget->queue_mutex_);
+            widget->latest_id_ = frame_id;
+            widget->latest_ts_ = ts_ns;
+        }
+        gst_buffer_unmap(buffer, &map);
+    }
+    return GST_PAD_PROBE_OK;
 }
 
 GstFlowReturn CameraGLWidget::on_new_sample(GstElement *sink, gpointer user_data)
@@ -211,13 +243,14 @@ GstFlowReturn CameraGLWidget::on_new_sample(GstElement *sink, gpointer user_data
         GstMapInfo map;
         gst_buffer_map(buffer, &map, GST_MAP_READ);
 
-        // Sem SEI/NALU — lê o header diretamente dos primeiros bytes do frame,
-        // exatamente onde foi escrito no TX.
-        uint64_t current_id = 0, current_ts = 0;
-        std::string header(reinterpret_cast<char*>(map.data), std::min(map.size, (gsize)64));
-        size_t null_pos = header.find('\0');
-        if (null_pos != std::string::npos) header = header.substr(0, null_pos);
-        sscanf(header.c_str(), "ID:%lu|TS:%lu", &current_id, &current_ts);
+        // Lê os valores já extraídos pela sonda (não faz parsing aqui —
+        // a esta altura os bytes já foram convertidos BGR->RGB).
+        uint64_t current_id, current_ts;
+        {
+            std::lock_guard<std::mutex> lock(widget->queue_mutex_);
+            current_id = widget->latest_id_;
+            current_ts = widget->latest_ts_;
+        }
 
         {
             std::lock_guard<std::mutex> lock(widget->frame_mutex_);
