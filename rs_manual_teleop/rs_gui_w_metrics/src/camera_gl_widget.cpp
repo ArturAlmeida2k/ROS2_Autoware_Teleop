@@ -36,15 +36,28 @@ CameraGLWidget::CameraGLWidget(int port, QWidget *parent)
     QSurfaceFormat fmt;
     fmt.setVersion(3, 3);
     fmt.setProfile(QSurfaceFormat::CoreProfile);
-    fmt.setSwapInterval(0);  // vsync desligado — mantém o fix
+    fmt.setSwapInterval(0);
     setFormat(fmt);
 
     gst_init(nullptr, nullptr);
     start_pipeline(port);
+
+    // NOVO: timer a ritmo fixo (~60fps de tentativas) — pede repintura
+    // independentemente de quando exatamente o GStreamer entrega um frame.
+    // Isto elimina a variação de fase entre chegada de frame e pedido de
+    // update() que estava a causar o serrote mesmo com swapInterval(0).
+    render_timer_ = new QTimer(this);
+    connect(render_timer_, &QTimer::timeout, this, [this]() {
+        update();
+    });
+    render_timer_->start(16);
 }
 
 CameraGLWidget::~CameraGLWidget()
 {
+    if (render_timer_) {
+        render_timer_->stop();
+    }
     stop_pipeline();
     makeCurrent();
     delete texture_;
@@ -118,11 +131,9 @@ void CameraGLWidget::paintGL()
     texture_->release();
     shader_->release();
 
-    // DE VOLTA: latência calculada aqui, DEPOIS do render (mas antes do
-    // swapBuffers real do driver — o Qt faz o swap automaticamente a seguir
-    // ao retorno de paintGL). Serve para testar se setSwapInterval(0)
-    // eliminou o serrote na origem.
-    if (id_to_emit > 0 && ts_to_emit > 0) {
+    // Só emite latência quando havia de facto um frame novo (evita repetir
+    // o mesmo valor em cada tick do timer quando não chegou nada de novo).
+    if (has_new_frame && id_to_emit > 0 && ts_to_emit > 0) {
         auto now = std::chrono::system_clock::now().time_since_epoch();
         uint64_t render_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(now).count();
         double full_latency_ms = (render_ns - ts_to_emit) / 1000000.0;
@@ -249,8 +260,9 @@ GstPadProbeReturn CameraGLWidget::pad_probe_callback(GstPad *pad, GstPadProbeInf
     return GST_PAD_PROBE_OK;
 }
 
-// Roda na thread do GStreamer, depois do decode. Já não calcula latência —
-// só entrega o frame + metadados pendentes para o paintGL desenhar e medir.
+// Roda na thread do GStreamer, depois do decode. Só atualiza o frame pendente
+// — já NÃO chama update() diretamente. O QTimer trata da repintura a ritmo
+// fixo, desacoplado da chegada de frames.
 GstFlowReturn CameraGLWidget::on_new_sample(GstElement *sink, gpointer user_data)
 {
     auto *widget = static_cast<CameraGLWidget*>(user_data);
@@ -289,7 +301,7 @@ GstFlowReturn CameraGLWidget::on_new_sample(GstElement *sink, gpointer user_data
             widget->dirty_ = true;
         }
 
-        QMetaObject::invokeMethod(widget, "update", Qt::QueuedConnection);
+        // REMOVIDO: já não chama update() aqui — o QTimer trata disso.
 
         gst_buffer_unmap(buffer, &map);
         gst_sample_unref(sample);

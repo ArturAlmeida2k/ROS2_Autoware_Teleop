@@ -4,11 +4,13 @@
 #include <QOpenGLFunctions_3_3_Core>
 #include <QOpenGLShaderProgram>
 #include <QOpenGLTexture>
+#include <QTimer>
 #include <gst/gst.h>
 #include <mutex>
 #include <vector>
-#include <cstdint>
 #include <queue>
+#include <utility>
+#include <cstdint>
 
 class CameraGLWidget : public QOpenGLWidget {
     Q_OBJECT
@@ -43,14 +45,18 @@ private:
     // GStreamer
     GstElement *pipeline_ = nullptr;
 
-    // Frame pendente para render — paintGL só desenha, não mede latência
+    // NOVO: timer que desacopla o pedido de repintura do ritmo de chegada
+    // de frames do GStreamer — pede update() a um ritmo fixo, em vez de a
+    // cada frame recebido.
+    QTimer *render_timer_ = nullptr;
+
+    // Frame pendente para render
     std::mutex frame_mutex_;
     std::vector<uint8_t> pending_frame_;
     int frame_w_ = 0, frame_h_ = 0;
-    bool dirty_ = false;
-
     uint64_t pending_id_ = 0;
     uint64_t pending_ts_ = 0;
+    bool dirty_ = false;
 
     // SEI extraído pela sonda, antes do decode
     std::mutex queue_mutex_;
