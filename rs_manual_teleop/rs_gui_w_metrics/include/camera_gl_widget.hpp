@@ -38,10 +38,9 @@ private:
     bool                 dirty_   = false;
 
     std::mutex queue_mutex_;
-    std::queue<std::pair<uint64_t, uint64_t>> sei_queue_; 
-
+    std::queue<std::pair<uint64_t, double>> sei_queue_;
+    double pending_network_latency_ms_ = 0.0;
     uint64_t pending_id_ = 0;
-    uint64_t pending_ts_ = 0;
 
     // Gestão do GStreamer
     GstElement* pipeline_ = nullptr;
