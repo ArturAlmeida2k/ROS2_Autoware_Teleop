@@ -1,7 +1,6 @@
 #include "camera_gl_widget.hpp"
 #include <QOpenGLFunctions_3_3_Core>
 #include <QDebug>
-#include <QTimer>
 #include <chrono>
 #include <cstring>
 
@@ -41,19 +40,10 @@ CameraGLWidget::CameraGLWidget(int port, QWidget *parent)
 
     gst_init(nullptr, nullptr);
     start_pipeline(port);
-
-    // Repintura contínua: pede update() a ritmo alto, independentemente de
-    // quando chegam frames. O vsync trava no refresh real, por isso o custo
-    // é baixo. Assim o paintGL apanha cada frame novo no primeiro refresh
-    // disponível, em vez de esperar pela fase do update() disparado por evento.
-    render_timer_ = new QTimer(this);
-    connect(render_timer_, &QTimer::timeout, this, [this]() { update(); });
-    render_timer_->start(2);
 }
 
 CameraGLWidget::~CameraGLWidget()
 {
-    if (render_timer_) render_timer_->stop();
     stop_pipeline();
 
     makeCurrent();
@@ -94,22 +84,18 @@ void CameraGLWidget::paintGL()
 
     gl33_->glClear(GL_COLOR_BUFFER_BIT);
 
-    {
-        std::lock_guard<std::mutex> lock(frame_mutex_);
-        if (dirty_ && !pending_frame_.empty()) {
-            local_frame.swap(pending_frame_);
+    std::lock_guard<std::mutex> lock(frame_mutex_);
+    if (dirty_ && !pending_frame_.empty()) {
+        local_frame.swap(pending_frame_);
 
-            local_w = frame_w_;
-            local_h = frame_h_;
-            id_to_emit = pending_id_;
-            ts_to_emit = pending_ts_;
-            dirty_ = false;
-            has_new_frame = true;
-        }
+        local_w = frame_w_;
+        local_h = frame_h_;
+        id_to_emit = pending_id_;
+        ts_to_emit = pending_ts_;
+        dirty_ = false;
+        has_new_frame = true;
     }
 
-    // Só faz upload quando há frame novo. Nas restantes passagens redesenha
-    // a textura que já lá está — o ecrã mostra sempre a imagem mais recente.
     if (has_new_frame) {
         if (!texture_->isCreated() || texture_->width() != local_w || texture_->height() != local_h) {
             if (texture_->isCreated()) {
@@ -133,9 +119,8 @@ void CameraGLWidget::paintGL()
     texture_->release();
     shader_->release();
 
-    // METRICA 3 — só emite quando havia frame novo, senão repetiria o mesmo
-    // valor a cada tick do timer e enviesava o bag.
-    if (has_new_frame && id_to_emit > 0 && ts_to_emit > 0) {
+    // METRICA 3 — captura -> desenhado
+    if (id_to_emit > 0 && ts_to_emit > 0) {
         auto now = std::chrono::system_clock::now().time_since_epoch();
         int64_t render_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(now).count();
         double full_latency_ms = (render_ns - (int64_t)ts_to_emit) / 1000000.0;
@@ -170,6 +155,10 @@ void CameraGLWidget::setup_quad()
 
 void CameraGLWidget::start_pipeline(int port)
 {
+    // Decode em CPU. O nvh264dec do nvcodec 1.20.3 acumula frames no
+    // GstVideoDecoder com esta GPU (g_list_find no perfil), degradando ate
+    // saturar o CPU. avdec_h264 e estavel.
+    // max-threads=4: chega para 1080p30 e deixa cores livres.
     std::string pipeline_str =
         "udpsrc port=" + std::to_string(port) + " "
         "caps=\"application/x-rtp, media=video, clock-rate=90000, encoding-name=H264, payload=96\" ! "
@@ -245,6 +234,8 @@ GstPadProbeReturn CameraGLWidget::pad_probe_callback(GstPad *pad, GstPadProbeInf
                 auto now = std::chrono::system_clock::now().time_since_epoch();
                 int64_t now_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(now).count();
 
+                // Cast com sinal: TS2 vem do relogio do TX. Sem isto, um
+                // offset NTP de ~1ms faz a subtracao unsigned enrolar para ~2^64.
                 int64_t diff_ns = now_ns - (int64_t)ts2_ns;
                 double network_ms = diff_ns / 1000000.0;
                 emit widget->networkLatencyUpdated(frame_id, network_ms);
@@ -265,7 +256,6 @@ GstPadProbeReturn CameraGLWidget::pad_probe_callback(GstPad *pad, GstPadProbeInf
 }
 
 // Depois do decode. METRICA 2 — captura -> pronto para o paintGL.
-// Já não chama update(): o timer trata da repintura.
 GstFlowReturn CameraGLWidget::on_new_sample(GstElement *sink, gpointer user_data)
 {
     auto *widget = static_cast<CameraGLWidget*>(user_data);
@@ -310,6 +300,8 @@ GstFlowReturn CameraGLWidget::on_new_sample(GstElement *sink, gpointer user_data
             widget->pending_ts_ = current_ts;
             widget->dirty_ = true;
         }
+
+        QMetaObject::invokeMethod(widget, "update", Qt::QueuedConnection);
 
         gst_buffer_unmap(buffer, &map);
         gst_sample_unref(sample);

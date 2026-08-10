@@ -3,7 +3,6 @@
 #include <QOpenGLFunctions_3_3_Core>
 #include <QOpenGLTexture>
 #include <QOpenGLShaderProgram>
-#include <QTimer>
 #include <mutex>
 #include <vector>
 #include <queue>
@@ -38,7 +37,6 @@ private:
     int                  frame_w_ = 0;
     int                  frame_h_ = 0;
     bool                 dirty_   = false;
-    QTimer *render_timer_ = nullptr;
 
     std::mutex queue_mutex_;
     std::queue<std::pair<uint64_t, uint64_t>> sei_queue_; 
