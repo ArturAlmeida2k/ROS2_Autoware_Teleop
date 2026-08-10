@@ -259,7 +259,8 @@ GstPadProbeReturn CameraGLWidget::pad_probe_callback(GstPad *pad, GstPadProbeInf
                 if (end_pos != std::string::npos) {
                     payload = payload.substr(0, end_pos);
                 }
-
+                qDebug() << "SEI payload cru:" << QString::fromStdString(payload)
+                                << "len=" << payload.size();
                 uint64_t frame_id = 0, ts_ns = 0, ts2_ns = 0;
                 if (sscanf(payload.c_str(), "ID:%lu|TS:%lu|TS2:%lu", &frame_id, &ts_ns, &ts2_ns) == 3) {
 
