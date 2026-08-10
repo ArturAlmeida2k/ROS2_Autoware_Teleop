@@ -241,28 +241,41 @@ GstPadProbeReturn CameraGLWidget::pad_probe_callback(GstPad *pad, GstPadProbeInf
     auto *widget = static_cast<CameraGLWidget*>(user_data);
     GstBuffer *buffer = GST_PAD_PROBE_INFO_BUFFER(info);
     GstMapInfo map;
-    
+
     if (gst_buffer_map(buffer, &map, GST_MAP_READ)) {
         const uint8_t uuid[16] = {
-            0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 
+            0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88,
             0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF, 0x11
         };
 
         size_t search_limit = std::min(map.size - 16, (size_t)128);
         for (size_t i = 0; i < search_limit - 16; ++i) {
             if (std::memcmp(map.data + i, uuid, 16) == 0) {
-                size_t str_len = std::min(map.size - i - 16, (size_t)64); 
+                // 96 (era 64): o payload cresceu com o campo TS2
+                size_t str_len = std::min(map.size - i - 16, (size_t)96);
                 std::string payload(reinterpret_cast<char*>(map.data + i + 16), str_len);
-                
+
                 size_t end_pos = payload.find((char)0x80);
                 if (end_pos != std::string::npos) {
                     payload = payload.substr(0, end_pos);
                 }
 
-                uint64_t frame_id = 0, ts_ns = 0;
-                if (sscanf(payload.c_str(), "ID:%lu|TS:%lu", &frame_id, &ts_ns) == 2) {
-                    // NOVA PARTE: Em vez de emitir, guarda na fila
+                uint64_t frame_id = 0, ts_ns = 0, ts2_ns = 0;
+                if (sscanf(payload.c_str(), "ID:%lu|TS:%lu|TS2:%lu", &frame_id, &ts_ns, &ts2_ns) == 3) {
+
+                    auto now = std::chrono::system_clock::now().time_since_epoch();
+                    uint64_t now_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(now).count();
+
+                    // METRICA 1 — rede isolada: udpsink -> rede -> udpsrc -> jitterbuffer -> depay -> parse
+                    double network_ms = (now_ns - ts2_ns) / 1000000.0;
+                    emit widget->networkLatencyUpdated(frame_id, network_ms);
+
                     std::lock_guard<std::mutex> lock(widget->queue_mutex_);
+                    // Trim: sem isto a fila cresce indefinidamente quando o
+                    // queue leaky descarta frames, e os timestamps ficam velhos.
+                    while (widget->sei_queue_.size() > 3) {
+                        widget->sei_queue_.pop();
+                    }
                     widget->sei_queue_.push({frame_id, ts_ns});
                 }
                 break;
@@ -273,24 +286,16 @@ GstPadProbeReturn CameraGLWidget::pad_probe_callback(GstPad *pad, GstPadProbeInf
     return GST_PAD_PROBE_OK;
 }
 
-// Roda numa thread do GStreamer após descodificar (Substitui o loop while)
 GstFlowReturn CameraGLWidget::on_new_sample(GstElement *sink, gpointer user_data)
 {
     auto *widget = static_cast<CameraGLWidget*>(user_data);
     GstSample *sample;
     g_signal_emit_by_name(sink, "pull-sample", &sample);
-    
 
-    static auto last_sample = std::chrono::steady_clock::now();
-    auto now = std::chrono::steady_clock::now();
-    double interval_ms = std::chrono::duration<double, std::milli>(now - last_sample).count();
-    last_sample = now;
-    qDebug() << "Intervalo appsink:" << interval_ms << "ms";  
-      
     if (sample) {
         GstBuffer *buffer = gst_sample_get_buffer(sample);
         GstCaps *caps = gst_sample_get_caps(sample);
-        
+
         GstStructure *s = gst_caps_get_structure(caps, 0);
         int width, height;
         gst_structure_get_int(s, "width", &width);
@@ -298,10 +303,9 @@ GstFlowReturn CameraGLWidget::on_new_sample(GstElement *sink, gpointer user_data
 
         GstMapInfo map;
         gst_buffer_map(buffer, &map, GST_MAP_READ);
-        
+
         uint64_t current_id = 0, current_ts = 0;
         {
-            // Retirar o timestamp correspondente a este frame da fila
             std::lock_guard<std::mutex> lock(widget->queue_mutex_);
             if (!widget->sei_queue_.empty()) {
                 current_id = widget->sei_queue_.front().first;
@@ -310,21 +314,26 @@ GstFlowReturn CameraGLWidget::on_new_sample(GstElement *sink, gpointer user_data
             }
         }
 
+        // METRICA 2 — descomprimido e pronto a entregar ao paintGL
+        if (current_id > 0 && current_ts > 0) {
+            auto now = std::chrono::system_clock::now().time_since_epoch();
+            uint64_t now_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(now).count();
+            double decode_ms = (now_ns - current_ts) / 1000000.0;
+            emit widget->decodeLatencyUpdated(current_id, decode_ms);
+        }
+
         {
-            // Lock do OpenGL frame
             std::lock_guard<std::mutex> lock(widget->frame_mutex_);
             widget->frame_w_ = width;
             widget->frame_h_ = height;
             widget->pending_frame_.assign(map.data, map.data + map.size);
-            
-            // Passar o timestamp para o Qt desenhar
             widget->pending_id_ = current_id;
             widget->pending_ts_ = current_ts;
             widget->dirty_ = true;
         }
-        
+
         QMetaObject::invokeMethod(widget, "update", Qt::QueuedConnection);
-        
+
         gst_buffer_unmap(buffer, &map);
         gst_sample_unref(sample);
         return GST_FLOW_OK;

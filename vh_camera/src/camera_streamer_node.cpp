@@ -193,12 +193,9 @@ private:
 
         {
             std::lock_guard<std::mutex> lock(node->queue_mutex_);
-            
-            // Limpeza de metadados órfãos para evitar desincronização em caso de drop de frames
             while (node->metadata_queue_.size() > 2) {
                 node->metadata_queue_.pop();
             }
-
             if (!node->metadata_queue_.empty()) {
                 frame_id = node->metadata_queue_.front().first;
                 ts_ns = node->metadata_queue_.front().second;
@@ -208,21 +205,22 @@ private:
             }
         }
 
-        // Cálculo do tempo de processamento interno do software
         auto out_now = std::chrono::system_clock::now().time_since_epoch();
-        uint64_t out_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(out_now).count();
-        double processing_ms = (out_ns - ts_ns) / 1000000.0;
+        uint64_t encode_ts_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(out_now).count();
 
+        double processing_ms = (encode_ts_ns - ts_ns) / 1000000.0;
         RCLCPP_INFO_THROTTLE(node->get_logger(), *node->get_clock(), 1000,
                               "[Software G2G] Tempo interno: %.2f ms", processing_ms);
 
-        // Construção do SEI NALU com metadados de tempo
         std::vector<uint8_t> sei_nalu;
         sei_nalu.push_back(0x00); sei_nalu.push_back(0x00); sei_nalu.push_back(0x00); sei_nalu.push_back(0x01);
         sei_nalu.push_back(0x06);
         sei_nalu.push_back(0x05);
 
-        std::string payload = "ID:" + std::to_string(frame_id) + "|TS:" + std::to_string(ts_ns) + (char)0x80;
+        // Agora com DOIS timestamps
+        std::string payload = "ID:" + std::to_string(frame_id) +
+                              "|TS:" + std::to_string(ts_ns) +
+                              "|TS2:" + std::to_string(encode_ts_ns) + (char)0x80;
         size_t payload_size = 16 + payload.length();
 
         size_t s = payload_size;
@@ -244,7 +242,6 @@ private:
         std::memcpy(new_map.data, sei_nalu.data(), sei_nalu.size());
         std::memcpy(new_map.data + sei_nalu.size(), old_map.data, old_map.size);
 
-        // Corrigido para gst_buffer_unmap corretamente
         gst_buffer_unmap(new_buf, &new_map);
         gst_buffer_unmap(buffer, &old_map);
 
@@ -255,6 +252,7 @@ private:
         return GST_PAD_PROBE_OK;
     }
 };
+
 
 int main(int argc, char * argv[]) {
     rclcpp::init(argc, argv);
