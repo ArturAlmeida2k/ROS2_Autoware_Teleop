@@ -30,7 +30,7 @@ static const float QUAD[] = {
      1.f,  1.f, 1.f, 0.f
 };
 
-CameraGLWidget::CameraGLWidget(int port, QWidget *parent) 
+CameraGLWidget::CameraGLWidget(int port, QWidget *parent)
     : QOpenGLWidget(parent)
 {
     QSurfaceFormat fmt;
@@ -38,17 +38,14 @@ CameraGLWidget::CameraGLWidget(int port, QWidget *parent)
     fmt.setProfile(QSurfaceFormat::CoreProfile);
     setFormat(fmt);
 
-    // Inicializa o GStreamer (seguro chamar várias vezes na mesma app)
     gst_init(nullptr, nullptr);
-
-    // Inicia a pipeline em pano de fundo
     start_pipeline(port);
 }
 
 CameraGLWidget::~CameraGLWidget()
 {
-    stop_pipeline(); 
-    
+    stop_pipeline();
+
     makeCurrent();
     delete texture_;
     delete shader_;
@@ -65,7 +62,7 @@ void CameraGLWidget::initializeGL()
     gl33_->initializeOpenGLFunctions();
     setup_shaders();
     setup_quad();
-    
+
     texture_ = new QOpenGLTexture(QOpenGLTexture::Target2D);
     texture_->setMinificationFilter(QOpenGLTexture::Linear);
     texture_->setMagnificationFilter(QOpenGLTexture::Linear);
@@ -79,26 +76,25 @@ void CameraGLWidget::resizeGL(int w, int h)
 
 void CameraGLWidget::paintGL()
 {
-    static std::vector<uint8_t> local_frame; 
+    static std::vector<uint8_t> local_frame;
     int local_w = 0, local_h = 0;
     uint64_t id_to_emit = 0;
     uint64_t ts_to_emit = 0;
-    bool has_new_frame = false;   
-    
+    bool has_new_frame = false;
+
     gl33_->glClear(GL_COLOR_BUFFER_BIT);
-    
+
     std::lock_guard<std::mutex> lock(frame_mutex_);
     if (dirty_ && !pending_frame_.empty()) {
-        // Magia do C++: Troca a memória instantaneamente em vez de copiar!
-        local_frame.swap(pending_frame_); 
-        
+        local_frame.swap(pending_frame_);
+
         local_w = frame_w_;
         local_h = frame_h_;
         id_to_emit = pending_id_;
         ts_to_emit = pending_ts_;
         dirty_ = false;
         has_new_frame = true;
-    }    
+    }
 
     if (has_new_frame) {
         if (!texture_->isCreated() || texture_->width() != local_w || texture_->height() != local_h) {
@@ -110,30 +106,24 @@ void CameraGLWidget::paintGL()
             texture_->setFormat(QOpenGLTexture::RGB8_UNorm);
             texture_->allocateStorage(QOpenGLTexture::RGB, QOpenGLTexture::UInt8);
         }
-
-        // Fazer upload para a placa gráfica usando a nossa cópia local
         texture_->setData(QOpenGLTexture::RGB, QOpenGLTexture::UInt8, static_cast<const void *>(local_frame.data()));
     }
-    
+
     if (!texture_->isCreated()) return;
-    
+
     shader_->bind();
     texture_->bind();
     gl33_->glBindVertexArray(vao_);
-    
-    // DESENHAR NO ECRÃ
     gl33_->glDrawArrays(GL_TRIANGLES, 0, 6);
-    
     gl33_->glBindVertexArray(0);
     texture_->release();
     shader_->release();
 
-    // CÁLCULO FINAL: A imagem acabou de ser processada pelo GPU e vai aparecer!
+    // METRICA 3 — captura -> desenhado
     if (id_to_emit > 0 && ts_to_emit > 0) {
         auto now = std::chrono::system_clock::now().time_since_epoch();
-        uint64_t render_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(now).count();
-        double full_latency_ms = (render_ns - ts_to_emit) / 1000000.0;
-        
+        int64_t render_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(now).count();
+        double full_latency_ms = (render_ns - (int64_t)ts_to_emit) / 1000000.0;
         emit latencyUpdated(id_to_emit, full_latency_ms);
     }
 }
@@ -143,8 +133,6 @@ void CameraGLWidget::setup_shaders()
     shader_ = new QOpenGLShaderProgram(this);
     shader_->addShaderFromSourceCode(QOpenGLShader::Vertex, VERT_SRC);
     shader_->addShaderFromSourceCode(QOpenGLShader::Fragment, FRAG_SRC);
-    shader_->link();
-    
     if (!shader_->link()) {
         qWarning() << "Shader link failed:" << shader_->log();
     }
@@ -157,32 +145,20 @@ void CameraGLWidget::setup_quad()
     gl33_->glBindVertexArray(vao_);
     gl33_->glBindBuffer(GL_ARRAY_BUFFER, vbo_);
     gl33_->glBufferData(GL_ARRAY_BUFFER, sizeof(QUAD), QUAD, GL_STATIC_DRAW);
-    
+
     gl33_->glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void *)0);
     gl33_->glEnableVertexAttribArray(0);
-    
+
     gl33_->glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void *)(2 * sizeof(float)));
     gl33_->glEnableVertexAttribArray(1);
 }
 
 void CameraGLWidget::start_pipeline(int port)
 {
-    // 1. Verificar qual descodificador está disponível no sistema atual
-    std::string decoder_str;
-    GstElementFactory *nv_factory = gst_element_factory_find("nvh264dec");
-    
-    if (nv_factory) {
-        // GPU Nvidia encontrada!
-        decoder_str = "nvh264dec max-display-delay=0 ! ";
-        gst_object_unref(nv_factory); // Limpar a memória da pesquisa
-        qInfo() << "GPU Nvidia detetada na porta" << port << "- A usar Aceleração de Hardware (nvh264dec).";
-    } else {
-        // Sem GPU Nvidia. Fallback para CPU!
-        decoder_str = "avdec_h264 ! "; 
-        qWarning() << "GPU Nvidia não encontrada na porta" << port << "- Fallback para CPU (avdec_h264).";
-    }
-
-    // 2. Montar a pipeline dinamicamente com o descodificador escolhido
+    // Decode em CPU. O nvh264dec do nvcodec 1.20.3 acumula frames no
+    // GstVideoDecoder com esta GPU (g_list_find no perfil), degradando ate
+    // saturar o CPU. avdec_h264 e estavel.
+    // max-threads=4: chega para 1080p30 e deixa cores livres.
     std::string pipeline_str =
         "udpsrc port=" + std::to_string(port) + " "
         "caps=\"application/x-rtp, media=video, clock-rate=90000, encoding-name=H264, payload=96\" ! "
@@ -190,39 +166,32 @@ void CameraGLWidget::start_pipeline(int port)
         "rtph264depay ! "
         "h264parse name=parser ! "
         "video/x-h264,stream-format=byte-stream,alignment=au ! "
-        // AQUI, não antes do depay: opera sobre Access Units completos,
-        // nunca sobre fragmentos RTP — descartar um frame inteiro é seguro,
-        // descartar um fragmento corrompe o bitstream.
-        "queue leaky=downstream max-size-buffers=5 max-size-bytes=0 max-size-time=0 ! "
-        + decoder_str +
-        "videoconvert n-threads=8 ! "
+        "queue max-size-buffers=5 max-size-bytes=0 max-size-time=0 ! "
+        "avdec_h264 max-threads=4 ! "
+        "videoconvert n-threads=4 ! "
         "video/x-raw,format=RGB ! "
-        "appsink name=mysink sync=false emit-signals=true";
+        "appsink name=mysink sync=false max-buffers=2 emit-signals=true";
 
     GError *error = nullptr;
     pipeline_ = gst_parse_launch(pipeline_str.c_str(), &error);
-    
+
     if (error) {
         qWarning() << "Erro GStreamer:" << error->message;
         g_error_free(error);
         return;
     }
 
-    // 3. Injetar Sonda (Pad Probe) para extrair o SEI
     GstElement *parser = gst_bin_get_by_name(GST_BIN(pipeline_), "parser");
     GstPad *src_pad = gst_element_get_static_pad(parser, "src");
     gst_pad_add_probe(src_pad, GST_PAD_PROBE_TYPE_BUFFER,
                       (GstPadProbeCallback)pad_probe_callback, this, nullptr);
-                      
     gst_object_unref(src_pad);
     gst_object_unref(parser);
 
-    // 4. Ligar o evento do AppSink para captar os píxeis
     GstElement *appsink = gst_bin_get_by_name(GST_BIN(pipeline_), "mysink");
     g_signal_connect(appsink, "new-sample", G_CALLBACK(on_new_sample), this);
     gst_object_unref(appsink);
 
-    // Iniciar!
     gst_element_set_state(pipeline_, GST_STATE_PLAYING);
 }
 
@@ -235,34 +204,47 @@ void CameraGLWidget::stop_pipeline()
     }
 }
 
-// Roda numa thread do GStreamer antes de o frame ser descodificado
+// Antes do decode. METRICA 1 — rede isolada.
 GstPadProbeReturn CameraGLWidget::pad_probe_callback(GstPad *pad, GstPadProbeInfo *info, gpointer user_data)
 {
     auto *widget = static_cast<CameraGLWidget*>(user_data);
     GstBuffer *buffer = GST_PAD_PROBE_INFO_BUFFER(info);
     GstMapInfo map;
-    
+
     if (gst_buffer_map(buffer, &map, GST_MAP_READ)) {
         const uint8_t uuid[16] = {
-            0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 
+            0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88,
             0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF, 0x11
         };
 
         size_t search_limit = std::min(map.size - 16, (size_t)128);
         for (size_t i = 0; i < search_limit - 16; ++i) {
             if (std::memcmp(map.data + i, uuid, 16) == 0) {
-                size_t str_len = std::min(map.size - i - 16, (size_t)64); 
+                size_t str_len = std::min(map.size - i - 16, (size_t)96);
                 std::string payload(reinterpret_cast<char*>(map.data + i + 16), str_len);
-                
-                size_t end_pos = payload.find((char)0x80);
-                if (end_pos != std::string::npos) {
-                    payload = payload.substr(0, end_pos);
-                }
 
-                uint64_t frame_id = 0, ts_ns = 0;
-                if (sscanf(payload.c_str(), "ID:%lu|TS:%lu", &frame_id, &ts_ns) == 2) {
-                    // NOVA PARTE: Em vez de emitir, guarda na fila
+                size_t end_pos = payload.find((char)0x80);
+                if (end_pos == std::string::npos) break;
+                payload = payload.substr(0, end_pos);
+
+                uint64_t frame_id = 0, ts_ns = 0, ts2_ns = 0;
+                if (sscanf(payload.c_str(), "ID:%lu|TS:%lu|TS2:%lu", &frame_id, &ts_ns, &ts2_ns) != 3) break;
+                if (ts_ns == 0 || ts2_ns == 0) break;
+
+                auto now = std::chrono::system_clock::now().time_since_epoch();
+                int64_t now_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(now).count();
+
+                // Cast com sinal: TS2 vem do relogio do TX. Sem isto, um
+                // offset NTP de ~1ms faz a subtracao unsigned enrolar para ~2^64.
+                int64_t diff_ns = now_ns - (int64_t)ts2_ns;
+                double network_ms = diff_ns / 1000000.0;
+                emit widget->networkLatencyUpdated(frame_id, network_ms);
+
+                {
                     std::lock_guard<std::mutex> lock(widget->queue_mutex_);
+                    while (widget->sei_queue_.size() > 3) {
+                        widget->sei_queue_.pop();
+                    }
                     widget->sei_queue_.push({frame_id, ts_ns});
                 }
                 break;
@@ -273,24 +255,17 @@ GstPadProbeReturn CameraGLWidget::pad_probe_callback(GstPad *pad, GstPadProbeInf
     return GST_PAD_PROBE_OK;
 }
 
-// Roda numa thread do GStreamer após descodificar (Substitui o loop while)
+// Depois do decode. METRICA 2 — captura -> pronto para o paintGL.
 GstFlowReturn CameraGLWidget::on_new_sample(GstElement *sink, gpointer user_data)
 {
     auto *widget = static_cast<CameraGLWidget*>(user_data);
     GstSample *sample;
     g_signal_emit_by_name(sink, "pull-sample", &sample);
-    
 
-    static auto last_sample = std::chrono::steady_clock::now();
-    auto now = std::chrono::steady_clock::now();
-    double interval_ms = std::chrono::duration<double, std::milli>(now - last_sample).count();
-    last_sample = now;
-    qDebug() << "Intervalo appsink:" << interval_ms << "ms";  
-      
     if (sample) {
         GstBuffer *buffer = gst_sample_get_buffer(sample);
         GstCaps *caps = gst_sample_get_caps(sample);
-        
+
         GstStructure *s = gst_caps_get_structure(caps, 0);
         int width, height;
         gst_structure_get_int(s, "width", &width);
@@ -298,10 +273,9 @@ GstFlowReturn CameraGLWidget::on_new_sample(GstElement *sink, gpointer user_data
 
         GstMapInfo map;
         gst_buffer_map(buffer, &map, GST_MAP_READ);
-        
+
         uint64_t current_id = 0, current_ts = 0;
         {
-            // Retirar o timestamp correspondente a este frame da fila
             std::lock_guard<std::mutex> lock(widget->queue_mutex_);
             if (!widget->sei_queue_.empty()) {
                 current_id = widget->sei_queue_.front().first;
@@ -310,21 +284,25 @@ GstFlowReturn CameraGLWidget::on_new_sample(GstElement *sink, gpointer user_data
             }
         }
 
+        if (current_id > 0 && current_ts > 0) {
+            auto now = std::chrono::system_clock::now().time_since_epoch();
+            int64_t now_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(now).count();
+            double decode_ms = (now_ns - (int64_t)current_ts) / 1000000.0;
+            emit widget->decodeLatencyUpdated(current_id, decode_ms);
+        }
+
         {
-            // Lock do OpenGL frame
             std::lock_guard<std::mutex> lock(widget->frame_mutex_);
             widget->frame_w_ = width;
             widget->frame_h_ = height;
             widget->pending_frame_.assign(map.data, map.data + map.size);
-            
-            // Passar o timestamp para o Qt desenhar
             widget->pending_id_ = current_id;
             widget->pending_ts_ = current_ts;
             widget->dirty_ = true;
         }
-        
+
         QMetaObject::invokeMethod(widget, "update", Qt::QueuedConnection);
-        
+
         gst_buffer_unmap(buffer, &map);
         gst_sample_unref(sample);
         return GST_FLOW_OK;

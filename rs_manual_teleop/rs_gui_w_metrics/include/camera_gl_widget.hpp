@@ -16,8 +16,9 @@ public:
     ~CameraGLWidget() override;
 
 signals:
-    // Sinal para poderes atualizar labels na MainWindow
     void latencyUpdated(uint64_t frame_id, double latency_ms);
+    void networkLatencyUpdated(uint64_t frame_id, double latency_ms);
+    void decodeLatencyUpdated(uint64_t frame_id, double latency_ms);
 
 protected:
     void initializeGL() override;
