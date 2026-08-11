@@ -1,8 +1,8 @@
 cmake_minimum_required(VERSION 3.8)
-project(rs_gui_w_metrics)
+project(rs_gui)
 
 set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_AUTOMOC ON)  # necessário para Qt signals/slots
+set(CMAKE_AUTOMOC ON)  
 
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
@@ -32,7 +32,7 @@ add_executable(rs_gui
 
 target_include_directories(rs_gui PRIVATE 
   include
-  ${OpenCV_INCLUDE_DIRS} # ADICIONADO: Garante acesso rápido aos headers do OpenCV
+  ${OpenCV_INCLUDE_DIRS} 
 )
 
 ament_target_dependencies(rs_gui

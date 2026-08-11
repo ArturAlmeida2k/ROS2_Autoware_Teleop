@@ -18,7 +18,7 @@ protected:
 
 private:
     void setSingleCameraMode(bool single);         
-    bool is_single_camera_ = true;                 
+    bool is_single_camera_ = false;                 
 
     QTabWidget*     tab_widget_    = nullptr; // O gestor de abas
     QWidget*        tab_quad_view_ = nullptr; // O conteúdo da Aba 1
