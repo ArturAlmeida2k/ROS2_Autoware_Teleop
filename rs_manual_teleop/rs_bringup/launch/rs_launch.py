@@ -51,14 +51,6 @@ def generate_launch_description():
     )
     telemetry_port = LaunchConfiguration('telemetry_port')
 
-    camera_port_arg = DeclareLaunchArgument(
-        'camera_port', 
-        default_value='5007', 
-        description="Porta base UDP para o(s) decoder(s) de vídeo"
-    )
-    camera_port = LaunchConfiguration('camera_port')
-
-
     
     # 1. Nó do Sistema: Leitura do Joystick com throttle para 50hz
     joy_node = Node(
@@ -131,24 +123,11 @@ def generate_launch_description():
         parameters=[{'ip_address': ip_address, 'port': telemetry_port}]
     )
 
-    # Nó opcional: video_encoder
-    video_decoder_node = Node(
-        package='rs_network',
-        executable='video_decoder_cpp_v2',
-        name='video_decoder_v2',
-        output='screen',
-        condition=IfCondition(PythonExpression(["'", video, "' == '1x'"])),
-        parameters=[{'ip_address': ip_address, 'port': camera_port}]
-    )
-
-    # Nó opcional: video_encoder_4x
-    video_decoder_4x_node = Node(
-        package='rs_network',
-        executable='video_decoder_4x_cpp',
-        name='video_decoder_4x_cpp',
-        output='screen',
-        condition=IfCondition(PythonExpression(["'", video, "' == '4x'"])),
-        parameters=[{'ip_address': ip_address, 'port': camera_port}]
+    gui_node = Node(
+        package="rs_network",
+        executable='telemetry_decoder', 
+        name='telemetry_decoder',
+        output='screen'
     )
 
     # Rosbag
@@ -182,7 +161,6 @@ def generate_launch_description():
         ip_address_arg,
         input_port_arg,
         telemetry_port_arg,
-        camera_port_arg,
         joy_node,
         throttle_node,
         rs50_teleop_node,
@@ -191,7 +169,6 @@ def generate_launch_description():
         command_gate_node,
         input_teleop_encoder_node,
         telemetry_decoder_node,
-        video_decoder_node,
-        video_decoder_4x_node,
+        gui_node,
         rosbag_metrics_node
     ])
