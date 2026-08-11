@@ -52,6 +52,14 @@ MainWindow::MainWindow(RosBridge* bridge, QWidget* parent)
         }
     }, Qt::QueuedConnection);
 
+    connect(cam_front_, &CameraGLWidget::networkLatencyUpdated, this, [this](uint64_t frame_id, double latency_ms) {
+        bridge_->publishFrontCameraNetwork(static_cast<uint32_t>(frame_id), latency_ms);
+    }, Qt::QueuedConnection);
+
+    connect(cam_front_, &CameraGLWidget::decodeLatencyUpdated, this, [this](uint64_t frame_id, double latency_ms) {
+        bridge_->publishFrontCameraDecode(static_cast<uint32_t>(frame_id), latency_ms);
+    }, Qt::QueuedConnection);
+
     panel_ = new TelemetryPanel(tab_quad_view_); 
 
     grid->addWidget(cam_left_,   0, 0, 2, 1);
