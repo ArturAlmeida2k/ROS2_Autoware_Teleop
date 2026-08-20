@@ -124,9 +124,9 @@ def generate_launch_description():
     )
 
     gui_node = Node(
-        package="rs_network",
-        executable='telemetry_decoder', 
-        name='telemetry_decoder',
+        package="rs_gui",
+        executable='rs_gui', 
+        name='rs_gui',
         output='screen'
     )
 
