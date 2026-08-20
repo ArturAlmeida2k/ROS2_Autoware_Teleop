@@ -134,7 +134,6 @@ def generate_launch_description():
     )
 
     return LaunchDescription([
-        num_cameras_arg,
         sim_arg,
         ip_address_arg,
         input_port_arg,
