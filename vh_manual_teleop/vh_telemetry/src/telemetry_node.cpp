@@ -11,6 +11,8 @@
 #include "msg_manual_teleop/msg/telemetry_state.hpp"
 #include "msg_manual_teleop/msg/node_metrics.hpp"
 
+#include "std_msgs/msg/int8.hpp"
+
 
 using VelocityReport       = autoware_vehicle_msgs::msg::VelocityReport;
 using GearReport           = autoware_vehicle_msgs::msg::GearReport;
@@ -19,6 +21,8 @@ using HazardLightsReport   = autoware_vehicle_msgs::msg::HazardLightsReport;
 using OperationModeState   = autoware_adapi_v1_msgs::msg::OperationModeState;
 using TelemetryState       = msg_manual_teleop::msg::TelemetryState;
 using Metrics              = msg_manual_teleop::msg::NodeMetrics;
+using Int8    = std_msgs::msg::Int8;
+
 
 class TelemetrySubscriber : public rclcpp::Node {
 public:
@@ -66,6 +70,12 @@ public:
                 state_.e2e_command_ms = msg->latency_ms;
             });
 
+        sub_network_state_ = create_subscription<Int8>(
+            "/teleop/safety_state", 10,
+            [this](const Int8::SharedPtr msg){
+                state_.network_state = msg->data;
+            });
+
         // Publica a 50Hz com o estado mais recente de todos os campos
         timer_ = create_wall_timer(
             std::chrono::milliseconds(20),
@@ -83,6 +93,7 @@ private:
     rclcpp::Subscription<TurnIndicatorsReport>::SharedPtr sub_turn_indicators_;
     rclcpp::Subscription<HazardLightsReport>::SharedPtr   sub_hazard_lights_;
     rclcpp::Subscription<Metrics>::SharedPtr              sub_latency_;
+    rclcpp::Subscription<Int8>::SharedPtr                 sub_network_state_;
     rclcpp::TimerBase::SharedPtr timer_;
 
     uint32_t seq_num_ = 1;  
