@@ -29,12 +29,12 @@ public:
                            frame_counter_(1) {
 
         this->declare_parameter<int>("camera_id", 2);
-        this->declare_parameter<int>("width", 1920);
-        this->declare_parameter<int>("height", 1080);
+        this->declare_parameter<int>("width", 1280);
+        this->declare_parameter<int>("height", 720);
         this->declare_parameter<int>("fps", 30);
         this->declare_parameter<std::string>("ip_address", "127.0.0.1");
         this->declare_parameter<int>("port", 5007);
-        this->declare_parameter<int>("bitrate", 80000);
+        this->declare_parameter<int>("bitrate", 5000);
         // N streams em paralelo a partir da mesma captura: portas port..port+N-1
         this->declare_parameter<int>("num_streams", 1);
 

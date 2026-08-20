@@ -1,58 +1,59 @@
 import os
+from datetime import datetime
+
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, ExecuteProcess
 from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node
-from datetime import datetime
 
 
 def generate_launch_description():
-    
+
     # --- Argumentos do Launch ---
-    video_mode_arg = DeclareLaunchArgument(
-        'video_mode',
-        default_value='none',
-        description="Selecione o encoder de vídeo: 'none' (nenhum), 'standard' (normal), ou '4x'"
+    num_cameras_arg = DeclareLaunchArgument(
+        'num_cameras',
+        default_value='0',
+        description="Número de câmaras a transmitir (0 desliga o encoder de vídeo, 1..4)"
     )
-    video_mode = LaunchConfiguration('video_mode')
+    num_cameras = LaunchConfiguration('num_cameras')
 
     ip_address_arg = DeclareLaunchArgument(
-        'ip_address', 
-        default_value='10.0.0.2', 
-        description="Endereço IP para os nós de rede"
+        'ip_address',
+        default_value='10.0.0.2',
+        description="Endereço IP da estação de controlo"
     )
     ip_address = LaunchConfiguration('ip_address')
 
-    # --- Argumentos das Portas ---
+    # --- Portas ---
     input_port_arg = DeclareLaunchArgument(
-        'input_port', 
-        default_value='5005', 
+        'input_port',
+        default_value='5005',
         description="Porta UDP para o input_teleop_decoder"
     )
     input_port = LaunchConfiguration('input_port')
 
     telemetry_port_arg = DeclareLaunchArgument(
-        'telemetry_port', 
-        default_value='5006', 
+        'telemetry_port',
+        default_value='5006',
         description="Porta UDP para o telemetry_encoder"
     )
     telemetry_port = LaunchConfiguration('telemetry_port')
 
-    rtt_port_arg = DeclareLaunchArgument(
-        'rtt_port', 
-        default_value='5011', 
-        description="Porta UDP para o rtt_metrics"
-    )
-    rtt_port = LaunchConfiguration('rtt_port')
-
-
     camera_port_arg = DeclareLaunchArgument(
-        'camera_port', 
-        default_value='5007', 
-        description="Porta base UDP para o(s) encoder(s) de vídeo"
+        'camera_port',
+        default_value='5007',
+        description="Porta base UDP do vídeo. A câmara i usa camera_port + i"
     )
     camera_port = LaunchConfiguration('camera_port')
+
+    # --- Vídeo ---
+    bitrate_arg = DeclareLaunchArgument(
+        'bitrate',
+        default_value='5000',
+        description="Bitrate alvo do encoder H.264, em kbit/s, por câmara"
+    )
+    bitrate = LaunchConfiguration('bitrate')
 
     # --- Nós do pacote: vh_network ---
     input_teleop_decoder_node = Node(
@@ -71,32 +72,27 @@ def generate_launch_description():
         parameters=[{'ip_address': ip_address, 'port': telemetry_port}]
     )
 
-    rtt_metrics_node = Node(
-        package='vh_network',
-        executable='rtt_metrics',
-        name='rtt_metrics',
-        output='screen',
-        parameters=[{'ip_address': ip_address, 'port': rtt_port}]
-    )
-
-    # Nó opcional: video_encoder
+    # Encoder de vídeo unificado: 1 a 4 câmaras, uma porta por câmara.
+    # A ordem dos tópicos define a ordem das portas e tem de corresponder
+    # à que a GUI espera: base+0 front, base+1 left, base+2 back, base+3 right.
     video_encoder_node = Node(
         package='vh_network',
         executable='video_encoder',
         name='video_encoder',
         output='screen',
-        condition=IfCondition(PythonExpression(["'", video_mode, "' == 'standard'"])),
-        parameters=[{'ip_address': ip_address, 'port': camera_port}]
-    )
-
-    # Nó opcional: video_encoder_4x
-    video_encoder_4x_node = Node(
-        package='vh_network',
-        executable='video_encoder_4x',
-        name='video_encoder_4x',
-        output='screen',
-        condition=IfCondition(PythonExpression(["'", video_mode, "' == '4x'"])),
-        parameters=[{'ip_address': ip_address, 'port': camera_port}]
+        condition=IfCondition(PythonExpression([num_cameras, " > 0"])),
+        parameters=[{
+            'ip_address': ip_address,
+            'port': camera_port,
+            'num_cameras': num_cameras,
+            'bitrate': bitrate,
+            'camera_topics': [
+                '/sensing/camera/CAM_FRONT/image_raw',
+                '/sensing/camera/CAM_FRONT_LEFT/image_raw',
+                '/sensing/camera/CAM_BACK/image_raw',
+                '/sensing/camera/CAM_FRONT_RIGHT/image_raw',
+            ],
+        }]
     )
 
     # --- Nós do pacote: vh_telemetry ---
@@ -129,11 +125,12 @@ def generate_launch_description():
         output='screen'
     )
 
-    # Rosbag
+    # --- Rosbag ---
     bag_dir = os.path.expanduser('~/bags')
-    os.makedirs(bag_dir, exist_ok=True)  
-    
-    bag_commands_path = os.path.join(bag_dir, f'metrics/{datetime.now().strftime("%Y%m%d_%H%M%S")}')
+    os.makedirs(bag_dir, exist_ok=True)
+
+    bag_commands_path = os.path.join(
+        bag_dir, 'metrics', datetime.now().strftime('%Y%m%d_%H%M%S'))
 
     rosbag_metrics_node = ExecuteProcess(
         cmd=[
@@ -148,22 +145,20 @@ def generate_launch_description():
         ],
         output='screen'
     )
-    
+
     return LaunchDescription([
-        video_mode_arg,
+        num_cameras_arg,
         ip_address_arg,
         input_port_arg,
         telemetry_port_arg,
-        rtt_port_arg,
         camera_port_arg,
+        bitrate_arg,
         input_teleop_decoder_node,
         telemetry_encoder_node,
         video_encoder_node,
-        video_encoder_4x_node,
         telemetry_node,
-        rtt_metrics_node,
         control_node,
         safety_gate_node,
         topic_monitor_node,
-        rosbag_metrics_node
+        rosbag_metrics_node,
     ])
