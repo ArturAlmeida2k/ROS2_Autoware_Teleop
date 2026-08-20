@@ -105,6 +105,7 @@ public:
 private:
     std::string ip_address_;
     int bitrate_ = 5000;
+    int base_port_ = 5007;
     std::vector<std::unique_ptr<StreamCtx>> streams_;
 
     // -----------------------------------------------------------------
