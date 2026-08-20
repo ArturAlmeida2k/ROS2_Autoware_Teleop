@@ -11,13 +11,6 @@ from launch_ros.actions import Node
 def generate_launch_description():
 
     # --- Argumentos do Launch ---
-    num_cameras_arg = DeclareLaunchArgument(
-        'num_cameras',
-        default_value='0',
-        description="Número de câmaras a transmitir (0 desliga o encoder de vídeo, 1..4)"
-    )
-    num_cameras = LaunchConfiguration('num_cameras')
-
     sim_arg = DeclareLaunchArgument(
         'sim', default_value='awsim',
         description="Perfil de configuração: 'awsim' ou 'carla'")
@@ -83,7 +76,6 @@ def generate_launch_description():
         executable='video_encoder',
         name='video_encoder',
         output='screen',
-        condition=IfCondition(PythonExpression([num_cameras, " > 0"])),
         parameters=[
             config_file,
             {'ip_address': ip_address, 'port': camera_port},
