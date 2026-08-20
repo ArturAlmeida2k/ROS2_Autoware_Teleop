@@ -4,7 +4,7 @@ from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, ExecuteProcess
 from launch.conditions import IfCondition
-from launch.substitutions import LaunchConfiguration, PythonExpression
+from launch.substitutions import LaunchConfiguration, PythonExpression, PathJoinSubstitution
 from launch_ros.actions import Node
 
 
@@ -58,14 +58,6 @@ def generate_launch_description():
     )
     camera_port = LaunchConfiguration('camera_port')
 
-    # --- Vídeo ---
-    bitrate_arg = DeclareLaunchArgument(
-        'bitrate',
-        default_value='5000',
-        description="Bitrate alvo do encoder H.264, em kbit/s, por câmara"
-    )
-    bitrate = LaunchConfiguration('bitrate')
-
     # --- Nós do pacote: vh_network ---
     input_teleop_decoder_node = Node(
         package='vh_network',
@@ -92,10 +84,10 @@ def generate_launch_description():
         name='video_encoder',
         output='screen',
         condition=IfCondition(PythonExpression([num_cameras, " > 0"])),
-        parameters=[{
+        parameters=[
             config_file,
             {'ip_address': ip_address, 'port': camera_port},
-        }]
+        ]
     )
 
     # --- Nós do pacote: vh_telemetry ---
@@ -156,7 +148,6 @@ def generate_launch_description():
         input_port_arg,
         telemetry_port_arg,
         camera_port_arg,
-        bitrate_arg,
         input_teleop_decoder_node,
         telemetry_encoder_node,
         video_encoder_node,
