@@ -1,0 +1,6 @@
+/video_encoder_tx:
+  ros__parameters:
+    num_cameras: 1
+    bitrate: 5000
+    camera_topics:
+      - /sensing/camera/traffic_light/image_raw

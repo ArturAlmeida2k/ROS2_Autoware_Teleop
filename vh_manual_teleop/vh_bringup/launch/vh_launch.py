@@ -1,6 +1,6 @@
 import os
 from datetime import datetime
-
+from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, ExecuteProcess
 from launch.conditions import IfCondition
@@ -17,6 +17,17 @@ def generate_launch_description():
         description="Número de câmaras a transmitir (0 desliga o encoder de vídeo, 1..4)"
     )
     num_cameras = LaunchConfiguration('num_cameras')
+
+    sim_arg = DeclareLaunchArgument(
+        'sim', default_value='awsim',
+        description="Perfil de configuração: 'awsim' ou 'carla'")
+    sim = LaunchConfiguration('sim')
+    
+    config_file = PathJoinSubstitution([
+        get_package_share_directory('vh_bringup'), 'config',
+        PythonExpression(["'", sim, "' + '.yaml'"])
+    ])
+
 
     ip_address_arg = DeclareLaunchArgument(
         'ip_address',
@@ -82,16 +93,8 @@ def generate_launch_description():
         output='screen',
         condition=IfCondition(PythonExpression([num_cameras, " > 0"])),
         parameters=[{
-            'ip_address': ip_address,
-            'port': camera_port,
-            'num_cameras': num_cameras,
-            'bitrate': bitrate,
-            'camera_topics': [
-                '/sensing/camera/CAM_FRONT/image_raw',
-                '/sensing/camera/CAM_FRONT_LEFT/image_raw',
-                '/sensing/camera/CAM_BACK/image_raw',
-                '/sensing/camera/CAM_FRONT_RIGHT/image_raw',
-            ],
+            config_file,
+            {'ip_address': ip_address, 'port': camera_port},
         }]
     )
 
@@ -148,6 +151,7 @@ def generate_launch_description():
 
     return LaunchDescription([
         num_cameras_arg,
+        sim_arg,
         ip_address_arg,
         input_port_arg,
         telemetry_port_arg,

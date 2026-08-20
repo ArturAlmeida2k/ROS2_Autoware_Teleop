@@ -1,0 +1,9 @@
+/video_encoder_tx:
+  ros__parameters:
+    num_cameras: 4
+    bitrate: 5000
+    camera_topics:
+      - /sensing/camera/CAM_FRONT/image_raw
+      - /sensing/camera/CAM_FRONT_LEFT/image_raw
+      - /sensing/camera/CAM_BACK/image_raw
+      - /sensing/camera/CAM_FRONT_RIGHT/image_raw
