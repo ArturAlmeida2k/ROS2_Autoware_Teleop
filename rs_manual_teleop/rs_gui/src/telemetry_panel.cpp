@@ -1,13 +1,13 @@
 #include "telemetry_panel.hpp"
 #include <QVBoxLayout>
-#include <QHBoxLayout>
 #include <QFrame>
 #include <QFont>
+#include <unordered_map>
 
 static const char* PANEL_STYLE = R"(
     QWidget#panel {
-        background-color: rgba(13, 13, 26, 180); 
-        border-radius: 8px; 
+        background-color: rgba(13, 13, 26, 180);
+        border-radius: 8px;
     }
     QFrame#card {
         background-color: rgba(30, 30, 46, 100);
@@ -44,14 +44,13 @@ TelemetryPanel::TelemetryPanel(QWidget* parent)
     layout->setContentsMargins(12, 16, 12, 16);
     layout->setSpacing(8);
 
-    layout->addWidget(make_card("VELOCIDADE (km/h)", lbl_velocity_ = make_value(36)));
-    layout->addWidget(make_card("GEAR",              lbl_gear_     = make_value(18)));
-    layout->addWidget(make_card("MODO",              lbl_mode_     = make_value(18)));
-    layout->addWidget(make_card("ENGAGE",            lbl_engage_   = make_value(13)));
-    layout->addWidget(make_card("SINAL",             lbl_signal_   = make_value(13)));
-    layout->addWidget(make_card("LIGAÇÃO",             lbl_network_  = make_value(13)));
-    layout->addWidget(make_card("LATÊNCIA VÍDEO (ms)", lbl_latency_  = make_value(18)));
-    layout->addWidget(make_card("CICLO COMPLETO (ms)", lbl_loop_     = make_value(18)));
+    layout->addWidget(make_card("GEAR",                lbl_gear_    = make_value(18)));
+    layout->addWidget(make_card("MODO",                lbl_mode_    = make_value(18)));
+    layout->addWidget(make_card("ENGAGE",              lbl_engage_  = make_value(13)));
+    layout->addWidget(make_card("SINAL",               lbl_signal_  = make_value(13)));
+    layout->addWidget(make_card("LIGAÇÃO",             lbl_network_ = make_value(13)));
+    layout->addWidget(make_card("LATÊNCIA VÍDEO (ms)", lbl_latency_ = make_value(18)));
+    layout->addWidget(make_card("CICLO COMPLETO (ms)", lbl_loop_    = make_value(18)));
     layout->addStretch();
 }
 
@@ -69,22 +68,19 @@ QWidget* TelemetryPanel::make_card(const QString& title, QLabel*& value_label)
 
 void TelemetryPanel::onTelemetryReceived(TelemetryState msg)
 {
-    // Velocidade
-    lbl_velocity_->setText(QString::number(msg.velocity_kmh, 'f', 1));
-
     // Gear
     static const std::unordered_map<int, QString> gear_map = {
         {0, "PARK"}, {1, "DRIVE"}, {2, "REVERSE"}
     };
     lbl_gear_->setText(gear_map.count(msg.gear) ? gear_map.at(msg.gear) : "?");
 
-    // Modo
-    static const std::unordered_map<int, std::pair<QString,QString>> mode_map = {
-        {0, {"UNKNOWN",  "#888888"}},
-        {1, {"STOP",     "#e74c3c"}},
-        {2, {"AUTO",     "#2ecc71"}},
-        {3, {"LOCAL",    "#248ed5"}},
-        {4, {"REMOTE",   "#9b59b6"}},
+    // Modo de operação do Autoware
+    static const std::unordered_map<int, std::pair<QString, QString>> mode_map = {
+        {0, {"UNKNOWN", "#888888"}},
+        {1, {"STOP",    "#e74c3c"}},
+        {2, {"AUTO",    "#2ecc71"}},
+        {3, {"LOCAL",   "#248ed5"}},
+        {4, {"REMOTE",  "#9b59b6"}},
     };
     if (mode_map.count(msg.mode)) {
         auto [name, color] = mode_map.at(msg.mode);
@@ -94,18 +90,27 @@ void TelemetryPanel::onTelemetryReceived(TelemetryState msg)
     }
 
     // Engage
-    bool eng = msg.engaged;
+    const bool eng = msg.engaged;
     lbl_engage_->setText(eng ? "● ENGAGED" : "○ DISENGAGED");
     lbl_engage_->setStyleSheet(
         QString("color: %1; background: transparent;").arg(eng ? "#2ecc71" : "#e74c3c"));
 
-    // Sinal
-    if      (msg.turn_signal == 2) { lbl_signal_->setText("◄ LEFT");   lbl_signal_->setStyleSheet("color:#f39c12; background:transparent;"); }
-    else if (msg.turn_signal == 3) { lbl_signal_->setText("RIGHT ►");  lbl_signal_->setStyleSheet("color:#f39c12; background:transparent;"); }
-    else if (msg.hazard == 2)      { lbl_signal_->setText("HAZARD ⚠"); lbl_signal_->setStyleSheet("color:#e67e22; background:transparent;"); }
-    else                           { lbl_signal_->setText("–");        lbl_signal_->setStyleSheet("color:#444; background:transparent;"); }
+    // Piscas e pisca-alerta
+    if (msg.turn_signal == 2) {
+        lbl_signal_->setText("◄ LEFT");
+        lbl_signal_->setStyleSheet("color:#f39c12; background:transparent;");
+    } else if (msg.turn_signal == 3) {
+        lbl_signal_->setText("RIGHT ►");
+        lbl_signal_->setStyleSheet("color:#f39c12; background:transparent;");
+    } else if (msg.hazard == 2) {
+        lbl_signal_->setText("HAZARD ⚠");
+        lbl_signal_->setStyleSheet("color:#e67e22; background:transparent;");
+    } else {
+        lbl_signal_->setText("–");
+        lbl_signal_->setStyleSheet("color:#444; background:transparent;");
+    }
 
-    // Estado da ligação, tal como avaliado no veículo pelo Topic Monitor.
+    // Estado da ligação, avaliado no veículo pelo Topic Monitor.
     switch (msg.network_state) {
         case 0:
             lbl_network_->setText("● OK");
@@ -113,32 +118,32 @@ void TelemetryPanel::onTelemetryReceived(TelemetryState msg)
             break;
         case 1:
             lbl_network_->setText("▲ DEGRADED");
-            lbl_network_->setStyleSheet("color:#f39c12; background:transparent; font-weight:bold;");
+            lbl_network_->setStyleSheet(
+                "color:#f39c12; background:transparent; font-weight:bold;");
             break;
         case 2:
             lbl_network_->setText("✕ LOST");
-            lbl_network_->setStyleSheet("color:#e74c3c; background:transparent; font-weight:bold;");
+            lbl_network_->setStyleSheet(
+                "color:#e74c3c; background:transparent; font-weight:bold;");
             break;
         default:
             lbl_network_->setText("–");
             lbl_network_->setStyleSheet("color:#444; background:transparent;");
             break;
     }
-
 }
 
 void TelemetryPanel::setVideoLatency(double latency_ms)
 {
-    // Formatar com 1 casa decimal
     lbl_latency_->setText(QString::number(latency_ms, 'f', 1));
-    
-    // Feedback visual (opcional mas útil para teleoperação)
+
     if (latency_ms < 100.0) {
-        lbl_latency_->setStyleSheet("color: #2ecc71; background: transparent;"); // Verde
+        lbl_latency_->setStyleSheet("color: #2ecc71; background: transparent;");
     } else if (latency_ms < 150.0) {
-        lbl_latency_->setStyleSheet("color: #f39c12; background: transparent;"); // Laranja
+        lbl_latency_->setStyleSheet("color: #f39c12; background: transparent;");
     } else {
-        lbl_latency_->setStyleSheet("color: #e74c3c; background: transparent; font-weight: bold;"); // Vermelho
+        lbl_latency_->setStyleSheet(
+            "color: #e74c3c; background: transparent; font-weight: bold;");
     }
 }
 
@@ -151,6 +156,7 @@ void TelemetryPanel::setLoopLatency(double latency_ms)
     } else if (latency_ms < 100.0) {
         lbl_loop_->setStyleSheet("color: #f39c12; background: transparent;");
     } else {
-        lbl_loop_->setStyleSheet("color: #e74c3c; background: transparent; font-weight: bold;");
+        lbl_loop_->setStyleSheet(
+            "color: #e74c3c; background: transparent; font-weight: bold;");
     }
 }
