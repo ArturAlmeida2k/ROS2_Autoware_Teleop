@@ -103,7 +103,8 @@ MainWindow::MainWindow(RosBridge* bridge, QWidget* parent)
     connect(bridge_, &RosBridge::telemetryReceived, this, [this](TelemetryState msg, int64_t rx_time_ns) {
         panel_->onTelemetryReceived(msg);
         int64_t display_time_ns = bridge_->nowNanoseconds();
-        bridge_->publishTelemetryGuiMetrics(msg.id, msg.origin_stamp, msg.e2e_command_ms, rx_time_ns, display_time_ns);
+        const double full_ms = bridge_->publishTelemetryGuiMetrics(msg.id, msg.origin_stamp, msg.e2e_command_ms, rx_time_ns, display_time_ns);
+        panel_->setLoopLatency(full_ms);
     }, Qt::QueuedConnection);
 
     resize(1440, 900);

@@ -12,6 +12,7 @@ public:
 
 public slots:
     void onTelemetryReceived(TelemetryState msg);
+    void setLoopLatency(double latency_ms);
     void setVideoLatency(double latency_ms);
 
 private:
@@ -20,7 +21,9 @@ private:
     QLabel* lbl_mode_;
     QLabel* lbl_engage_;
     QLabel* lbl_signal_;
+    QLabel* lbl_network_;
     QLabel* lbl_latency_;
+    QLabel* lbl_loop_;
 
     QWidget* make_card(const QString& title, QLabel*& value_label);
     void     apply_mode_color(int mode);

@@ -67,14 +67,16 @@ void RosBridge::publishTelemetryGuiMetrics(uint32_t id, const builtin_interfaces
     // Tópico 4: Full Latency = E2E Telemetry + E2E Command
     // Como a full latency é uma soma e não uma simples diferença de tempos, preenchemos o msg à mão
     double e2e_telemetry_ms = (display_time - origin_time).seconds() * 1000.0;
-    
+    const double full_latency_ms = e2e_telemetry_ms + e2e_command_ms;
+
     auto msg_full = std::make_unique<Metrics>();
     msg_full->id = id;
-    msg_full->tx = origin_stamp; 
-    msg_full->rx = display_time; 
-    msg_full->latency_ms = e2e_telemetry_ms + e2e_command_ms;
-    
+    msg_full->tx = origin_stamp;
+    msg_full->rx = display_time;
+    msg_full->latency_ms = full_latency_ms;
+
     pub_full_latency_->publish(std::move(msg_full));
+    return full_latency_ms;
 }
 
 // Tópico 5 (Câmara Frontal)
