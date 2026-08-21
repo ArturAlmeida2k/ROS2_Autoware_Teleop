@@ -22,12 +22,14 @@ add_executable(rs_gui
   src/main_window.cpp
   src/camera_gl_widget.cpp
   src/telemetry_panel.cpp
+  src/speed_panel.cpp
   src/pointcloud_gl_widget.cpp
   include/ros_bridge.hpp
   include/main_window.hpp
   include/camera_gl_widget.hpp
   include/telemetry_panel.hpp
   include/pointcloud_gl_widget.hpp
+  include/speed_panel.hpp
 )
 
 target_include_directories(rs_gui PRIVATE 
