@@ -56,27 +56,10 @@ install(PROGRAMS
   RENAME telemetry_encoder
 )
 
-install(PROGRAMS
-  src/pointcloud_compressor.py
-DESTINATION lib/${PROJECT_NAME}
-RENAME pointcloud_compressor
-)
-
-install(PROGRAMS
-  src/pointcloud_sender.py
-DESTINATION lib/${PROJECT_NAME}
-RENAME pointcloud_sender
-)
-
 install(PROGRAMS                        
   src/pointcloud_encoder.py
   DESTINATION lib/${PROJECT_NAME}
   RENAME pointcloud_encoder
-)
-
-install(FILES
-  src/pcq_codec.py
-DESTINATION lib/python3/dist-packages
 )
 
 ament_package()
