@@ -13,6 +13,8 @@ SpeedPanel::SpeedPanel(QWidget* parent): QWidget(parent)
     layout->setContentsMargins(12, 8, 12, 8);
     layout->setSpacing(0);
 
+    setAttribute(Qt::WA_StyledBackground, true);
+    
     lbl_value_ = new QLabel("–");
     QFont f("Monospace", 44);
     f.setBold(true);
