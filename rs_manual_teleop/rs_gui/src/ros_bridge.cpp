@@ -27,7 +27,7 @@ RosBridge::RosBridge(QObject* parent)
         });
     
     sub_pointcloud_ = create_subscription<PointCloud2>(
-        "/sensing/lidar/concatenated/pointcloud", 
+        "/teleop/pointcloud",
         rclcpp::SensorDataQoS(),
         [this](const PointCloud2::SharedPtr msg) {
             emit pointCloudReceived(msg);
