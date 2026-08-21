@@ -51,7 +51,7 @@ void RosBridge::publish_metric(const rclcpp::Publisher<Metrics>::SharedPtr& pub,
 }
 
 // Tópicos 2 e 3 (Telemetria GUI e End-to-End)
-void RosBridge::publishTelemetryGuiMetrics(uint32_t id, const builtin_interfaces::msg::Time &origin_stamp, double e2e_command_ms, int64_t rx_time_ns, int64_t display_time_ns)
+double RosBridge::publishTelemetryGuiMetrics(uint32_t id, const builtin_interfaces::msg::Time &origin_stamp, double e2e_command_ms, int64_t rx_time_ns, int64_t display_time_ns)
 {
     rclcpp::Time rx_time(rx_time_ns, RCL_ROS_TIME);
     rclcpp::Time display_time(display_time_ns, RCL_ROS_TIME);
