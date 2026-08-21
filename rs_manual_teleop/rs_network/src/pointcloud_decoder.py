@@ -1,90 +1,112 @@
 #!/usr/bin/env python3
+import socket
+
 import rclpy
 from rclpy.node import Node
+from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
 from rclpy.serialization import deserialize_message
-import socket
-import struct
-import threading
-
-# Importações das mensagens
+from rclpy.time import Time
 from sensor_msgs.msg import PointCloud2
-from autoware_perception_msgs.msg import DetectedObjects
 
-class PerceptionDecoder(Node):
+from msg_manual_teleop.msg import NetworkMetrics
+
+RECV_BUF = 65535
+
+
+class PointCloudDecoder(Node):
     def __init__(self):
-        super().__init__('perception_decoder')
-        
-        # Publishers
-        self.pc_pub = self.create_publisher(PointCloud2, '/teleop/pointcloud', 10)
-        self.obj_pub = self.create_publisher(DetectedObjects, '/perception/object_recognition/detection/clustering/objects_received', 10)
-        
-        self.host = '0.0.0.0'
-        self.pc_port = 5011
-        self.obj_port = 5012
-        
-        # Iniciar threads para escutar as duas portas simultaneamente
-        threading.Thread(target=self.setup_server, args=(self.pc_port, self.process_pc), daemon=True).start()
-        threading.Thread(target=self.setup_server, args=(self.obj_port, self.process_obj), daemon=True).start()
+        super().__init__('pointcloud_decoder')
 
-    def setup_server(self, port, process_callback):
-        server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        server_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        server_sock.bind((self.host, port))
-        server_sock.listen(1)
-        self.get_logger().info(f"Servidor à escuta na porta {port}...")
-        
-        while rclpy.ok():
+        self.declare_parameter('ip_address', '10.0.0.1')
+        self.declare_parameter('port', 5011)
+        self.declare_parameter('output_topic', '/teleop/pointcloud')
+
+        self.allowed_ip = self.get_parameter('ip_address').value
+        self.port = self.get_parameter('port').value
+        output_topic = self.get_parameter('output_topic').value
+
+        qos = QoSProfile(depth=1,
+                         reliability=ReliabilityPolicy.BEST_EFFORT,
+                         history=HistoryPolicy.KEEP_LAST)
+        self.pub_pointcloud = self.create_publisher(PointCloud2, output_topic, qos)
+
+        metrics_qos = QoSProfile(depth=10,
+                                 reliability=ReliabilityPolicy.BEST_EFFORT,
+                                 durability=DurabilityPolicy.VOLATILE)
+        self.pub_metrics = self.create_publisher(
+            NetworkMetrics, '/metrics/network/pointcloud', metrics_qos)
+
+        # O buffer de receção tem de acomodar vários datagramas de ~8 KB, ou
+        # uma rajada perde-se enquanto o timer não corre.
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 1 << 20)
+        self.sock.bind(('0.0.0.0', self.port))
+        self.sock.setblocking(False)
+
+        self.seq_num = 0
+
+        self.create_timer(0.01, self.receive_packet)   # 100 Hz
+
+        self.get_logger().info(
+            f"PointCloud Decoder → {self.port} from {self.allowed_ip}")
+
+    def publish_metrics(self, msg_id, rx_time_msg, tx_time_msg):
+        metrics_msg = NetworkMetrics()
+        metrics_msg.id = msg_id
+        metrics_msg.tx = tx_time_msg
+        metrics_msg.rx = rx_time_msg
+
+        tx_time = Time.from_msg(tx_time_msg)
+        rx_time = Time.from_msg(rx_time_msg)
+        latency = rx_time - tx_time
+        metrics_msg.latency_ms = latency.nanoseconds / 1000000.0
+
+        # Sem identificador de sequência na PointCloud2, a perda não é
+        # observável aqui; um datagrama fragmentado ou chega inteiro ou não
+        # chega de todo.
+        metrics_msg.lost_pkg = 0
+
+        self.pub_metrics.publish(metrics_msg)
+
+    def receive_packet(self):
+        while True:
             try:
-                conn, addr = server_sock.accept()
-                self.get_logger().info(f"Conexão aceite na porta {port} de {addr}")
-                process_callback(conn)
+                data, addr = self.sock.recvfrom(RECV_BUF)
+
+                if addr[0] != self.allowed_ip:
+                    continue
+
+                start_time = self.get_clock().now().to_msg()
+
+                msg = deserialize_message(data, PointCloud2)
+                sensor_stamp = msg.header.stamp
+
+                self.pub_pointcloud.publish(msg)
+
+                self.seq_num += 1
+                self.publish_metrics(self.seq_num, start_time, sensor_stamp)
+
+            except BlockingIOError:
+                break
             except Exception as e:
-                self.get_logger().error(f"Erro no servidor (porta {port}): {e}")
+                if rclpy.ok():
+                    self.get_logger().error(f"Erro: {e}")
+                break
 
-    def process_pc(self, conn):
-        self.receive_loop(conn, PointCloud2, self.pc_pub)
-
-    def process_obj(self, conn):
-        self.receive_loop(conn, DetectedObjects, self.obj_pub)
-
-    def receive_loop(self, conn, msg_type, publisher):
-        try:
-            while rclpy.ok():
-                raw_msglen = self.recvall(conn, 4)
-                if not raw_msglen:
-                    break
-                msglen = struct.unpack('>I', raw_msglen)[0]
-                
-                data = self.recvall(conn, msglen)
-                if not data:
-                    break
-                    
-                msg = deserialize_message(data, msg_type)
-                publisher.publish(msg)
-        except Exception as e:
-            self.get_logger().error(f"Erro ao receber dados: {e}")
-        finally:
-            conn.close()
-
-    def recvall(self, sock, n):
-        data = bytearray()
-        while len(data) < n:
-            packet = sock.recv(n - len(data))
-            if not packet:
-                return None
-            data.extend(packet)
-        return bytes(data)
 
 def main(args=None):
     rclpy.init(args=args)
-    node = PerceptionDecoder()
+    node = PointCloudDecoder()
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
         pass
     finally:
+        node.sock.close()
         node.destroy_node()
-        rclpy.shutdown()
+        if rclpy.ok():
+            rclpy.shutdown()
+
 
 if __name__ == '__main__':
     main()
