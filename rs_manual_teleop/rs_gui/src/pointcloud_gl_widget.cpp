@@ -1,5 +1,6 @@
 #include "pointcloud_gl_widget.hpp"
 #include <cstring>
+#include <chrono>
 
 static const char* PC_VERT_SRC = R"(
 #version 330 core
@@ -131,12 +132,20 @@ void PointCloudGLWidget::paintGL() {
     gl33_->glBindVertexArray(vao_);
 
     size_t num_points = 0;
+    bool has_new_frame = false;
+    builtin_interfaces::msg::Time stamp_to_emit;
+    uint32_t id_to_emit = 0;
+
     {
         std::lock_guard<std::mutex> lock(frame_mutex_);
         if (dirty_) {
             gl33_->glBindBuffer(GL_ARRAY_BUFFER, vbo_);
             gl33_->glBufferData(GL_ARRAY_BUFFER, points_.size() * sizeof(float), points_.data(), GL_DYNAMIC_DRAW);
             dirty_ = false;
+
+            has_new_frame = true;
+            stamp_to_emit = pending_stamp_;
+            id_to_emit = pending_id_;
         }
         num_points = points_.size() / 3;
     }
@@ -150,7 +159,7 @@ void PointCloudGLWidget::paintGL() {
     gl33_->glBindVertexArray(0);
     shader_->release();
 
-    // === NOVO: DESENHAR O CARRO ===
+    // === DESENHAR O CARRO ===
     car_shader_->bind();
     car_shader_->setUniformValue("u_MVP", mvp); // Usamos a mesma matriz da câmara
     gl33_->glBindVertexArray(car_vao_);
@@ -163,7 +172,14 @@ void PointCloudGLWidget::paintGL() {
     
     gl33_->glBindVertexArray(0);
     car_shader_->release();
-    
+
+    if (has_new_frame) {
+        const auto now = std::chrono::system_clock::now().time_since_epoch();
+        const int64_t now_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(now).count();
+        const int64_t stamp_ns = static_cast<int64_t>(stamp_to_emit.sec) * 1000000000LL + stamp_to_emit.nanosec;
+
+        emit displayLatencyUpdated(id_to_emit, (now_ns - stamp_ns) / 1e6);
+    }
 }
 
 void PointCloudGLWidget::onPointCloudReceived(sensor_msgs::msg::PointCloud2::SharedPtr msg) {
@@ -185,9 +201,22 @@ void PointCloudGLWidget::onPointCloudReceived(sensor_msgs::msg::PointCloud2::Sha
         new_points.push_back(z);
     }
 
+    uint32_t id = 0;
+    const std::string &frame_id = msg->header.frame_id;
+    const auto sep = frame_id.rfind('#');
+    if (sep != std::string::npos) {
+        try {
+            id = static_cast<uint32_t>(std::stoul(frame_id.substr(sep + 1)));
+        } catch (const std::exception &) {
+            id = 0;
+        }
+    }
+
     {
         std::lock_guard<std::mutex> lock(frame_mutex_);
         points_ = std::move(new_points);
+        pending_stamp_ = msg->header.stamp;
+        pending_id_ = id;
         dirty_ = true;
     }
     QMetaObject::invokeMethod(this, "update", Qt::QueuedConnection);

@@ -43,6 +43,8 @@ private:
     const int GEAR_DRIVE = 4; //  Right padle
     const int PARKING = 2; // Enter Parking -> Circle
 
+    const int UPLINK_MODE = 0; // Switch between video and pointcloud, 0 maintain, 1 switch,
+
     // --- Constants ---
     const float MAX_VLC = 10.0f; // Maximum Velocity in m/s, 5m/s -> 18Km/h
     const float MAX_STEERING_RAD = 0.5f; // Maximum steering angle (~28.6 graus)
@@ -142,7 +144,11 @@ private:
             turn_signal = 3;
         }
 
-        // --- 6. PUBLISHING ---  
+        // --- 6. VIDEO MODE ---
+
+        bool uplink_mode = msg->buttons[UPLINK_MODE];
+
+        // --- 7. PUBLISHING ---  
         auto teleop_msg = std::make_unique<TeleopCommand>();
 
         teleop_msg->header.stamp = start_time;
@@ -153,8 +159,10 @@ private:
         teleop_msg->brake_factor = static_cast<float>(normalized_brake);
         teleop_msg->target_steering_angle = target_steering_angle;
         teleop_msg->engage_command = change_engage_state;
+        teleop_msg->uplink_mode = uplink_mode;
         teleop_msg->gear = new_gear;
         teleop_msg->turn_signal = turn_signal;
+
 
         pub_filtered_command_->publish(std::move(teleop_msg));
     }

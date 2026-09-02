@@ -90,8 +90,13 @@ MainWindow::MainWindow(RosBridge* bridge, QWidget* parent)
     tab_widget_->addTab(tab_pc, "LiDAR 3D");
 
     connect(bridge_, &RosBridge::pointCloudReceived,
-            pc_widget_, &PointCloudGLWidget::onPointCloudReceived,
-            Qt::QueuedConnection);
+        pc_widget_, &PointCloudGLWidget::onPointCloudReceived,
+        Qt::QueuedConnection);
+
+    connect(pc_widget_, &PointCloudGLWidget::displayLatencyUpdated, this,
+        [this](uint32_t id, double latency_ms) {
+        bridge_->publishPointCloudMetrics(id, latency_ms);
+    }, Qt::QueuedConnection);
 
     // =====================================================================
     // Telemetria

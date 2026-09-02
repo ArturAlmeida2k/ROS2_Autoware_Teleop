@@ -164,7 +164,7 @@ private:
         const std::string pipeline_str =
             "appsrc name=mysrc is-live=true do-timestamp=true format=time caps=\"" + caps + "\" ! "
             "videoconvert ! "
-            "videoconvert ! "
+            "videoscale ! "
             "video/x-raw,format=I420,widht=1280,height=720 ! "
             "queue leaky=downstream max-size-buffers=1 max-size-bytes=0 max-size-time=0 ! "
             "x264enc tune=zerolatency speed-preset=ultrafast sliced-threads=true threads=4 "

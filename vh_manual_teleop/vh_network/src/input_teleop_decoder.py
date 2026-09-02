@@ -4,6 +4,9 @@ from rclpy.node import Node
 from rclpy.serialization import deserialize_message
 from rclpy.time import Time
 import socket
+
+from std_msgs.msg import UInt8
+
 from msg_manual_teleop.msg import TeleopCommand
 from msg_manual_teleop.msg import NetworkMetrics
 
@@ -18,7 +21,11 @@ class InputTeleopDecoder(Node):
 
         self.expected_id_ = None
 
+        # 1. Publisher original de comandos
         self.pub_command = self.create_publisher(TeleopCommand, '/teleop/command', 10)
+        
+        # 2. Publisher dedicado ao estado do Uplink
+        self.pub_uplink = self.create_publisher(UInt8, '/teleop/uplink_mode', 10)
 
         self.pub_metrics = self.create_publisher(NetworkMetrics, '/metrics/network/teleop_commands', 10)
         
@@ -49,7 +56,6 @@ class InputTeleopDecoder(Node):
         self.expected_id_ = msg_id + 1
         metrics_msg.lost_pkg = lost
         
-        # 4. Publicar métricas
         self.pub_metrics.publish(metrics_msg)
 
     def receive_packet(self):
@@ -65,10 +71,13 @@ class InputTeleopDecoder(Node):
                 msg = deserialize_message(data, TeleopCommand)
 
                 incoming_stamp = msg.header.stamp
-
                 msg.header.stamp = start_time
 
                 self.pub_command.publish(msg)
+
+                uplink_msg = UInt8()
+                uplink_msg.data = msg.uplink_mode
+                self.pub_uplink.publish(uplink_msg)
 
                 self.publish_metrics(msg.id, start_time, incoming_stamp)
                 

@@ -76,9 +76,12 @@ private:
     bool is_telemetry_valid_ = false;
     bool target_engage_state_ = false;
     bool last_received_engage_button_ = false;
+    bool last_received_uplink_button_ = false;
+
     int target_gear_ = 0;
     int target_turn_signal_ = 1; 
     int last_received_turn_button_ = 0;
+    int current_uplink_mode_ = 2;
 
     // --- Interfaces ROS 2 ---
     rclcpp::Subscription<TeleopCommand>::SharedPtr sub_filtered_command_;
@@ -104,6 +107,8 @@ private:
             target_gear_ = 0;
             target_turn_signal_ = 1;
             last_received_turn_button_ = 0;
+            last_received_uplink_button_ = false;
+            current_uplink_mode_ = 2;
         }
     }
 
@@ -157,7 +162,6 @@ private:
             }
         }
         
-        // Atualiza a memória para o próximo ciclo
         last_received_engage_button_ = current_engage_button;
         
         final_msg->engage_command = target_engage_state_;
@@ -204,6 +208,16 @@ private:
             last_received_turn_button_ = current_button;
             final_msg->turn_signal = target_turn_signal_;
 
+            bool pressed_uplink = (msg->uplink_mode == 1);
+
+            if (pressed_uplink && !last_received_uplink_button_){
+                current_uplink_mode_ = (current_uplink_mode_ == 2) ? 3 : 2;
+            }
+
+            last_received_uplink_button_ = pressed_uplink;
+
+            final_msg->uplink_mode = current_uplink_mode_;
+
         } else {
             final_msg->target_velocity = 0.0f;
             final_msg->brake_factor = 0.0f;
@@ -215,7 +229,9 @@ private:
             target_turn_signal_ = 1;
             final_msg->turn_signal = 1;
 
-            last_received_turn_button_ = 0;
+            last_received_uplink_button_ = false;
+            current_uplink_mode_ = 2; 
+            final_msg->uplink_mode = 2;
         }
 
         // -------------------------------------------------------------
