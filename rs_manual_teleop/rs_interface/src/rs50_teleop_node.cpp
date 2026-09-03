@@ -8,10 +8,10 @@
 using Joy = sensor_msgs::msg::Joy;
 using TeleopCommand = msg_manual_teleop::msg::TeleopCommand;
 
-class G923TeleopNode : public rclcpp::Node
+class RS50TeleopNode : public rclcpp::Node
 {
 public:
-    G923TeleopNode() : Node("g923_teleop_node")
+    RS50TeleopNode() : Node("rs50_teleop_node")
     {
         // Pub to the Autoware Controller Node
         pub_filtered_command_ = this->create_publisher<TeleopCommand>("/teleop/filtered_command", 10);
@@ -19,13 +19,13 @@ public:
         // Sub to the Joystick
         sub_joy_ = this->create_subscription<Joy>(
             "/joy_throttled", 10, 
-            std::bind(&G923TeleopNode::joy_callback, this, std::placeholders::_1));
+            std::bind(&RS50TeleopNode::joy_callback, this, std::placeholders::_1));
 
-        RCLCPP_INFO(this->get_logger(), "Nó G923 Teleop iniciado. Mapeamento de controlo ativo. Publicando em /teleop/filtered_command.");
+        RCLCPP_INFO(this->get_logger(), "Nó RS50 Teleop iniciado. Mapeamento de controlo ativo. Publicando em /teleop/filtered_command.");
     }
 
 private:
-    // --- Mapping of the Axis and Buttons (Logitech G923) ---
+    // --- Mapping of the Axis and Buttons (Logitech RS50) ---
 
     // Axis (vals from -1.0 a 1.0)
     const int AXIS_STEERING =  0;   // Sterring Wheel, 0 repose, -1 right, 1 left
@@ -43,7 +43,7 @@ private:
     const int GEAR_DRIVE = 4; //  Right padle
     const int PARKING = 2; // Enter Parking -> Circle
 
-    const int UPLINK_MODE = 0; // Switch between video and pointcloud, 0 maintain, 1 switch,
+    const int UPLINK_MODE = 0; // Switch between video and pointcloud, 0 maintain, 1 switch -> R1
 
     // --- Constants ---
     const float MAX_VLC = 10.0f; // Maximum Velocity in m/s, 5m/s -> 18Km/h
@@ -171,7 +171,7 @@ private:
 int main(int argc, char *argv[])
 {
     rclcpp::init(argc, argv);
-    auto node = std::make_shared<G923TeleopNode>();
+    auto node = std::make_shared<RS50TeleopNode>();
     rclcpp::spin(node);
     rclcpp::shutdown();
     return 0;

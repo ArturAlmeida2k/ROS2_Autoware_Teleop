@@ -34,7 +34,7 @@ using TeleopCommand = msg_manual_teleop::msg::TeleopCommand;
 //  6  │ Back   │ Engage (parte 1 — pressionar Back + Start em simultâneo)
 //  7  │ Start  │ Engage (parte 2 — pressionar Back + Start em simultâneo)
 //  8  │ Guide  │ (não utilizado)
-//  9  │ LS     │ (não utilizado)
+//  9  │ LS     │ Alternar vídeo / pointcloud
 // 10  │ RS     │ (não utilizado)
 //
 //  MUDANÇAS DE MARCHA
@@ -78,6 +78,7 @@ private:
     const int BUTTON_RB      = 5;  // Pisca direito
     const int BUTTON_BACK    = 6;  // Engage parte 1
     const int BUTTON_START   = 7;  // Engage parte 2
+    const int BUTTON_LS      = 9;  // Alternar vídeo / pointcloud
 
     // --- Constantes ---
     const float MAX_VLC           = 10.0f;  // Velocidade máxima em m/s
@@ -96,9 +97,9 @@ private:
         auto start_time = this->now();
 
         // O comando Xbox necessita de pelo menos 8 eixos e 8 botões
-        if (msg->axes.size() < 8 || msg->buttons.size() < 8) {
+        if (msg->axes.size() < 8 || msg->buttons.size() < 10) {
             RCLCPP_WARN_ONCE(this->get_logger(),
-                "Mensagem JOY incompleta. Esperados >= 8 eixos e >= 8 botões.");
+                "Mensagem JOY incompleta. Esperados >= 8 eixos e >= 10 botões.");
             return;
         }
 
@@ -166,6 +167,7 @@ private:
         bool turn_right   = msg->buttons[BUTTON_RB];
         bool turn_left    = msg->buttons[BUTTON_LB];
         bool hazard_signal = msg->buttons[BUTTON_Y];
+        bool uplink_mode  = msg->buttons[BUTTON_LS];
 
         int turn_signal = 0;
 
@@ -188,6 +190,7 @@ private:
         teleop_msg->brake_factor = static_cast<float>(normalized_brake);
         teleop_msg->target_steering_angle = target_steering_angle;
         teleop_msg->engage_command = change_engage_state;
+        teleop_msg->uplink_mode = uplink_mode;
         teleop_msg->gear = new_gear;
         teleop_msg->turn_signal = turn_signal;
 

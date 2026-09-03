@@ -38,6 +38,7 @@ private:
     const int BUTTON_TURN_SIGNAL_RIGHT = 10; // Turn Signal Right -> R3
     const int BUTTON_TURN_SIGNAL_LEFT = 11; // Turn Signal Left -> L3
     const int BUTTON_HAZARD_SIGNAL = 23; // Turn Hazard Lights -> "Enter" Button
+    const int BUTTON_UPLINK_MODE = 8; // 
 
     const int GEAR_DRIVE = 4; // Drive_Button -> Right padle
     const int GEAR_REVERSE = 5; // Reverse Button -> Left padle
@@ -139,6 +140,7 @@ private:
         bool turn_right = msg->buttons[BUTTON_TURN_SIGNAL_RIGHT];
         bool turn_left = msg->buttons[BUTTON_TURN_SIGNAL_LEFT];
         bool hazard_signal = msg->buttons[BUTTON_HAZARD_SIGNAL];
+        bool uplink_mode = msg->buttons[BUTTON_UPLINK_MODE];
 
         int turn_signal = 0;
 
@@ -165,6 +167,7 @@ private:
         teleop_msg->brake_factor = static_cast<float>(normalized_brake);
         teleop_msg->target_steering_angle = target_steering_angle;
         teleop_msg->engage_command = change_engage_state;
+        teleop_msg->uplink_mode = uplink_mode;
         teleop_msg->gear = new_gear;
         teleop_msg->turn_signal = turn_signal;
 
