@@ -1,10 +1,12 @@
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/image.hpp>
+#include <std_msgs/msg/int8.hpp>
 #include <cv_bridge/cv_bridge.h>
 #include <opencv2/opencv.hpp>
 #include <gst/gst.h>
 #include <gst/app/gstappsrc.h>
 
+#include <atomic>
 #include <chrono>
 #include <cstring>
 #include <memory>
@@ -14,6 +16,7 @@
 #include <vector>
 
 using Image = sensor_msgs::msg::Image;
+using Int8 = std_msgs::msg::Int8;
 
 class VideoEncoderTX;
 
@@ -70,6 +73,12 @@ public:
         qos.best_effort();
         qos.keep_last(1);
 
+        sub_mode_ = create_subscription<Int8>(
+            "/teleop/uplink_mode", 10,
+            [this](const Int8::SharedPtr msg) {
+                active_.store(msg->data == 2, std::memory_order_relaxed);
+            });
+
         for (int i = 0; i < num_cameras; ++i) {
             auto ctx   = std::make_unique<StreamCtx>();
             ctx->node  = this;
@@ -108,8 +117,13 @@ private:
     int base_port_ = 5007;
     std::vector<std::unique_ptr<StreamCtx>> streams_;
 
+    rclcpp::Subscription<Int8>::SharedPtr sub_mode_;
+    std::atomic<bool> active_{true};
+
     // -----------------------------------------------------------------
     void image_callback(const Image::SharedPtr msg, StreamCtx *ctx) {
+        if (!active_.load(std::memory_order_relaxed)) return;
+
         try {
             cv_bridge::CvImagePtr cv_ptr =
                 cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::BGR8);
@@ -157,15 +171,16 @@ private:
 
     // -----------------------------------------------------------------
     void init_pipeline(StreamCtx *ctx, int width, int height) {
+
         const std::string caps =
             "video/x-raw,format=BGR,width=" + std::to_string(width) +
-            ",height=" + std::to_string(height);
+            ",height=" + std::to_string(height) + ",framerate=30/1";
 
         const std::string pipeline_str =
             "appsrc name=mysrc is-live=true do-timestamp=true format=time caps=\"" + caps + "\" ! "
             "videoconvert ! "
             "videoscale ! "
-            "video/x-raw,format=I420,widht=1280,height=720 ! "
+            "video/x-raw,format=I420,width=1280,height=720 ! "
             "queue leaky=downstream max-size-buffers=1 max-size-bytes=0 max-size-time=0 ! "
             "x264enc tune=zerolatency speed-preset=ultrafast sliced-threads=true threads=4 "
             "key-int-max=15 bitrate=" + std::to_string(bitrate_) + " ! "
@@ -305,8 +320,6 @@ private:
 
 int main(int argc, char *argv[]) {
     rclcpp::init(argc, argv);
-    // MultiThreadedExecutor: com várias câmaras, os callbacks não bloqueiam
-    // uns aos outros à espera do encode.
     rclcpp::executors::MultiThreadedExecutor executor;
     auto node = std::make_shared<VideoEncoderTX>();
     executor.add_node(node);
