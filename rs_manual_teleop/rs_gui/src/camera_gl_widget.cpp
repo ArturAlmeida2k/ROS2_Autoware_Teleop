@@ -155,10 +155,6 @@ void CameraGLWidget::setup_quad()
 
 void CameraGLWidget::start_pipeline(int port)
 {
-    // Decode em CPU. O nvh264dec do nvcodec 1.20.3 acumula frames no
-    // GstVideoDecoder com esta GPU (g_list_find no perfil), degradando ate
-    // saturar o CPU. avdec_h264 e estavel.
-    // max-threads=4: chega para 1080p30 e deixa cores livres.
     std::string pipeline_str =
         "udpsrc port=" + std::to_string(port) + " "
         "caps=\"application/x-rtp, media=video, clock-rate=90000, encoding-name=H264, payload=96\" ! "
@@ -216,6 +212,11 @@ GstPadProbeReturn CameraGLWidget::pad_probe_callback(GstPad *pad, GstPadProbeInf
             0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88,
             0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF, 0x11
         };
+
+        if (map.size < 32) {
+            gst_buffer_unmap(buffer, &map);
+            return GST_PAD_PROBE_OK;
+        }
 
         size_t search_limit = std::min(map.size - 16, (size_t)128);
         for (size_t i = 0; i < search_limit - 16; ++i) {

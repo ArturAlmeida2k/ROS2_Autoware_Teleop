@@ -42,6 +42,7 @@ public:
                     case GearReport::PARK: state_.gear = 0; break;
                     case GearReport::DRIVE: state_.gear = 1; break;
                     case GearReport::REVERSE: state_.gear = 2; break;
+                    default: break;
                 }
             });
 

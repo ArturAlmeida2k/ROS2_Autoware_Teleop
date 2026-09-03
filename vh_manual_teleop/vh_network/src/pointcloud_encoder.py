@@ -62,7 +62,7 @@ class PointCloudEncoder(Node):
             return
 
         now_ns = self.get_clock().now().nanoseconds
-        if self.min_period and (now_ns - self._last_accept_ns) < self.min_period_ns:
+        if self.min_period_ns and (now_ns - self._last_accept_ns) < self.min_period_ns:
                 return
         self._last_accept_ns = now_ns
 
