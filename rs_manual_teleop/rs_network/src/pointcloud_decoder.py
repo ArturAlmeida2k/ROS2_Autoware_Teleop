@@ -23,9 +23,11 @@ class PointCloudDecoder(Node):
 
         self.declare_parameter('bind_address', '0.0.0.0')
         self.declare_parameter('port', 5011)
+        self.declare_parameter('ip_address', '10.0.0.1')
 
         p = self.get_parameter
         self.bind = (p('bind_address').value, p('port').value)
+        self.allowed_ip = p('ip_address').value
 
         qos = QoSProfile(depth=1,
                          reliability=ReliabilityPolicy.BEST_EFFORT,
@@ -62,9 +64,15 @@ class PointCloudDecoder(Node):
             except OSError:
                 break
 
+            if addr[0] != self.allowed_ip:
+                self.get_logger().warn(
+                    f"Ligação recusada de {addr[0]} (esperado {self.allowed_ip}).")
+                conn.close()
+                continue
+
             self.get_logger().info(f"Emissor ligado: {addr}")
             conn.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-            self._expected_id = None       
+            self._expected_id = None
             try:
                 self._handle(conn)
             except Exception as e:
