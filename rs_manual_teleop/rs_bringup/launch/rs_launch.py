@@ -1,13 +1,13 @@
 import os
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, ExecuteProcess
-from launch.conditions import IfCondition, UnlessCondition
+from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node
 from datetime import datetime
 
 def generate_launch_description():
-   
+
     device_id_arg = DeclareLaunchArgument(
         'device_id',
         default_value='0',
@@ -22,14 +22,6 @@ def generate_launch_description():
     )
     controller = LaunchConfiguration('controller')
 
-    video_arg = DeclareLaunchArgument(
-        'video',
-        default_value='none',
-        description="Selecione o encoder de vídeo: 'none' (nenhum), '1x'(AWSIM), ou '4x'(CARLA)"
-    )
-    video = LaunchConfiguration('video')
-
-    
     ip_address_arg = DeclareLaunchArgument(
         'ip_address',
         default_value='10.0.0.1',
@@ -38,20 +30,26 @@ def generate_launch_description():
     ip_address = LaunchConfiguration('ip_address')
 
     input_port_arg = DeclareLaunchArgument(
-        'input_port', 
-        default_value='5005', 
+        'input_port',
+        default_value='5005',
         description="Porta UDP para o input_teleop_encoder"
     )
     input_port = LaunchConfiguration('input_port')
 
     telemetry_port_arg = DeclareLaunchArgument(
-        'telemetry_port', 
-        default_value='5006', 
+        'telemetry_port',
+        default_value='5006',
         description="Porta UDP para o telemetry_decoder"
     )
     telemetry_port = LaunchConfiguration('telemetry_port')
 
-    
+    pointcloud_port_arg = DeclareLaunchArgument(
+        'pointcloud_port',
+        default_value='5011',
+        description="Porta TCP para o pointcloud_decoder"
+    )
+    pointcloud_port = LaunchConfiguration('pointcloud_port')
+
     # 1. Nó do Sistema: Leitura do Joystick com throttle para 50hz
     joy_node = Node(
         package='joy',
@@ -62,7 +60,7 @@ def generate_launch_description():
             {'deadzone': 0.001},
             {'autorepeat_rate': 50.0},
             {'device_id': device_id_config}
-        ] 
+        ]
     )
 
     throttle_node = Node(
@@ -72,7 +70,7 @@ def generate_launch_description():
         arguments=['messages', '/joy', '60.0', '/joy_throttled']
     )
 
-    # 2a. Nó de Mapeamento: Logitech RS50 
+    # 2a. Nó de Mapeamento: Logitech RS50
     rs50_teleop_node = Node(
         package="rs_interface",
         executable='rs50_teleop_node',
@@ -81,7 +79,7 @@ def generate_launch_description():
         condition=IfCondition(PythonExpression(["'", controller, "' == 'rs50'"]))
     )
 
-    # 2b. Nó de Mapeamento: Logitech G923 
+    # 2b. Nó de Mapeamento: Logitech G923
     g923_teleop_node = Node(
         package="rs_interface",
         executable='g923_teleop_node',
@@ -90,7 +88,7 @@ def generate_launch_description():
         condition=IfCondition(PythonExpression(["'", controller, "' == 'g923'"]))
     )
 
-    # 2c. Nó de Mapeamento: Xbox 
+    # 2c. Nó de Mapeamento: Xbox
     xbox_teleop_node = Node(
         package="rs_interface",
         executable='xbox_teleop_node',
@@ -109,7 +107,7 @@ def generate_launch_description():
 
     input_teleop_encoder_node = Node(
         package="rs_network",
-        executable='input_teleop_encoder', 
+        executable='input_teleop_encoder',
         name='input_teleop_encoder',
         output='screen',
         parameters=[{'ip_address': ip_address, 'port': input_port}]
@@ -117,30 +115,36 @@ def generate_launch_description():
 
     telemetry_decoder_node = Node(
         package="rs_network",
-        executable='telemetry_decoder', 
+        executable='telemetry_decoder',
         name='telemetry_decoder',
         output='screen',
         parameters=[{'ip_address': ip_address, 'port': telemetry_port}]
     )
 
+    pointcloud_decoder_node = Node(
+        package="rs_network",
+        executable='pointcloud_decoder',
+        name='pointcloud_decoder',
+        output='screen',
+        parameters=[{'ip_address': ip_address, 'port': pointcloud_port}]
+    )
+
     gui_node = Node(
         package="rs_gui",
-        executable='rs_gui', 
+        executable='rs_gui',
         name='rs_gui',
         output='screen'
     )
 
     # Rosbag
     bag_dir = os.path.expanduser('~/bags')
-    os.makedirs(bag_dir, exist_ok=True)  
-    
-    # Criar um caminho único para este bag consolidado
+    os.makedirs(bag_dir, exist_ok=True)
+
     bag_metrics_path = os.path.join(bag_dir, f'metrics/{datetime.now().strftime("%Y%m%d_%H%M%S")}')
 
     rosbag_metrics_node = ExecuteProcess(
         cmd=[
             'ros2', 'bag', 'record',
-            '/metrics/telemetry',
             '/metrics/controller',
             '/metrics/command_gate',
             '/metrics/network/telemetry',
@@ -149,6 +153,11 @@ def generate_launch_description():
             '/metrics/e2e_telemetry_latency',
             '/metrics/full_latency',
             '/metrics/front_camera',
+            '/metrics/front_camera_network',
+            '/metrics/front_camera_decode',
+            '/metrics/network/pointcloud',
+            '/metrics/pointcloud_sensor_to_station',
+            '/metrics/pointcloud',
             '--output', bag_metrics_path
         ],
         output='screen'
@@ -157,10 +166,10 @@ def generate_launch_description():
     return LaunchDescription([
         device_id_arg,
         controller_arg,
-        video_arg,
         ip_address_arg,
         input_port_arg,
         telemetry_port_arg,
+        pointcloud_port_arg,
         joy_node,
         throttle_node,
         rs50_teleop_node,
@@ -169,6 +178,7 @@ def generate_launch_description():
         command_gate_node,
         input_teleop_encoder_node,
         telemetry_decoder_node,
+        pointcloud_decoder_node,
         gui_node,
         rosbag_metrics_node
     ])

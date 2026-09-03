@@ -3,7 +3,6 @@ from datetime import datetime
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, ExecuteProcess
-from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration, PythonExpression, PathJoinSubstitution
 from launch_ros.actions import Node
 
@@ -15,12 +14,11 @@ def generate_launch_description():
         'sim', default_value='awsim',
         description="Perfil de configuração: 'awsim' ou 'carla'")
     sim = LaunchConfiguration('sim')
-    
+
     config_file = PathJoinSubstitution([
         get_package_share_directory('vh_bringup'), 'config',
         PythonExpression(["'", sim, "' + '.yaml'"])
     ])
-
 
     ip_address_arg = DeclareLaunchArgument(
         'ip_address',
@@ -51,6 +49,13 @@ def generate_launch_description():
     )
     camera_port = LaunchConfiguration('camera_port')
 
+    pointcloud_port_arg = DeclareLaunchArgument(
+        'pointcloud_port',
+        default_value='5011',
+        description="Porta TCP para o pointcloud_encoder"
+    )
+    pointcloud_port = LaunchConfiguration('pointcloud_port')
+
     # --- Nós do pacote: vh_network ---
     input_teleop_decoder_node = Node(
         package='vh_network',
@@ -68,9 +73,6 @@ def generate_launch_description():
         parameters=[{'ip_address': ip_address, 'port': telemetry_port}]
     )
 
-    # Encoder de vídeo unificado: 1 a 4 câmaras, uma porta por câmara.
-    # A ordem dos tópicos define a ordem das portas e tem de corresponder
-    # à que a GUI espera: base+0 front, base+1 left, base+2 back, base+3 right.
     video_encoder_node = Node(
         package='vh_network',
         executable='video_encoder',
@@ -80,6 +82,14 @@ def generate_launch_description():
             config_file,
             {'ip_address': ip_address, 'port': camera_port},
         ]
+    )
+
+    pointcloud_encoder_node = Node(
+        package='vh_network',
+        executable='pointcloud_encoder',
+        name='pointcloud_encoder',
+        output='screen',
+        parameters=[{'ip_address': ip_address, 'port': pointcloud_port}]
     )
 
     # --- Nós do pacote: vh_telemetry ---
@@ -139,9 +149,11 @@ def generate_launch_description():
         input_port_arg,
         telemetry_port_arg,
         camera_port_arg,
+        pointcloud_port_arg,
         input_teleop_decoder_node,
         telemetry_encoder_node,
         video_encoder_node,
+        pointcloud_encoder_node,
         telemetry_node,
         control_node,
         safety_gate_node,
