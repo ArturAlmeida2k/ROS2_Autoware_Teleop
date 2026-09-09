@@ -42,7 +42,7 @@ private:
     double error_timeout_ms_;
     double latest_latency_ms_ = 0.0;
     int recovery_cycles_ = 5;
-    int recovery_count_;
+    int recovery_count_ = 0;
 
     rclcpp::Time last_msg_time_;
     int8_t current_state_ = STATE_ERROR;
@@ -80,11 +80,10 @@ private:
             recovery_count_ = 0;
         }
 
-        if (new_state != previous_state) {
+        if (current_state_ != previous_state) {
             if      (new_state == STATE_ERROR) RCLCPP_ERROR(this->get_logger(), "NETWORK ERROR: latency %.1f ms / silence %.1f ms.", latest_latency_ms_, elapsed_ms);
             else if (new_state == STATE_WARN)  RCLCPP_WARN (this->get_logger(), "NETWORK WARN: latency %.1f ms / silence %.1f ms.", latest_latency_ms_, elapsed_ms);
             else                               RCLCPP_INFO (this->get_logger(), "NETWORK OK: Connection stable.");
-            current_state_ = new_state;
         }
         Int8 state_msg;
         state_msg.data = current_state_;

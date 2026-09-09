@@ -137,7 +137,7 @@ private:
         auto final_msg = std::make_unique<TeleopCommand>();
 
         final_msg->header.stamp = start_time; 
-        final_msg->header.frame_id = "comand_gate";  
+        final_msg->header.frame_id = "command_gate";  
         final_msg->origin_stamp = msg->origin_stamp;
         final_msg->id = msg->id;
 
