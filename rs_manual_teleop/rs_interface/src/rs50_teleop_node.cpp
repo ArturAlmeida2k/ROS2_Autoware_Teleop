@@ -41,7 +41,6 @@ private:
     const int BUTTON_TURN_SIGNAL_LEFT = 11; // Turn Signal Left -> L3
     const int BUTTON_HAZARD_SIGNAL = 27; // Turn Hazard Lights -> "Enter" Button
 
-    const int CLUTCH_BUTTON = 1; // Clutch Button -> Square 
     const int GEAR_REVERSE = 5; //  Left padle
     const int GEAR_DRIVE = 4; //  Right padle
     const int PARKING = 2; // Enter Parking -> Circle
@@ -111,20 +110,17 @@ private:
         bool drive = msg->buttons[GEAR_DRIVE];
         bool reverse = msg->buttons[GEAR_REVERSE];
         bool park = msg->buttons[PARKING];
-        bool clutch = msg->buttons[CLUTCH_BUTTON];
 
         int new_gear = CmdEnums::GEAR_NONE;
 
-        if (clutch){
-            if (park) {
-                new_gear = CmdEnums::GEAR_PARK;
-            }           
-            else if (drive) {
-                new_gear = CmdEnums::GEAR_DRIVE;
-            }
-            else if (reverse) {
-                new_gear = CmdEnums::GEAR_REVERSE;
-            }
+        if (park) {
+            new_gear = CmdEnums::GEAR_PARK;
+        }           
+        else if (drive) {
+            new_gear = CmdEnums::GEAR_DRIVE;
+        }
+        else if (reverse) {
+            new_gear = CmdEnums::GEAR_REVERSE;
         }
 
         // --- 5. TURN SIGNAL ----
