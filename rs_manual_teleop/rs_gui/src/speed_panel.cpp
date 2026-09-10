@@ -33,17 +33,15 @@ SpeedPanel::SpeedPanel(QWidget* parent): QWidget(parent)
     lbl_gear_->setFont(fg);
     lbl_gear_->setStyleSheet("color: #cdd6f4; background: transparent;");
     lbl_gear_->setAlignment(Qt::AlignCenter);
+    lbl_gear_->setFixedWidth(100);
 
     auto* lbl_gear_caption = new QLabel("GEAR");
     lbl_gear_caption->setStyleSheet(CAPTION_STYLE);
     lbl_gear_caption->setAlignment(Qt::AlignCenter);
+    lbl_gear_caption->setFixedWidth(100);
 
     gear_col->addWidget(lbl_gear_);
     gear_col->addWidget(lbl_gear_caption);
-
-    auto* gear_wrap = new QWidget();
-    gear_wrap->setLayout(gear_col);
-    gear_wrap->setFixedWidth(100);
 
     // --- Velocidade, ao centro ---
     auto* speed_col = new QVBoxLayout();
@@ -73,21 +71,27 @@ SpeedPanel::SpeedPanel(QWidget* parent): QWidget(parent)
     lbl_turn_->setFont(ft);
     lbl_turn_->setStyleSheet("color: #444; background: transparent;");
     lbl_turn_->setAlignment(Qt::AlignCenter);
+    lbl_turn_->setFixedWidth(100);
 
     auto* lbl_turn_caption = new QLabel("SINAL");
     lbl_turn_caption->setStyleSheet(CAPTION_STYLE);
     lbl_turn_caption->setAlignment(Qt::AlignCenter);
+    lbl_turn_caption->setFixedWidth(100);
 
     turn_col->addWidget(lbl_turn_);
     turn_col->addWidget(lbl_turn_caption);
 
-    auto* turn_wrap = new QWidget();
-    turn_wrap->setLayout(turn_col);
-    turn_wrap->setFixedWidth(100);
+    // As 3 colunas têm alturas diferentes (o número da velocidade é maior
+    // que o gear/sinal) — alinhar todas ao fundo da linha para as legendas
+    // ficarem à mesma altura do "km/h".
+    row->addLayout(gear_col);
+    row->setAlignment(gear_col, Qt::AlignBottom);
 
-    row->addWidget(gear_wrap);
     row->addLayout(speed_col, 1);
-    row->addWidget(turn_wrap);
+    row->setAlignment(speed_col, Qt::AlignBottom);
+
+    row->addLayout(turn_col);
+    row->setAlignment(turn_col, Qt::AlignBottom);
 }
 
 void SpeedPanel::setVelocity(float kmh)
