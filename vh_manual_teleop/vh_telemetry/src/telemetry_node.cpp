@@ -48,8 +48,16 @@ public:
                 }
             });
 
+        // O /system/operation_mode/state é publicado com QoS reliable +
+        // transient_local pelo lado do Autoware (é um tópico de "estado",
+        // só republica quando há mudança) — sem o subscriber pedir a mesma
+        // durability, quem se ligar depois da última mudança nunca recebe
+        // nada até à próxima. Isto substitui qualquer necessidade de "ler
+        // tudo manualmente no arranque": o DDS entrega a última amostra
+        // retida assim que a subscrição se liga.
         sub_operation_mode_ = create_subscription<OperationModeState>(
-            "/system/operation_mode/state", 10,
+            "/system/operation_mode/state",
+            rclcpp::QoS(1).reliable().transient_local(),
             [this](const OperationModeState::SharedPtr msg) {
                 state_.mode    = msg->mode;
                 state_.engaged = msg->is_autoware_control_enabled;

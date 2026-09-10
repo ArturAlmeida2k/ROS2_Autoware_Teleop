@@ -18,7 +18,7 @@ static const char* PANEL_STYLE = R"(
 
 static QLabel* make_title(const QString& text) {
     auto* l = new QLabel(text);
-    l->setStyleSheet("color: #585b70; font-size: 9px; background: transparent;");
+    l->setStyleSheet("color: #a6adc8; font-size: 9px; background: transparent;");
     l->setAlignment(Qt::AlignCenter);
     return l;
 }
