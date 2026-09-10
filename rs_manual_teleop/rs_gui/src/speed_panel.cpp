@@ -41,6 +41,7 @@ SpeedPanel::SpeedPanel(QWidget* parent): QWidget(parent)
     lbl_gear_caption->setFixedWidth(100);
 
     gear_col->addWidget(lbl_gear_);
+    gear_col->addSpacing(14);
     gear_col->addWidget(lbl_gear_caption);
 
     // --- Velocidade, ao centro ---
@@ -79,6 +80,7 @@ SpeedPanel::SpeedPanel(QWidget* parent): QWidget(parent)
     lbl_turn_caption->setFixedWidth(100);
 
     turn_col->addWidget(lbl_turn_);
+    turn_col->addSpacing(14);
     turn_col->addWidget(lbl_turn_caption);
 
     // As 3 colunas têm alturas diferentes (o número da velocidade é maior
