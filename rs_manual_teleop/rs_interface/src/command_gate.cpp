@@ -181,21 +181,23 @@ private:
             final_msg->target_steering_angle = msg->target_steering_angle;
 
             int requested_gear = msg->gear;
-            bool park_button_edge = (requested_gear == CmdEnums::GEAR_PARK && last_requested_gear_ != CmdEnums::GEAR_PARK);
-
-            if (requested_gear != CmdEnums::GEAR_NONE) {
+            bool gear_button_edge = (requested_gear != CmdEnums::GEAR_NONE && requested_gear != last_requested_gear_);
+            
+            if (gear_button_edge) {
                 if (current_velocity_ < 0.1f) {
                     if (current_gear_ == CmdEnums::GEAR_PARK) {
-                        if (park_button_edge) target_gear_ = CmdEnums::GEAR_DRIVE;
+                        if (requested_gear == CmdEnums::GEAR_PARK) target_gear_ = CmdEnums::GEAR_DRIVE;
                     } else {
                         target_gear_ = requested_gear;
                     }
+                    last_requested_gear_ = requested_gear;  
                 } else {
                     RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
                         "Tentativa de mudar de mudança bloqueada: Veículo em movimento (Velocidade: %.2f)", current_velocity_);
                 }
+            } else if (requested_gear == CmdEnums::GEAR_NONE) {
+                last_requested_gear_ = CmdEnums::GEAR_NONE;
             }
-            last_requested_gear_ = requested_gear;
             final_msg->gear = target_gear_;
 
             int current_button = msg->turn_signal;
