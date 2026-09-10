@@ -19,14 +19,31 @@ SpeedPanel::SpeedPanel(QWidget* parent): QWidget(parent)
     row->setContentsMargins(16, 8, 16, 8);
     row->setSpacing(12);
 
+    // Cor da legenda — mais clara que o cinza antigo (#585b70), que quase
+    // não se via sobre o fundo escuro semi-transparente do HUD.
+    static const char* CAPTION_STYLE = "color: #a6adc8; font-size: 11px; background: transparent;";
+
     // --- Gear, à esquerda ---
+    auto* gear_col = new QVBoxLayout();
+    gear_col->setSpacing(0);
+
     lbl_gear_ = new QLabel("–");
     QFont fg("Monospace", 16);
     fg.setBold(true);
     lbl_gear_->setFont(fg);
     lbl_gear_->setStyleSheet("color: #cdd6f4; background: transparent;");
     lbl_gear_->setAlignment(Qt::AlignCenter);
-    lbl_gear_->setFixedWidth(100);
+
+    auto* lbl_gear_caption = new QLabel("GEAR");
+    lbl_gear_caption->setStyleSheet(CAPTION_STYLE);
+    lbl_gear_caption->setAlignment(Qt::AlignCenter);
+
+    gear_col->addWidget(lbl_gear_);
+    gear_col->addWidget(lbl_gear_caption);
+
+    auto* gear_wrap = new QWidget();
+    gear_wrap->setLayout(gear_col);
+    gear_wrap->setFixedWidth(100);
 
     // --- Velocidade, ao centro ---
     auto* speed_col = new QVBoxLayout();
@@ -40,24 +57,37 @@ SpeedPanel::SpeedPanel(QWidget* parent): QWidget(parent)
     lbl_value_->setAlignment(Qt::AlignCenter);
 
     lbl_unit_ = new QLabel("km/h");
-    lbl_unit_->setStyleSheet("color: #585b70; font-size: 11px; background: transparent;");
+    lbl_unit_->setStyleSheet(CAPTION_STYLE);
     lbl_unit_->setAlignment(Qt::AlignCenter);
 
     speed_col->addWidget(lbl_value_);
     speed_col->addWidget(lbl_unit_);
 
     // --- Pisca / hazard, à direita ---
+    auto* turn_col = new QVBoxLayout();
+    turn_col->setSpacing(0);
+
     lbl_turn_ = new QLabel("–");
     QFont ft("Monospace", 13);
     ft.setBold(true);
     lbl_turn_->setFont(ft);
     lbl_turn_->setStyleSheet("color: #444; background: transparent;");
     lbl_turn_->setAlignment(Qt::AlignCenter);
-    lbl_turn_->setFixedWidth(100);
 
-    row->addWidget(lbl_gear_);
+    auto* lbl_turn_caption = new QLabel("SINAL");
+    lbl_turn_caption->setStyleSheet(CAPTION_STYLE);
+    lbl_turn_caption->setAlignment(Qt::AlignCenter);
+
+    turn_col->addWidget(lbl_turn_);
+    turn_col->addWidget(lbl_turn_caption);
+
+    auto* turn_wrap = new QWidget();
+    turn_wrap->setLayout(turn_col);
+    turn_wrap->setFixedWidth(100);
+
+    row->addWidget(gear_wrap);
     row->addLayout(speed_col, 1);
-    row->addWidget(lbl_turn_);
+    row->addWidget(turn_wrap);
 }
 
 void SpeedPanel::setVelocity(float kmh)
