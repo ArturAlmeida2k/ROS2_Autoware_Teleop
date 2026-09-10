@@ -104,6 +104,8 @@ MainWindow::MainWindow(RosBridge* bridge, QWidget* parent)
     connect(bridge_, &RosBridge::telemetryReceived, this,
             [this](TelemetryState msg, int64_t rx_time_ns) {
         speed_->setVelocity(msg.velocity_kmh);
+        speed_->setGear(msg.gear);
+        speed_->setTurnSignal(msg.turn_signal, msg.hazard);
         panel_->onTelemetryReceived(msg);
 
         const int64_t display_time_ns = bridge_->nowNanoseconds();

@@ -44,10 +44,8 @@ TelemetryPanel::TelemetryPanel(QWidget* parent)
     layout->setContentsMargins(12, 16, 12, 16);
     layout->setSpacing(8);
 
-    layout->addWidget(make_card("GEAR",                lbl_gear_    = make_value(18)));
     layout->addWidget(make_card("MODO",                lbl_mode_    = make_value(18)));
     layout->addWidget(make_card("ENGAGE",              lbl_engage_  = make_value(13)));
-    layout->addWidget(make_card("SINAL",               lbl_signal_  = make_value(13)));
     layout->addWidget(make_card("LIGAÇÃO",             lbl_network_ = make_value(13)));
     layout->addWidget(make_card("LATÊNCIA VÍDEO (ms)", lbl_latency_ = make_value(18)));
     layout->addWidget(make_card("CICLO COMPLETO (ms)", lbl_loop_    = make_value(18)));
@@ -68,12 +66,6 @@ QWidget* TelemetryPanel::make_card(const QString& title, QLabel*& value_label)
 
 void TelemetryPanel::onTelemetryReceived(TelemetryState msg)
 {
-    // Gear
-    static const std::unordered_map<int, QString> gear_map = {
-        {CmdEnums::GEAR_PARK, "PARK"}, {CmdEnums::GEAR_DRIVE, "DRIVE"}, {CmdEnums::GEAR_REVERSE, "REVERSE"}
-    };
-    lbl_gear_->setText(gear_map.count(msg.gear) ? gear_map.at(msg.gear) : "?");
-
     // Modo de operação do Autoware
     static const std::unordered_map<int, std::pair<QString, QString>> mode_map = {
         {0, {"UNKNOWN", "#888888"}},
@@ -94,21 +86,6 @@ void TelemetryPanel::onTelemetryReceived(TelemetryState msg)
     lbl_engage_->setText(eng ? "● ENGAGED" : "○ DISENGAGED");
     lbl_engage_->setStyleSheet(
         QString("color: %1; background: transparent;").arg(eng ? "#2ecc71" : "#e74c3c"));
-
-    // Piscas e pisca-alerta
-    if (msg.turn_signal == 2) {
-        lbl_signal_->setText("◄ LEFT");
-        lbl_signal_->setStyleSheet("color:#f39c12; background:transparent;");
-    } else if (msg.turn_signal == 3) {
-        lbl_signal_->setText("RIGHT ►");
-        lbl_signal_->setStyleSheet("color:#f39c12; background:transparent;");
-    } else if (msg.hazard == 2) {
-        lbl_signal_->setText("HAZARD ⚠");
-        lbl_signal_->setStyleSheet("color:#e67e22; background:transparent;");
-    } else {
-        lbl_signal_->setText("–");
-        lbl_signal_->setStyleSheet("color:#444; background:transparent;");
-    }
 
     // Estado da ligação, avaliado no veículo pelo Topic Monitor.
     switch (msg.network_state) {
