@@ -70,7 +70,7 @@ void TelemetryPanel::onTelemetryReceived(TelemetryState msg)
 {
     // Gear
     static const std::unordered_map<int, QString> gear_map = {
-        {0, "PARK"}, {1, "DRIVE"}, {2, "REVERSE"}
+        {CmdEnums::GEAR_PARK, "PARK"}, {CmdEnums::GEAR_DRIVE, "DRIVE"}, {CmdEnums::GEAR_REVERSE, "REVERSE"}
     };
     lbl_gear_->setText(gear_map.count(msg.gear) ? gear_map.at(msg.gear) : "?");
 

@@ -41,9 +41,9 @@ public:
             "/vehicle/status/gear_status", 10,
             [this](const GearReport::SharedPtr msg) {
                 switch (msg->report){
-                    case GearReport::PARK: state_.gear = CmdEnums::PARK; break;
-                    case GearReport::DRIVE: state_.gear = CmdEnums::DRIVE; break;
-                    case GearReport::REVERSE: state_.gear = CmdEnums::REVERSE; break;
+                    case GearReport::PARK: state_.gear = CmdEnums::GEAR_PARK; break;
+                    case GearReport::DRIVE: state_.gear = CmdEnums::GEAR_DRIVE; break;
+                    case GearReport::REVERSE: state_.gear = CmdEnums::GEAR_REVERSE; break;
                     default: break;
                 }
             });

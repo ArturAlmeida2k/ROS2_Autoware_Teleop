@@ -109,6 +109,7 @@ private:
             target_engage_state_ = false;
             last_received_engage_button_ = false; 
             target_gear_ = CmdEnums::GEAR_PARK;
+            last_requested_gear_ = CmdEnums::GEAR_NONE
             target_turn_signal_ = 1;
             last_received_turn_button_ = 0;
             last_received_uplink_button_ = false;

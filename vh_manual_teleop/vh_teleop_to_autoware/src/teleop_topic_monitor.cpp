@@ -81,8 +81,8 @@ private:
         }
 
         if (current_state_ != previous_state) {
-            if      (new_state == STATE_ERROR) RCLCPP_ERROR(this->get_logger(), "NETWORK ERROR: latency %.1f ms / silence %.1f ms.", latest_latency_ms_, elapsed_ms);
-            else if (new_state == STATE_WARN)  RCLCPP_WARN (this->get_logger(), "NETWORK WARN: latency %.1f ms / silence %.1f ms.", latest_latency_ms_, elapsed_ms);
+            if      (current_state_ == STATE_ERROR) RCLCPP_ERROR(this->get_logger(), "NETWORK ERROR: latency %.1f ms / silence %.1f ms.", latest_latency_ms_, elapsed_ms);
+            else if (current_state_ == STATE_WARN)  RCLCPP_WARN (this->get_logger(), "NETWORK WARN: latency %.1f ms / silence %.1f ms.", latest_latency_ms_, elapsed_ms);
             else                               RCLCPP_INFO (this->get_logger(), "NETWORK OK: Connection stable.");
         }
         Int8 state_msg;

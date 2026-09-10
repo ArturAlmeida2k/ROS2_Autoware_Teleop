@@ -9,7 +9,7 @@
 
 using Joy = sensor_msgs::msg::Joy;
 using TeleopCommand = msg_manual_teleop::msg::TeleopCommand;
-using CmdEnums = msg_manual_teleop::msg::CommandEnums
+using CmdEnums = msg_manual_teleop::msg::CommandEnums;
 
 class RS50TeleopNode : public rclcpp::Node
 {

@@ -1,9 +1,14 @@
 #pragma once
 #include <QWidget>
 #include <QLabel>
+
 #include <msg_manual_teleop/msg/telemetry_state.hpp>
+#include "msg_manual_teleop/msg/command_enums.hpp"
+
  
 using TelemetryState = msg_manual_teleop::msg::TelemetryState;
+using CmdEnums = msg_manual_teleop::msg::CommandEnums;
+
  
 class TelemetryPanel : public QWidget {
     Q_OBJECT
