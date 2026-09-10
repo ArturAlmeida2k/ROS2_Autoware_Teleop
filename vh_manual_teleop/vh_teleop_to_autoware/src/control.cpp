@@ -7,6 +7,8 @@
 
 #include "msg_manual_teleop/msg/teleop_command.hpp"
 #include "msg_manual_teleop/msg/node_metrics.hpp"
+#include "msg_manual_teleop/msg/command_enums.hpp"
+
 #include <autoware_control_msgs/msg/control.hpp>
 #include <autoware_vehicle_msgs/msg/gear_command.hpp>
 #include <autoware_vehicle_msgs/msg/turn_indicators_command.hpp>
@@ -24,6 +26,8 @@ using OperationModeState     = autoware_adapi_v1_msgs::msg::OperationModeState;
 using ChangeOperationModeSrv = autoware_adapi_v1_msgs::srv::ChangeOperationMode; 
 using TeleopCommand          = msg_manual_teleop::msg::TeleopCommand;
 using Metrics                = msg_manual_teleop::msg::NodeMetrics;
+using CmdEnums = msg_manual_teleop::msg::CommandEnums;
+
 
 class AutowareControllerNode : public rclcpp::Node
 {
@@ -70,7 +74,7 @@ private:
     float   vlc_current_           = 0.0f;
     float   steering_angle_target_ = 0.0f;
     float   brake_factor_          = 0.0f;
-    int     gear_change_           = GearCommand::REVERSE;
+    int     gear_change_           = GearCommand::PARK;
     bool    last_engage_cmd_       = false;
     uint8_t current_mode_          = OperationModeState::UNKNOWN;
 
@@ -174,9 +178,9 @@ private:
             GearCommand gear_cmd;
             gear_cmd.stamp = start_time;
             switch (gear_change_) {
-                case 0: gear_cmd.command = GearCommand::PARK;    break;
-                case 1: gear_cmd.command = GearCommand::DRIVE;   break;
-                case 2: gear_cmd.command = GearCommand::REVERSE; break;
+                case CmdEnums::GEAR_PARK: gear_cmd.command = GearCommand::PARK;    break;
+                case CmdEnums::GEAR_DRIVE: gear_cmd.command = GearCommand::DRIVE;   break;
+                case CmdEnums::GEAR_REVERSE: gear_cmd.command = GearCommand::REVERSE; break;
             }
         
             auto control_cmd = std::make_unique<Control>();

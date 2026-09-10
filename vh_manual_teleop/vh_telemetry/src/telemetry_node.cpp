@@ -10,6 +10,7 @@
 
 #include "msg_manual_teleop/msg/telemetry_state.hpp"
 #include "msg_manual_teleop/msg/node_metrics.hpp"
+#include "msg_manual_teleop/msg/command_enums.hpp"
 
 #include "std_msgs/msg/int8.hpp"
 
@@ -21,6 +22,7 @@ using HazardLightsReport   = autoware_vehicle_msgs::msg::HazardLightsReport;
 using OperationModeState   = autoware_adapi_v1_msgs::msg::OperationModeState;
 using TelemetryState       = msg_manual_teleop::msg::TelemetryState;
 using Metrics              = msg_manual_teleop::msg::NodeMetrics;
+using CmdEnums = msg_manual_teleop::msg::CommandEnums;
 using Int8    = std_msgs::msg::Int8;
 
 
@@ -39,9 +41,9 @@ public:
             "/vehicle/status/gear_status", 10,
             [this](const GearReport::SharedPtr msg) {
                 switch (msg->report){
-                    case GearReport::PARK: state_.gear = 0; break;
-                    case GearReport::DRIVE: state_.gear = 1; break;
-                    case GearReport::REVERSE: state_.gear = 2; break;
+                    case GearReport::PARK: state_.gear = CmdEnums::PARK; break;
+                    case GearReport::DRIVE: state_.gear = CmdEnums::DRIVE; break;
+                    case GearReport::REVERSE: state_.gear = CmdEnums::REVERSE; break;
                     default: break;
                 }
             });

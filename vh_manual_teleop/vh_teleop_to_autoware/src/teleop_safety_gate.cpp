@@ -5,11 +5,13 @@
 
 #include "msg_manual_teleop/msg/teleop_command.hpp"
 #include "msg_manual_teleop/msg/node_metrics.hpp"
+#include "msg_manual_teleop/msg/command_enums.hpp"
 
 
 using Int8 = std_msgs::msg::Int8;
 using TeleopCommand = msg_manual_teleop::msg::TeleopCommand;
 using Metrics = msg_manual_teleop::msg::NodeMetrics;
+using CmdEnums = msg_manual_teleop::msg::CommandEnums;
 
 class TeleopSafetyGateNode : public rclcpp::Node {
 public:
@@ -51,7 +53,7 @@ private:
     float warning_velocity_limit_;
 
     bool last_engage_ = false;
-    int last_gear_ = 0;
+    int last_gear_ = CmdEnums::GEAR_NONE;
 
     rclcpp::Subscription<TeleopCommand>::SharedPtr sub_teleop_cmd_;
     rclcpp::Subscription<Int8>::SharedPtr sub_safety_state_;

@@ -5,10 +5,13 @@
 #include "msg_manual_teleop/msg/teleop_command.hpp"
 #include "msg_manual_teleop/msg/telemetry_state.hpp" 
 #include "msg_manual_teleop/msg/node_metrics.hpp" 
+#include "msg_manual_teleop/msg/command_enums.hpp"
 
 using TeleopCommand = msg_manual_teleop::msg::TeleopCommand;
 using Telemetry = msg_manual_teleop::msg::TelemetryState;
 using Metrics = msg_manual_teleop::msg::NodeMetrics;
+using CmdEnums = msg_manual_teleop::msg::CommandEnums;
+
 using namespace std::chrono_literals; 
 
 class ComandGate : public rclcpp::Node
@@ -78,7 +81,8 @@ private:
     bool last_received_engage_button_ = false;
     bool last_received_uplink_button_ = false;
 
-    int target_gear_ = 0;
+    int target_gear_ = CmdEnums::GEAR_PARK;
+    int last_requested_gear_ = CmdEnums::GEAR_NONE;
     int target_turn_signal_ = 1; 
     int last_received_turn_button_ = 0;
     int current_uplink_mode_ = 2;
@@ -104,7 +108,7 @@ private:
 
             target_engage_state_ = false;
             last_received_engage_button_ = false; 
-            target_gear_ = 0;
+            target_gear_ = CmdEnums::GEAR_PARK;
             target_turn_signal_ = 1;
             last_received_turn_button_ = 0;
             last_received_uplink_button_ = false;
@@ -176,17 +180,21 @@ private:
             final_msg->target_steering_angle = msg->target_steering_angle;
 
             int requested_gear = msg->gear;
+            bool park_button_edge = (requested_gear == CmdEnums::GEAR_PARK && last_requested_gear_ != CmdEnums::GEAR_PARK);
 
-            if (requested_gear != 0) {
-                if (current_gear_ == 0) {
-                    if (requested_gear == 2) target_gear_ = 1; 
-                } 
-                else {
-                    if (requested_gear == 1) target_gear_ = 0; 
-                    else if (requested_gear == 2) target_gear_ = 1; 
-                    else if (requested_gear == 3) target_gear_ = 2; 
+            if (requested_gear != CmdEnums::GEAR_NONE) {
+                if (current_velocity_ < 0.1f) {
+                    if (current_gear_ == CmdEnums::GEAR_PARK) {
+                        if (park_button_edge) target_gear_ = CmdEnums::GEAR_DRIVE;
+                    } else {
+                        target_gear_ = requested_gear;
+                    }
+                } else {
+                    RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
+                        "Tentativa de mudar de mudança bloqueada: Veículo em movimento (Velocidade: %.2f)", current_velocity_);
                 }
             }
+            last_requested_gear_ = requested_gear;
             final_msg->gear = target_gear_;
 
             int current_button = msg->turn_signal;
@@ -223,8 +231,8 @@ private:
             final_msg->brake_factor = 0.0f;
             final_msg->target_steering_angle = 0.0f;
             
-            target_gear_ = 0;
-            final_msg->gear = 0;
+            target_gear_ = CmdEnums::GEAR_PARK;
+            final_msg->gear = target_gear_;
             
             target_turn_signal_ = 1;
             final_msg->turn_signal = 1;

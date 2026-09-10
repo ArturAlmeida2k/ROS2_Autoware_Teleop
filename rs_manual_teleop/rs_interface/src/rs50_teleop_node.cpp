@@ -4,9 +4,12 @@
 #include <memory>
 
 #include "msg_manual_teleop/msg/teleop_command.hpp"
+#include "msg_manual_teleop/msg/command_enums.hpp"
+
 
 using Joy = sensor_msgs::msg::Joy;
 using TeleopCommand = msg_manual_teleop::msg::TeleopCommand;
+using CmdEnums = msg_manual_teleop::msg::CommandEnums
 
 class RS50TeleopNode : public rclcpp::Node
 {
@@ -43,7 +46,7 @@ private:
     const int GEAR_DRIVE = 4; //  Right padle
     const int PARKING = 2; // Enter Parking -> Circle
 
-    const int UPLINK_MODE = 0; // Switch between video and pointcloud, 0 maintain, 1 switch -> R1
+    const int UPLINK_MODE = 0; // Switch between video and pointcloud, 0 maintain, 1 switch -> X
 
     // --- Constants ---
     const float MAX_VLC = 10.0f; // Maximum Velocity in m/s, 5m/s -> 18Km/h
@@ -110,18 +113,17 @@ private:
         bool park = msg->buttons[PARKING];
         bool clutch = msg->buttons[CLUTCH_BUTTON];
 
-        int new_gear = 0;
-        // Enter Parking(1), Leave Parking(2), Drive(2), Reverse(3)
+        int new_gear = CmdEnums::GEAR_NONE;
 
         if (clutch){
             if (park) {
-                new_gear = 1;
+                new_gear = CmdEnums::GEAR_PARK;
             }           
             else if (drive) {
-                new_gear = 2;
+                new_gear = CmdEnums::GEAR_DRIVE;
             }
             else if (reverse) {
-                new_gear = 3;
+                new_gear = CmdEnums::GEAR_REVERSE;
             }
         }
 

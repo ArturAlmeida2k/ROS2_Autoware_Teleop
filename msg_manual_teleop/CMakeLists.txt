@@ -10,6 +10,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/TeleopCommand.msg"
   "msg/NetworkMetrics.msg"
   "msg/NodeMetrics.msg"
+  "msg/CommandEnums.msg"
   DEPENDENCIES std_msgs
 )
 

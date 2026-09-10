@@ -58,7 +58,7 @@ def generate_launch_description():
         output='screen',
         parameters=[
             {'deadzone': 0.001},
-            {'autorepeat_rate': 50.0},
+            {'autorepeat_rate': 100.0},
             {'device_id': device_id_config}
         ]
     )
