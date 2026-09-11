@@ -101,8 +101,18 @@ MainWindow::MainWindow(RosBridge* bridge, QWidget* parent)
     // =====================================================================
     // Telemetria
     // =====================================================================
-    connect(bridge_, &RosBridge::telemetryReceived, this,
-            [this](TelemetryState msg, int64_t rx_time_ns) {
+    // Em vez de reagir a cada mensagem (Qt::QueuedConnection sofre backlog
+    // quando a GUI está ocupada a desenhar câmaras), um timer de taxa fixa
+    // lê sempre o estado mais recente já em cache no RosBridge. Mensagens
+    // intermédias que cheguem entre dois disparos do timer são
+    // legitimamente ignoradas — não há valor em desenhar um estado que o
+    // utilizador nunca chegou a ver antes de já haver um mais novo.
+    auto* telemetry_timer = new QTimer(this);
+    connect(telemetry_timer, &QTimer::timeout, this, [this]() {
+        TelemetryState msg;
+        int64_t rx_time_ns;
+        if (!bridge_->latestTelemetry(msg, rx_time_ns)) return;
+
         speed_->setVelocity(msg.velocity_kmh);
         speed_->setGear(msg.gear);
         speed_->setTurnSignal(msg.turn_signal, msg.hazard);
@@ -112,7 +122,8 @@ MainWindow::MainWindow(RosBridge* bridge, QWidget* parent)
         const double full_ms = bridge_->publishTelemetryGuiMetrics(
             msg.id, msg.origin_stamp, msg.e2e_command_ms, rx_time_ns, display_time_ns);
         panel_->setLoopLatency(full_ms);
-    }, Qt::QueuedConnection);
+    });
+    telemetry_timer->start(33); // ~30Hz, desacoplado da taxa de origem (50Hz)
 
     resize(1440, 900);
 

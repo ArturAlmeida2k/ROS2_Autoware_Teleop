@@ -20,10 +20,15 @@ RosBridge::RosBridge(QObject* parent)
         "/telemetry/state", 10,
         [this](const TelemetryState::SharedPtr msg) {
             rclcpp::Time tempo_rececao = this->now();
-            
+
             publish_metric(pub_telemetry_decoder_, msg->id, tempo_rececao, rclcpp::Time(msg->header.stamp));
 
-            emit telemetryReceived(*msg, tempo_rececao.nanoseconds());
+            // Só escreve a cache partilhada — nada de emitir sinal Qt aqui,
+            // para este callback nunca ficar à espera do thread da GUI.
+            std::lock_guard<std::mutex> lock(telemetry_mutex_);
+            latest_telemetry_ = *msg;
+            latest_telemetry_rx_time_ns_ = tempo_rececao.nanoseconds();
+            has_telemetry_ = true;
         });
 
     sub_pointcloud_ = create_subscription<PointCloud2>(
@@ -33,6 +38,15 @@ RosBridge::RosBridge(QObject* parent)
         });
 
     executor_.add_node(get_node_base_interface());
+}
+
+bool RosBridge::latestTelemetry(TelemetryState &out, int64_t &rx_time_ns_out)
+{
+    std::lock_guard<std::mutex> lock(telemetry_mutex_);
+    if (!has_telemetry_) return false;
+    out = latest_telemetry_;
+    rx_time_ns_out = latest_telemetry_rx_time_ns_;
+    return true;
 }
 
 void RosBridge::publish_metric(const rclcpp::Publisher<Metrics>::SharedPtr& pub, uint32_t id, const rclcpp::Time &rx_time, const rclcpp::Time &tx_time)

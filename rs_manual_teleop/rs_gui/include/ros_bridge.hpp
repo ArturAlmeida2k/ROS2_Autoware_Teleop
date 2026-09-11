@@ -5,6 +5,7 @@
 #include <msg_manual_teleop/msg/telemetry_state.hpp>
 #include <msg_manual_teleop/msg/node_metrics.hpp>
 #include <thread>
+#include <mutex>
 
 
 using PointCloud2 = sensor_msgs::msg::PointCloud2;
@@ -20,6 +21,8 @@ public:
 
     int64_t nowNanoseconds() { return this->now().nanoseconds(); }
 
+    bool latestTelemetry(TelemetryState &out, int64_t &rx_time_ns_out);
+
     double publishTelemetryGuiMetrics(uint32_t id, const builtin_interfaces::msg::Time &origin_stamp, double e2e_command, int64_t rx_time_ns, int64_t display_time_ns);
     void publishFrontCameraMetrics(uint32_t frame_id, double latency_ms);
     void publishFrontCameraNetwork(uint32_t frame_id, double latency_ms);
@@ -27,8 +30,6 @@ public:
     void publishPointCloudMetrics(uint32_t id, double latency_ms);
 
     signals:
-    void telemetryReceived(TelemetryState msg, int64_t receive_time_ns);
-
     void pointCloudReceived(PointCloud2::SharedPtr msg);
 private:
     rclcpp::Subscription<TelemetryState>::SharedPtr   sub_telemetry_;
@@ -46,6 +47,11 @@ private:
 
     rclcpp::executors::SingleThreadedExecutor         executor_;
     std::thread                                       spin_thread_;
+
+    std::mutex     telemetry_mutex_;
+    TelemetryState latest_telemetry_{};
+    int64_t        latest_telemetry_rx_time_ns_ = 0;
+    bool           has_telemetry_ = false;
 
     void publish_metric(const rclcpp::Publisher<Metrics>::SharedPtr& pub, uint32_t id, const rclcpp::Time &rx_time, const rclcpp::Time &tx_time);
 };
