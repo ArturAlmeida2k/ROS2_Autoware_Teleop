@@ -115,6 +115,12 @@ MainWindow::MainWindow(RosBridge* bridge, QWidget* parent)
                                ? tab_pointcloud_ : tab_quad_view_;
         if (stack_widget_->currentWidget() != target) {
             stack_widget_->setCurrentWidget(target);
+            // setCurrentWidget traz a página nova para cima de tudo o que
+            // está no stack_widget_ — incluindo o panel_/speed_, que só
+            // foram raise()ados uma vez no arranque. Sem isto, a
+            // telemetria fica tapada assim que troca de página.
+            panel_->raise();
+            speed_->raise();
         }
     });
     telemetry_timer->start(33); // ~30Hz, desacoplado da taxa de origem (50Hz)
