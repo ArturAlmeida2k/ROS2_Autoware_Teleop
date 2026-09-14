@@ -38,7 +38,6 @@ TelemetryPanel::TelemetryPanel(QWidget* parent)
 {
     setObjectName("panel");
     setStyleSheet(PANEL_STYLE);
-    setFixedWidth(220);
 
     auto* layout = new QVBoxLayout(this);
     layout->setContentsMargins(12, 16, 12, 16);

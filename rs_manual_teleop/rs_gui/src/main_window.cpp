@@ -1,6 +1,7 @@
 #include "main_window.hpp"
 #include <QGridLayout>
 #include <QVBoxLayout>
+#include <QHBoxLayout>
 #include <QWidget>
 #include <QResizeEvent>
 #include <QTimer>
@@ -11,8 +12,17 @@ MainWindow::MainWindow(RosBridge* bridge, QWidget* parent)
     setWindowTitle("Teleoperation HUD");
     setStyleSheet("background-color: #11111b;");
 
-    stack_widget_ = new QStackedWidget(this);
-    setCentralWidget(stack_widget_);
+    // Container principal: sidebar de telemetria fixa à esquerda (~1/6 do
+    // ecrã) + a página atual (câmaras ou pointcloud) à direita. Ao contrário
+    // de antes, a telemetria já não é filha de uma página específica — por
+    // isso continua visível ao trocar entre vídeo e pointcloud.
+    auto* central = new QWidget(this);
+    setCentralWidget(central);
+    auto* root_layout = new QHBoxLayout(central);
+    root_layout->setContentsMargins(0, 0, 0, 0);
+    root_layout->setSpacing(0);
+
+    stack_widget_ = new QStackedWidget(central);
 
     // =====================================================================
     // PÁGINA 1 — vistas das câmaras
@@ -56,18 +66,6 @@ MainWindow::MainWindow(RosBridge* bridge, QWidget* parent)
     grid->setRowStretch(0, 2);
     grid->setRowStretch(1, 1);
 
-    // Sobreposições: painel de estado no canto superior esquerdo da vista
-    // frontal, velocímetro ao centro inferior da mesma vista.
-    panel_ = new TelemetryPanel(tab_quad_view_);
-    panel_->adjustSize();
-    panel_->show();
-    panel_->raise();
-
-    speed_ = new SpeedPanel(tab_quad_view_);
-    speed_->adjustSize();
-    speed_->show();
-    speed_->raise();
-
     stack_widget_->addWidget(tab_quad_view_);
 
     // =====================================================================
@@ -92,8 +90,23 @@ MainWindow::MainWindow(RosBridge* bridge, QWidget* parent)
     }, Qt::QueuedConnection);
 
     // =====================================================================
-    // Telemetria
+    // Telemetria — sempre visível, independente da página atual
     // =====================================================================
+    // Painel de estado: sidebar fixa à esquerda (stretch 1 contra 5 do
+    // stack, ~1/6 do ecrã), gerida pelo layout — já não precisa de
+    // move()/raise() manuais.
+    panel_ = new TelemetryPanel(central);
+    root_layout->addWidget(panel_, 1);
+    root_layout->addWidget(stack_widget_, 5);
+
+    // Velocímetro: sobreposto ao stack (não a uma página específica), para
+    // ficar por cima tanto das câmaras como do pointcloud, sempre centrado
+    // ao fundo.
+    speed_ = new SpeedPanel(stack_widget_);
+    speed_->adjustSize();
+    speed_->show();
+    speed_->raise();
+
     auto* telemetry_timer = new QTimer(this);
     connect(telemetry_timer, &QTimer::timeout, this, [this]() {
         TelemetryState msg;
@@ -120,26 +133,21 @@ MainWindow::MainWindow(RosBridge* bridge, QWidget* parent)
 
     resize(1440, 900);
 
-    // A geometria da grelha só está resolvida depois do primeiro ciclo de
-    // eventos, por isso o posicionamento inicial é adiado.
+    // A geometria só está resolvida depois do primeiro ciclo de eventos,
+    // por isso o posicionamento inicial do velocímetro é adiado.
     QTimer::singleShot(0, this, [this]() { reposition_overlays(); });
 }
 
 // ---------------------------------------------------------------------
 void MainWindow::reposition_overlays()
 {
-    if (!cam_front_) return;
+    if (!speed_ || !stack_widget_) return;
     const int padding = 20;
 
-    if (panel_) {
-        panel_->move(cam_front_->x() + padding,
-                     cam_front_->y() + padding);
-    }
-
-    if (speed_) {
-        speed_->move(cam_front_->x() + (cam_front_->width() - speed_->width()) / 2,
-                     cam_front_->y() + cam_front_->height() - speed_->height() - padding);
-    }
+    // speed_ é filho direto do stack_widget_, por isso as coordenadas já
+    // são relativas a ele — sem precisar de somar a posição de mais nada.
+    speed_->move((stack_widget_->width() - speed_->width()) / 2,
+                 stack_widget_->height() - speed_->height() - padding);
 }
 
 void MainWindow::resizeEvent(QResizeEvent* event)
