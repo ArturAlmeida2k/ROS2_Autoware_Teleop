@@ -166,7 +166,7 @@ private:
             HazardLightsCommand hazard_cmd;
             hazard_cmd.stamp = start_time;
 
-            if (msg->turn_signal == 4) {
+            if (msg->turn_signal == CmdEnums::TURN_HAZARD) {
                 turn_cmd.command   = TurnIndicatorsCommand::DISABLE;
                 hazard_cmd.command = HazardLightsCommand::ENABLE;
             } else {

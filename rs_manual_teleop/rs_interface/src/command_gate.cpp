@@ -83,7 +83,7 @@ private:
 
     int target_gear_ = CmdEnums::GEAR_PARK;
     int last_requested_gear_ = CmdEnums::GEAR_NONE;
-    int target_turn_signal_ = 1; 
+    int target_turn_signal_ = CmdEnums::TURN_OFF; 
     int last_received_turn_button_ = 0;
     int current_uplink_mode_ = 2;
 
@@ -110,7 +110,7 @@ private:
             last_received_engage_button_ = false; 
             target_gear_ = CmdEnums::GEAR_PARK;
             last_requested_gear_ = CmdEnums::GEAR_NONE;
-            target_turn_signal_ = 1;
+            target_turn_signal_ = CmdEnums::TURN_OFF;
             last_received_turn_button_ = 0;
             last_received_uplink_button_ = false;
             current_uplink_mode_ = 2;
@@ -202,18 +202,18 @@ private:
 
             int current_button = msg->turn_signal;
 
-            bool pressed_right  = (current_button == 1 && last_received_turn_button_ != 1);
-            bool pressed_left   = (current_button == 2 && last_received_turn_button_ != 2);
-            bool pressed_hazard = (current_button == 3 && last_received_turn_button_ != 3);
+            bool pressed_right  = (current_button == CmdEnums::TURN_RIGHT && last_received_turn_button_ != CmdEnums::TURN_RIGHT);
+            bool pressed_left   = (current_button == CmdEnums::TURN_LEFT && last_received_turn_button_ != CmdEnums::TURN_LEFT);
+            bool pressed_hazard = (current_button == CmdEnums::TURN_HAZARD && last_received_turn_button_ != CmdEnums::TURN_HAZARD);
 
             if (pressed_right) {
-                target_turn_signal_ = (current_turn_signal_ == 3) ? 1 : 3;
+                target_turn_signal_ = (current_turn_signal_ == CmdEnums::TURN_RIGHT) ? CmdEnums::TURN_OFF : CmdEnums::TURN_RIGHT;
             }
             else if (pressed_left) {
-                target_turn_signal_ = (current_turn_signal_ == 2) ? 1 : 2;
+                target_turn_signal_ = (current_turn_signal_ == CmdEnums::TURN_LEFT) ? CmdEnums::TURN_OFF : CmdEnums::TURN_LEFT;
             }
             else if (pressed_hazard) {
-                target_turn_signal_ = (current_hazard_signal_ == 2) ? 1 : 4;
+                target_turn_signal_ = (current_hazard_signal_ == CmdEnums::HAZARD_ON) ? CmdEnums::TURN_OFF: CmdEnums::TURN_HAZARD;
             }
 
             last_received_turn_button_ = current_button;
@@ -237,8 +237,8 @@ private:
             target_gear_ = CmdEnums::GEAR_PARK;
             final_msg->gear = target_gear_;
             
-            target_turn_signal_ = 1;
-            final_msg->turn_signal = 1;
+            target_turn_signal_ = CmdEnums::TURN_OFF;
+            final_msg->turn_signal = target_turn_signal_;
 
             last_received_uplink_button_ = false;
             current_uplink_mode_ = 2; 

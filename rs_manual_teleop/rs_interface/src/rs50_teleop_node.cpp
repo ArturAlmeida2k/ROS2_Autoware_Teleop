@@ -129,17 +129,16 @@ private:
         bool turn_left = msg->buttons[BUTTON_TURN_SIGNAL_LEFT];
         bool hazard_signal = msg->buttons[BUTTON_HAZARD_SIGNAL];
 
-        int turn_signal = 0;
+        int turn_signal = CmdEnums::TURN_OFF;
 
-        // Right(1), Left(2), Hazard(3)
-        if (turn_right) {
-            turn_signal = 1;
+        if (turn_left) {
+            turn_signal = CmdEnums::TURN_LEFT;
         }
-        else if (turn_left){
-            turn_signal = 2;
+        else if (turn_right){
+            turn_signal = CmdEnums::TURN_RIGHT;
         }
         else if (hazard_signal){
-            turn_signal = 3;
+            turn_signal = CmdEnums::TURN_HAZARD;
         }
 
         // --- 6. VIDEO MODE ---
