@@ -145,26 +145,17 @@ void MainWindow::reposition_overlays()
 
     // --- Painel de telemetria (modo, latência, etc.) ---
     if (on_pointcloud) {
-        // Sem câmaras por baixo a competir por espaço — mais para dentro,
-        // ~1/3 do ecrã a partir da esquerda.
         panel_->move(stack_widget_->width() / 3, padding);
     } else if (is_single_camera_) {
-        // 1 câmara a ocupar o ecrã todo — canto superior esquerdo, como já
-        // estava e continua a ficar bem.
         panel_->move(padding, padding);
     } else {
-        // 4 câmaras — a coluna da câmara esquerda ocupa ~1/6 da largura
-        // (stretch 1 em 1+4+1); desloca o painel para dentro da coluna
-        // central, para não ficar em cima dessa câmara.
         panel_->move(stack_widget_->width() / 6 + padding, padding);
     }
 
     // --- Velocímetro ---
     int speed_y;
     if (!on_pointcloud && !is_single_camera_) {
-        // 4 câmaras — mais para cima, perto da fronteira entre a vista
-        // frontal e a traseira, em vez de encostado ao fundo do ecrã.
-        speed_y = static_cast<int>(stack_widget_->height() * 0.55) - speed_->height() / 2;
+        speed_y = static_cast<int>(stack_widget_->height() * 2/3) - speed_->height() - padding;
     } else {
         speed_y = stack_widget_->height() - speed_->height() - padding;
     }
