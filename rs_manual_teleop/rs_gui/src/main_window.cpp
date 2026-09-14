@@ -11,18 +11,11 @@ MainWindow::MainWindow(RosBridge* bridge, QWidget* parent)
     setWindowTitle("Teleoperation HUD");
     setStyleSheet("background-color: #11111b;");
 
-    tab_widget_ = new QTabWidget(this);
-    setCentralWidget(tab_widget_);
-
-    tab_widget_->setStyleSheet(
-        "QTabBar::tab { background: #1e1e2e; color: #cdd6f4; padding: 8px 16px; "
-        "border-radius: 4px; margin: 2px; }"
-        "QTabBar::tab:selected { background: #313244; font-weight: bold; }"
-        "QTabWidget::pane { border: none; }"
-    );
+    stack_widget_ = new QStackedWidget(this);
+    setCentralWidget(stack_widget_);
 
     // =====================================================================
-    // ABA 1 — vistas das câmaras
+    // PÁGINA 1 — vistas das câmaras
     // =====================================================================
     tab_quad_view_ = new QWidget();
     auto* grid = new QGridLayout(tab_quad_view_);
@@ -75,19 +68,19 @@ MainWindow::MainWindow(RosBridge* bridge, QWidget* parent)
     speed_->show();
     speed_->raise();
 
-    tab_widget_->addTab(tab_quad_view_, "Visão das Câmaras");
+    stack_widget_->addWidget(tab_quad_view_);
 
     // =====================================================================
-    // ABA 2 — point cloud
+    // PÁGINA 2 — point cloud
     // =====================================================================
-    auto* tab_pc = new QWidget();
-    auto* layout_pc = new QVBoxLayout(tab_pc);
+    tab_pointcloud_ = new QWidget();
+    auto* layout_pc = new QVBoxLayout(tab_pointcloud_);
     layout_pc->setContentsMargins(0, 0, 0, 0);
 
-    pc_widget_ = new PointCloudGLWidget(tab_pc);
+    pc_widget_ = new PointCloudGLWidget(tab_pointcloud_);
     layout_pc->addWidget(pc_widget_);
 
-    tab_widget_->addTab(tab_pc, "LiDAR 3D");
+    stack_widget_->addWidget(tab_pointcloud_);
 
     connect(bridge_, &RosBridge::pointCloudReceived,
         pc_widget_, &PointCloudGLWidget::onPointCloudReceived,
@@ -101,12 +94,6 @@ MainWindow::MainWindow(RosBridge* bridge, QWidget* parent)
     // =====================================================================
     // Telemetria
     // =====================================================================
-    // Em vez de reagir a cada mensagem (Qt::QueuedConnection sofre backlog
-    // quando a GUI está ocupada a desenhar câmaras), um timer de taxa fixa
-    // lê sempre o estado mais recente já em cache no RosBridge. Mensagens
-    // intermédias que cheguem entre dois disparos do timer são
-    // legitimamente ignoradas — não há valor em desenhar um estado que o
-    // utilizador nunca chegou a ver antes de já haver um mais novo.
     auto* telemetry_timer = new QTimer(this);
     connect(telemetry_timer, &QTimer::timeout, this, [this]() {
         TelemetryState msg;
@@ -122,6 +109,12 @@ MainWindow::MainWindow(RosBridge* bridge, QWidget* parent)
         const double full_ms = bridge_->publishTelemetryGuiMetrics(
             msg.id, msg.origin_stamp, msg.e2e_command_ms, rx_time_ns, display_time_ns);
         panel_->setLoopLatency(full_ms);
+
+        QWidget* target = (bridge_->currentUplinkMode() == CmdEnums::UPLINK_POINTCLOUD)
+                               ? tab_pointcloud_ : tab_quad_view_;
+        if (stack_widget_->currentWidget() != target) {
+            stack_widget_->setCurrentWidget(target);
+        }
     });
     telemetry_timer->start(33); // ~30Hz, desacoplado da taxa de origem (50Hz)
 

@@ -1,6 +1,6 @@
 #pragma once
 #include <QMainWindow>
-#include <QTabWidget>
+#include <QStackedWidget>
 #include <QKeyEvent>
 #include "telemetry_panel.hpp"
 #include "speed_panel.hpp"
@@ -23,8 +23,9 @@ private:
  
     bool is_single_camera_ = false;
  
-    QTabWidget* tab_widget_    = nullptr;
-    QWidget*    tab_quad_view_ = nullptr;
+    QStackedWidget* stack_widget_   = nullptr;
+    QWidget*        tab_quad_view_  = nullptr;
+    QWidget*        tab_pointcloud_ = nullptr;
  
     TelemetryPanel*     panel_     = nullptr;
     SpeedPanel*         speed_     = nullptr;
@@ -35,4 +36,3 @@ private:
     RosBridge*          bridge_    = nullptr;
     PointCloudGLWidget* pc_widget_ = nullptr;
 };
- 
