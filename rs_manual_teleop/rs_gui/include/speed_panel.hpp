@@ -16,7 +16,7 @@ public:
 public slots:
     void setVelocity(float kmh);
     void setGear(uint8_t gear);
-    void setTurnSignal(uint8_t turn_signal, uint8_t hazard);
+    void setTurnSignal(uint8_t turn_signal);
 
 private:
     QLabel* lbl_gear_  = nullptr;

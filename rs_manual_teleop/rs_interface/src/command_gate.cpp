@@ -41,7 +41,7 @@ public:
 
                 // Sincronização Inicial ou Reconexão
                 if (!is_telemetry_valid_) {
-                    target_engage_state_ = (msg->mode == 4);
+                    target_engage_state_ = (msg->mode == CmdEnums::OPERATION_MODE_REMOTE);
                     target_gear_ = msg->gear;
                     target_turn_signal_ = msg->turn_signal; 
 
@@ -54,7 +54,6 @@ public:
                 current_engage_status_ = msg->engaged;
                 current_velocity_ = msg->velocity_kmh;
                 current_turn_signal_ = msg->turn_signal;
-                current_hazard_signal_ = msg->hazard;
                 current_gear_ = msg->gear;
             });
 
@@ -72,7 +71,6 @@ private:
     bool current_engage_status_ = false;
     float current_velocity_ = 0.0f;
     int current_turn_signal_ = 0;
-    int current_hazard_signal_ = 0;
     int current_gear_ = 0;
 
     // --- Variáveis de Retenção de Estado (A tua Lógica) ---
@@ -85,7 +83,7 @@ private:
     int last_requested_gear_ = CmdEnums::GEAR_NONE;
     int target_turn_signal_ = CmdEnums::TURN_OFF; 
     int last_received_turn_button_ = 0;
-    int current_uplink_mode_ = 2;
+    int current_uplink_mode_ = CmdEnums::UPLINK_VIDEO;
 
     // --- Interfaces ROS 2 ---
     rclcpp::Subscription<TeleopCommand>::SharedPtr sub_filtered_command_;
@@ -113,7 +111,7 @@ private:
             target_turn_signal_ = CmdEnums::TURN_OFF;
             last_received_turn_button_ = 0;
             last_received_uplink_button_ = false;
-            current_uplink_mode_ = 2;
+            current_uplink_mode_ = CmdEnums::UPLINK_VIDEO;
         }
     }
 
@@ -174,7 +172,7 @@ private:
         // -------------------------------------------------------------
         // 3. VALIDAÇÃO DE MODO E BLOCO DE LÓGICA
         // -------------------------------------------------------------
-        if (current_mode_ == 4) {
+        if (current_mode_ == CmdEnums::OPERATION_MODE_REMOTE) {
             
             final_msg->target_velocity = msg->target_velocity;
             final_msg->brake_factor = msg->brake_factor;
@@ -213,7 +211,7 @@ private:
                 target_turn_signal_ = (current_turn_signal_ == CmdEnums::TURN_LEFT) ? CmdEnums::TURN_OFF : CmdEnums::TURN_LEFT;
             }
             else if (pressed_hazard) {
-                target_turn_signal_ = (current_hazard_signal_ == CmdEnums::HAZARD_ON) ? CmdEnums::TURN_OFF: CmdEnums::TURN_HAZARD;
+                target_turn_signal_ = (current_turn_signal_ == CmdEnums::TURN_HAZARD) ? CmdEnums::TURN_OFF : CmdEnums::TURN_HAZARD;
             }
 
             last_received_turn_button_ = current_button;
@@ -222,7 +220,7 @@ private:
             bool pressed_uplink = (msg->uplink_mode == 1);
 
             if (pressed_uplink && !last_received_uplink_button_){
-                current_uplink_mode_ = (current_uplink_mode_ == 2) ? 3 : 2;
+                current_uplink_mode_ = (current_uplink_mode_ == CmdEnums::UPLINK_VIDEO) ? CmdEnums::UPLINK_POINTCLOUD : CmdEnums::UPLINK_VIDEO;
             }
 
             last_received_uplink_button_ = pressed_uplink;
@@ -241,8 +239,8 @@ private:
             final_msg->turn_signal = target_turn_signal_;
 
             last_received_uplink_button_ = false;
-            current_uplink_mode_ = 2; 
-            final_msg->uplink_mode = 2;
+            current_uplink_mode_ = CmdEnums::UPLINK_VIDEO; 
+            final_msg->uplink_mode = current_uplink_mode_;
         }
 
         // -------------------------------------------------------------

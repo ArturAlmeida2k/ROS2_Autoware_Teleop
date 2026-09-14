@@ -59,13 +59,17 @@ public:
         sub_turn_indicators_ = create_subscription<TurnIndicatorsReport>(
             "/vehicle/status/turn_indicators_status", 10,
             [this](const TurnIndicatorsReport::SharedPtr msg) {
-                state_.turn_signal = msg->report;
+                last_turn_indicator_ = msg->report;
+                if (!hazard_active_) {
+                    state_.turn_signal = last_turn_indicator_;
+                }
             });
 
         sub_hazard_lights_ = create_subscription<HazardLightsReport>(
             "/vehicle/status/hazard_lights_status", 10,
             [this](const HazardLightsReport::SharedPtr msg) {
-                state_.hazard = msg->report;
+                hazard_active_ = (msg->report == HazardLightsReport::ENABLE);
+                state_.turn_signal = hazard_active_ ? CmdEnums::TURN_HAZARD : last_turn_indicator_;
             });
 
         sub_latency_ = create_subscription<Metrics>(
@@ -80,7 +84,6 @@ public:
                 state_.network_state = msg->data;
             });
 
-        // Publica a 50Hz com o estado mais recente de todos os campos
         timer_ = create_wall_timer(
             std::chrono::milliseconds(20),
             [this]() { 
@@ -102,6 +105,9 @@ private:
 
     uint32_t seq_num_ = 1;  
 
+    uint8_t last_turn_indicator_ = CmdEnums::TURN_OFF;
+    bool hazard_active_ = false;
+
     void publish_and_log() {
         state_.header.stamp    = this->now();
         state_.header.frame_id = "telemetry_node";
@@ -112,6 +118,11 @@ private:
 };
 
 int main(int argc, char * argv[]) {
+    rclcpp::init(argc, argv);
+    rclcpp::spin(std::make_shared<TelemetrySubscriber>());
+    rclcpp::shutdown();
+    return 0;
+}
     rclcpp::init(argc, argv);
     rclcpp::spin(std::make_shared<TelemetrySubscriber>());
     rclcpp::shutdown();

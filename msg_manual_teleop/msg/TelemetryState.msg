@@ -6,6 +6,5 @@ float32 e2e_command_ms
 uint8   gear
 uint8   mode
 uint8   turn_signal
-uint8   hazard
 uint8   network_state
 bool    engaged

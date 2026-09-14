@@ -103,7 +103,7 @@ void SpeedPanel::setGear(uint8_t gear)
     lbl_gear_->setText(gear_map.count(gear) ? gear_map.at(gear) : "?");
 }
 
-void SpeedPanel::setTurnSignal(uint8_t turn_signal, uint8_t hazard)
+void SpeedPanel::setTurnSignal(uint8_t turn_signal)
 {
     if (turn_signal == CmdEnums::TURN_LEFT) {
         lbl_turn_->setText("◄ LEFT");
@@ -111,7 +111,7 @@ void SpeedPanel::setTurnSignal(uint8_t turn_signal, uint8_t hazard)
     } else if (turn_signal == CmdEnums::TURN_RIGHT) {
         lbl_turn_->setText("RIGHT ►");
         lbl_turn_->setStyleSheet("color:#f39c12; background:transparent;");
-    } else if (hazard == CmdEnums::HAZARD_ON) {
+    } else if (turn_signal == CmdEnums::TURN_HAZARD) {
         lbl_turn_->setText("HAZARD ⚠");
         lbl_turn_->setStyleSheet("color:#e67e22; background:transparent;");
     } else {

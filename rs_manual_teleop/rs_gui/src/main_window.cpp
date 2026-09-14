@@ -103,7 +103,7 @@ MainWindow::MainWindow(RosBridge* bridge, QWidget* parent)
 
         speed_->setVelocity(msg.velocity_kmh);
         speed_->setGear(msg.gear);
-        speed_->setTurnSignal(msg.turn_signal, msg.hazard);
+        speed_->setTurnSignal(msg.turn_signal);
         panel_->onTelemetryReceived(msg);
 
         const int64_t display_time_ns = bridge_->nowNanoseconds();
