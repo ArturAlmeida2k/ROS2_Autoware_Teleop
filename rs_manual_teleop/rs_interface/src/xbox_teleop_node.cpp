@@ -4,9 +4,11 @@
 #include <memory>
 
 #include "msg_manual_teleop/msg/teleop_command.hpp"
+#include "msg_manual_teleop/msg/command_enums.hpp"
 
 using Joy = sensor_msgs::msg::Joy;
 using TeleopCommand = msg_manual_teleop::msg::TeleopCommand;
+using CmdEnums = msg_manual_teleop::msg::CommandEnums;
 
 // ============================================================
 //  Mapeamento do Comando Xbox (via joy_node / driver xpad)
@@ -129,9 +131,8 @@ private:
 
         // ── 3. DIREÇÃO ─────────────────────────────────────────────────────────
         // Left Stick X: -1.0 = esquerda, +1.0 = direita.
-        // Negamos para manter a convenção do G923 (positivo = virar à esquerda).
         float steering_input        = msg->axes[AXIS_STEERING];
-        float target_steering_angle = -steering_input * MAX_STEERING_RAD;
+        float target_steering_angle = steering_input * MAX_STEERING_RAD;
 
         // ── 4. MUDANÇAS DE MARCHA ──────────────────────────────────────────────
         // O botão X funciona como modificador (equivalente à embraiagem).
@@ -144,21 +145,21 @@ private:
         bool reverse_button = msg->buttons[BUTTON_B];
         int  dpad_y         = static_cast<int>(msg->axes[AXIS_DPAD_Y]);
 
-        int new_gear = 0;
+        int new_gear = CmdEnums::GEAR_NONE;
 
         if (gear_modifier) {
             if (dpad_y == 1) {
                 // D-Pad Cima + X → sair de Parking (entrar em Drive)
-                new_gear = 2;
+                new_gear = CmdEnums::GEAR_DRIVE;
             } else if (dpad_y == -1) {
                 // D-Pad Baixo + X → entrar em Parking
-                new_gear = 1;
+                new_gear = CmdEnums::GEAR_PARK;
             } else if (drive_button) {
                 // A + X → Drive
-                new_gear = 2;
+                new_gear = CmdEnums::GEAR_DRIVE;
             } else if (reverse_button) {
                 // B + X → Reverse
-                new_gear = 3;
+                new_gear = CmdEnums::GEAR_REVERSE;
             }
         }
 
@@ -169,14 +170,14 @@ private:
         bool hazard_signal = msg->buttons[BUTTON_Y];
         bool uplink_mode  = msg->buttons[BUTTON_LS];
 
-        int turn_signal = 0;
+        int turn_signal = CmdEnums::TURN_OFF;
 
         if (turn_right) {
-            turn_signal = 1;
+            turn_signal = CmdEnums::TURN_RIGHT;
         } else if (turn_left) {
-            turn_signal = 2;
+            turn_signal = CmdEnums::TURN_LEFT;
         } else if (hazard_signal) {
-            turn_signal = 3;
+            turn_signal = CmdEnums::TURN_HAZARD;
         }
 
         // ── 6. PUBLICAÇÃO ──────────────────────────────────────────────────────

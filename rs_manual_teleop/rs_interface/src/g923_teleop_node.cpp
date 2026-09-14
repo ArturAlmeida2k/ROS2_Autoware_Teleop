@@ -4,9 +4,11 @@
 #include <memory>
 
 #include "msg_manual_teleop/msg/teleop_command.hpp"
+#include "msg_manual_teleop/msg/command_enums.hpp"
 
 using Joy = sensor_msgs::msg::Joy;
 using TeleopCommand = msg_manual_teleop::msg::TeleopCommand;
+using CmdEnums = msg_manual_teleop::msg::CommandEnums;
 
 class G923TeleopNode : public rclcpp::Node
 {
@@ -112,26 +114,25 @@ private:
         // Change from [-1.0 (Repose) to 1.0 (Fully Pressed)] to [0.0 to 1.0]
         double normalized_clutch = (clutch + 1.0) / 2.0;
 
-        int new_gear = 0;
-        // Enter Parking(1), Leave Parking(2), Drive(2), Reverse(3)
+        int new_gear = CmdEnums::GEAR_NONE;
 
         if (normalized_clutch >= 0.9){
             // Lógica para sair de Parking (0) para Drive (1)
             if (parking_axes == 1) {
-                new_gear = 2;
+                new_gear = CmdEnums::GEAR_DRIVE;
             }
             // Lógica para entrar em Parking (0)
             else if (parking_axes == -1) {
-                new_gear = 1;
+                new_gear = CmdEnums::GEAR_PARK;
             }
             // Troca entre Drive (1) e Reverse (2) - apenas se não estiver em Parking
            
             else if (drive_button) {
-                    new_gear = 2;
+                    new_gear = CmdEnums::GEAR_DRIVE;
             }
             
             else if (reverse_button) {
-                    new_gear = 3;
+                    new_gear = CmdEnums::GEAR_REVERSE;
             }
         }
 
@@ -142,18 +143,17 @@ private:
         bool hazard_signal = msg->buttons[BUTTON_HAZARD_SIGNAL];
         bool uplink_mode = msg->buttons[BUTTON_UPLINK_MODE];
 
-        int turn_signal = 0;
+        int turn_signal = CmdEnums::TURN_OFF;
 
-        // Right(1), Left(2), Hazard(3)
         if (turn_right) {
-            turn_signal = 1;
+            turn_signal = CmdEnums::TURN_RIGHT;
 
         }
         else if (turn_left){
-            turn_signal = 2;
+            turn_signal = CmdEnums::TURN_LEFT;
         }
         else if (hazard_signal){
-            turn_signal = 3;
+            turn_signal = CmdEnums::TURN_HAZARD;
         }
 
         // --- 6. PUBLISHING ---  
