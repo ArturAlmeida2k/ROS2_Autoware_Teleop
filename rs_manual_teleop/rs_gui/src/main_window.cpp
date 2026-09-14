@@ -121,6 +121,9 @@ MainWindow::MainWindow(RosBridge* bridge, QWidget* parent)
             // telemetria fica tapada assim que troca de página.
             panel_->raise();
             speed_->raise();
+            // A posição depende de qual página está ativa (ver
+            // reposition_overlays), por isso recalcula ao trocar.
+            reposition_overlays();
         }
     });
     telemetry_timer->start(33); // ~30Hz, desacoplado da taxa de origem (50Hz)
@@ -138,12 +141,34 @@ void MainWindow::reposition_overlays()
     if (!speed_ || !panel_ || !stack_widget_) return;
     const int padding = 20;
 
-    // Ambos são filhos diretos do stack_widget_, por isso as coordenadas
-    // já são relativas a ele — sem precisar de somar a posição da câmara.
-    panel_->move(padding, padding);
+    const bool on_pointcloud = (stack_widget_->currentWidget() == tab_pointcloud_);
 
-    speed_->move((stack_widget_->width() - speed_->width()) / 2,
-                 stack_widget_->height() - speed_->height() - padding);
+    // --- Painel de telemetria (modo, latência, etc.) ---
+    if (on_pointcloud) {
+        // Sem câmaras por baixo a competir por espaço — mais para dentro,
+        // ~1/3 do ecrã a partir da esquerda.
+        panel_->move(stack_widget_->width() / 3, padding);
+    } else if (is_single_camera_) {
+        // 1 câmara a ocupar o ecrã todo — canto superior esquerdo, como já
+        // estava e continua a ficar bem.
+        panel_->move(padding, padding);
+    } else {
+        // 4 câmaras — a coluna da câmara esquerda ocupa ~1/6 da largura
+        // (stretch 1 em 1+4+1); desloca o painel para dentro da coluna
+        // central, para não ficar em cima dessa câmara.
+        panel_->move(stack_widget_->width() / 6 + padding, padding);
+    }
+
+    // --- Velocímetro ---
+    int speed_y;
+    if (!on_pointcloud && !is_single_camera_) {
+        // 4 câmaras — mais para cima, perto da fronteira entre a vista
+        // frontal e a traseira, em vez de encostado ao fundo do ecrã.
+        speed_y = static_cast<int>(stack_widget_->height() * 0.55) - speed_->height() / 2;
+    } else {
+        speed_y = stack_widget_->height() - speed_->height() - padding;
+    }
+    speed_->move((stack_widget_->width() - speed_->width()) / 2, speed_y);
 }
 
 void MainWindow::resizeEvent(QResizeEvent* event)
