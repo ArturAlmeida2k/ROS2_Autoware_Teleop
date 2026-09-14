@@ -11,16 +11,12 @@ SpeedPanel::SpeedPanel(QWidget* parent): QWidget(parent)
         "QWidget#speed { background-color: rgba(13, 13, 26, 180); border-radius: 8px; }");
     setAttribute(Qt::WA_StyledBackground, true);
 
-    // Largura fixa para o texto de gear/sinal (comprimento variável, ex.
-    // "REVERSE" vs "PARK") não deslocar o velocímetro do centro.
-    setFixedWidth(400);
+    setFixedWidth(450);
 
     auto* row = new QHBoxLayout(this);
     row->setContentsMargins(16, 8, 16, 8);
     row->setSpacing(12);
 
-    // Cor da legenda — mais clara que o cinza antigo (#585b70), que quase
-    // não se via sobre o fundo escuro semi-transparente do HUD.
     static const char* CAPTION_STYLE = "color: #a6adc8; font-size: 11px; background: transparent;";
 
     // --- Gear, à esquerda ---
@@ -54,6 +50,7 @@ SpeedPanel::SpeedPanel(QWidget* parent): QWidget(parent)
     lbl_value_->setFont(f);
     lbl_value_->setStyleSheet("color: #cdd6f4; background: transparent;");
     lbl_value_->setAlignment(Qt::AlignCenter);
+    lbl_value_->setFixedWidth(194);
 
     lbl_unit_ = new QLabel("km/h");
     lbl_unit_->setStyleSheet(CAPTION_STYLE);
@@ -83,9 +80,6 @@ SpeedPanel::SpeedPanel(QWidget* parent): QWidget(parent)
     turn_col->addSpacing(14);
     turn_col->addWidget(lbl_turn_caption);
 
-    // As 3 colunas têm alturas diferentes (o número da velocidade é maior
-    // que o gear/sinal) — alinhar todas ao fundo da linha para as legendas
-    // ficarem à mesma altura do "km/h".
     row->addLayout(gear_col);
     row->setAlignment(gear_col, Qt::AlignBottom);
 
