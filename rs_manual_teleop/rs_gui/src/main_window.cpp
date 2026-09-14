@@ -1,7 +1,6 @@
 #include "main_window.hpp"
 #include <QGridLayout>
 #include <QVBoxLayout>
-#include <QHBoxLayout>
 #include <QWidget>
 #include <QResizeEvent>
 #include <QTimer>
@@ -12,17 +11,8 @@ MainWindow::MainWindow(RosBridge* bridge, QWidget* parent)
     setWindowTitle("Teleoperation HUD");
     setStyleSheet("background-color: #11111b;");
 
-    // Container principal: sidebar de telemetria fixa à esquerda (~1/6 do
-    // ecrã) + a página atual (câmaras ou pointcloud) à direita. Ao contrário
-    // de antes, a telemetria já não é filha de uma página específica — por
-    // isso continua visível ao trocar entre vídeo e pointcloud.
-    auto* central = new QWidget(this);
-    setCentralWidget(central);
-    auto* root_layout = new QHBoxLayout(central);
-    root_layout->setContentsMargins(0, 0, 0, 0);
-    root_layout->setSpacing(0);
-
-    stack_widget_ = new QStackedWidget(central);
+    stack_widget_ = new QStackedWidget(this);
+    setCentralWidget(stack_widget_);
 
     // =====================================================================
     // PÁGINA 1 — vistas das câmaras
@@ -92,16 +82,14 @@ MainWindow::MainWindow(RosBridge* bridge, QWidget* parent)
     // =====================================================================
     // Telemetria — sempre visível, independente da página atual
     // =====================================================================
-    // Painel de estado: sidebar fixa à esquerda (stretch 1 contra 5 do
-    // stack, ~1/6 do ecrã), gerida pelo layout — já não precisa de
-    // move()/raise() manuais.
-    panel_ = new TelemetryPanel(central);
-    root_layout->addWidget(panel_, 1);
-    root_layout->addWidget(stack_widget_, 5);
+    // Os dois flutuam sobre o stack_widget_ (não sobre uma página
+    // específica), por isso ficam por cima tanto das câmaras como do
+    // pointcloud, em vez de desaparecerem ao trocar de página.
+    panel_ = new TelemetryPanel(stack_widget_);
+    panel_->adjustSize();
+    panel_->show();
+    panel_->raise();
 
-    // Velocímetro: sobreposto ao stack (não a uma página específica), para
-    // ficar por cima tanto das câmaras como do pointcloud, sempre centrado
-    // ao fundo.
     speed_ = new SpeedPanel(stack_widget_);
     speed_->adjustSize();
     speed_->show();
@@ -141,11 +129,13 @@ MainWindow::MainWindow(RosBridge* bridge, QWidget* parent)
 // ---------------------------------------------------------------------
 void MainWindow::reposition_overlays()
 {
-    if (!speed_ || !stack_widget_) return;
+    if (!speed_ || !panel_ || !stack_widget_) return;
     const int padding = 20;
 
-    // speed_ é filho direto do stack_widget_, por isso as coordenadas já
-    // são relativas a ele — sem precisar de somar a posição de mais nada.
+    // Ambos são filhos diretos do stack_widget_, por isso as coordenadas
+    // já são relativas a ele — sem precisar de somar a posição da câmara.
+    panel_->move(padding, padding);
+
     speed_->move((stack_widget_->width() - speed_->width()) / 2,
                  stack_widget_->height() - speed_->height() - padding);
 }

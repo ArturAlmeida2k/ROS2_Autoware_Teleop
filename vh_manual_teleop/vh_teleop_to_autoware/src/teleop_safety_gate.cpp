@@ -72,7 +72,7 @@ private:
         safe_msg->target_steering_angle = 0.0f;
         safe_msg->engage_command = last_engage_;
         safe_msg->gear = last_gear_;
-        safe_msg->turn_signal = 4; // Hazard signal
+        safe_msg->turn_signal = CMD::TURN_HAZARD; 
         
         pub_safe_cmd_->publish(std::move(safe_msg));
         
