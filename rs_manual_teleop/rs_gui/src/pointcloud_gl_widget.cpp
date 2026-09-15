@@ -187,6 +187,10 @@ void PointCloudGLWidget::onPointCloudReceived(sensor_msgs::msg::PointCloud2::Sha
     size_t point_step = msg->point_step;
     size_t total_points = msg->width * msg->height;
 
+    if (point_step < 12 || msg->data.size() < total_points * point_step) {
+        return;
+    }
+
     std::vector<float> new_points;
     new_points.reserve(total_points * 3);
 
