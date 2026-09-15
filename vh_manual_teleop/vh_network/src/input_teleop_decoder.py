@@ -50,9 +50,8 @@ class InputTeleopDecoder(Node):
         metrics_msg.latency_ms = latency.nanoseconds / 1000000.0
 
         lost = 0
-        if self.expected_id_ is not None and msg_id != self.expected_id_:
+        if self.expected_id_ is not None:
             lost = int(msg_id - self.expected_id_)
-
         self.expected_id_ = msg_id + 1
         metrics_msg.lost_pkg = lost
         
@@ -69,6 +68,9 @@ class InputTeleopDecoder(Node):
                 start_time = self.get_clock().now().to_msg()
 
                 msg = deserialize_message(data, TeleopCommand)
+
+                if self.expected_id_ is not None and msg.id < self.expected_id_:
+                    continue
 
                 incoming_stamp = msg.header.stamp
                 msg.header.stamp = start_time
