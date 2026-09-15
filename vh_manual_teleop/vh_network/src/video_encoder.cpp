@@ -5,6 +5,7 @@
 #include <opencv2/opencv.hpp>
 #include <gst/gst.h>
 #include <gst/app/gstappsrc.h>
+#include "msg_manual_teleop/msg/command_enums.hpp"
 
 #include <atomic>
 #include <chrono>
@@ -17,6 +18,7 @@
 
 using Image = sensor_msgs::msg::Image;
 using Int8 = std_msgs::msg::Int8;
+using CmdEnums = msg_manual_teleop::msg::CommandEnums;
 
 class VideoEncoderTX;
 
@@ -76,7 +78,7 @@ public:
         sub_mode_ = create_subscription<Int8>(
             "/teleop/uplink_mode", 10,
             [this](const Int8::SharedPtr msg) {
-                active_.store(msg->data == 2, std::memory_order_relaxed);
+                active_.store(msg->data == CmdEnums::UPLINK_VIDEO, std::memory_order_relaxed);
             });
 
         for (int i = 0; i < num_cameras; ++i) {

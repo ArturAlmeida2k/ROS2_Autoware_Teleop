@@ -11,6 +11,7 @@ from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPo
 from rclpy.serialization import serialize_message
 from sensor_msgs.msg import PointCloud2
 from std_msgs.msg import Int8
+from msg_manual_teleop.msg import CommandEnums
 
 MAX_RATE_HZ = 5.0
 
@@ -51,7 +52,7 @@ class PointCloudEncoder(Node):
 
     # ------------------------------------------------------------------
     def on_mode(self, msg):
-        active = (msg.data == 3)
+        active = (msg.data == CommandEnums.UPLINK_POINTCLOUD)
         if active != self._active:
             self._active = active
             if not active:
