@@ -2,15 +2,15 @@
 #include <memory>
 #include <chrono> 
 
-#include "msg_manual_teleop/msg/teleop_command.hpp"
-#include "msg_manual_teleop/msg/telemetry_state.hpp" 
-#include "msg_manual_teleop/msg/node_metrics.hpp" 
-#include "msg_manual_teleop/msg/command_enums.hpp"
+#include "teleop_msgs/msg/teleop_command.hpp"
+#include "teleop_msgs/msg/telemetry_state.hpp" 
+#include "teleop_msgs/msg/node_metrics.hpp" 
+#include "teleop_msgs/msg/command_enums.hpp"
 
-using TeleopCommand = msg_manual_teleop::msg::TeleopCommand;
-using Telemetry = msg_manual_teleop::msg::TelemetryState;
-using Metrics = msg_manual_teleop::msg::NodeMetrics;
-using CmdEnums = msg_manual_teleop::msg::CommandEnums;
+using TeleopCommand = teleop_msgs::msg::TeleopCommand;
+using Telemetry = teleop_msgs::msg::TelemetryState;
+using Metrics = teleop_msgs::msg::NodeMetrics;
+using CmdEnums = teleop_msgs::msg::CommandEnums;
 
 using namespace std::chrono_literals; 
 

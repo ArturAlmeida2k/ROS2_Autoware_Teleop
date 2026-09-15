@@ -5,9 +5,9 @@
 #include <memory>
 #include <cmath>
 
-#include "msg_manual_teleop/msg/teleop_command.hpp"
-#include "msg_manual_teleop/msg/node_metrics.hpp"
-#include "msg_manual_teleop/msg/command_enums.hpp"
+#include "teleop_msgs/msg/teleop_command.hpp"
+#include "teleop_msgs/msg/node_metrics.hpp"
+#include "teleop_msgs/msg/command_enums.hpp"
 
 #include <autoware_control_msgs/msg/control.hpp>
 #include <autoware_vehicle_msgs/msg/gear_command.hpp>
@@ -24,9 +24,9 @@ using TurnIndicatorsCommand  = autoware_vehicle_msgs::msg::TurnIndicatorsCommand
 using HazardLightsCommand    = autoware_vehicle_msgs::msg::HazardLightsCommand;
 using OperationModeState     = autoware_adapi_v1_msgs::msg::OperationModeState;
 using ChangeOperationModeSrv = autoware_adapi_v1_msgs::srv::ChangeOperationMode; 
-using TeleopCommand          = msg_manual_teleop::msg::TeleopCommand;
-using Metrics                = msg_manual_teleop::msg::NodeMetrics;
-using CmdEnums = msg_manual_teleop::msg::CommandEnums;
+using TeleopCommand          = teleop_msgs::msg::TeleopCommand;
+using Metrics                = teleop_msgs::msg::NodeMetrics;
+using CmdEnums = teleop_msgs::msg::CommandEnums;
 
 
 class AutowareControllerNode : public rclcpp::Node

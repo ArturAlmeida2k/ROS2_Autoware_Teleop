@@ -5,7 +5,7 @@
 #include <opencv2/opencv.hpp>
 #include <gst/gst.h>
 #include <gst/app/gstappsrc.h>
-#include "msg_manual_teleop/msg/command_enums.hpp"
+#include "teleop_msgs/msg/command_enums.hpp"
 
 #include <atomic>
 #include <chrono>
@@ -18,7 +18,7 @@
 
 using Image = sensor_msgs::msg::Image;
 using Int8 = std_msgs::msg::Int8;
-using CmdEnums = msg_manual_teleop::msg::CommandEnums;
+using CmdEnums = teleop_msgs::msg::CommandEnums;
 
 class VideoEncoderTX;
 

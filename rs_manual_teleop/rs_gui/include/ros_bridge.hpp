@@ -2,20 +2,20 @@
 #include <QObject>
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/point_cloud2.hpp>
-#include <msg_manual_teleop/msg/telemetry_state.hpp>
-#include <msg_manual_teleop/msg/teleop_command.hpp>
-#include <msg_manual_teleop/msg/command_enums.hpp>
-#include <msg_manual_teleop/msg/node_metrics.hpp>
+#include <teleop_msgs/msg/telemetry_state.hpp>
+#include <teleop_msgs/msg/teleop_command.hpp>
+#include <teleop_msgs/msg/command_enums.hpp>
+#include <teleop_msgs/msg/node_metrics.hpp>
 #include <thread>
 #include <mutex>
 #include <atomic>
 
 
 using PointCloud2 = sensor_msgs::msg::PointCloud2;
-using TelemetryState  = msg_manual_teleop::msg::TelemetryState;
-using TeleopCommand = msg_manual_teleop::msg::TeleopCommand;
-using CmdEnums = msg_manual_teleop::msg::CommandEnums;
-using Metrics = msg_manual_teleop::msg::NodeMetrics;
+using TelemetryState  = teleop_msgs::msg::TelemetryState;
+using TeleopCommand = teleop_msgs::msg::TeleopCommand;
+using CmdEnums = teleop_msgs::msg::CommandEnums;
+using Metrics = teleop_msgs::msg::NodeMetrics;
 
 class RosBridge : public QObject, public rclcpp::Node {
     Q_OBJECT

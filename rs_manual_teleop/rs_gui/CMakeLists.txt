@@ -7,7 +7,7 @@ set(CMAKE_AUTOMOC ON)
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(sensor_msgs REQUIRED)
-find_package(msg_manual_teleop REQUIRED)
+find_package(teleop_msgs REQUIRED)
 find_package(OpenCV REQUIRED)
 
 find_package(Qt5 REQUIRED COMPONENTS Widgets OpenGL)
@@ -40,7 +40,7 @@ target_include_directories(rs_gui PRIVATE
 ament_target_dependencies(rs_gui
   rclcpp
   sensor_msgs
-  msg_manual_teleop
+  teleop_msgs
 )
 
 target_link_libraries(rs_gui

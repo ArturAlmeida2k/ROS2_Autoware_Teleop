@@ -10,7 +10,7 @@ find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
-find_package(msg_manual_teleop REQUIRED)  
+find_package(teleop_msgs REQUIRED)  
 
 add_executable(
   g923_debug
@@ -33,7 +33,7 @@ ament_target_dependencies(
   xbox_teleop_node
   rclcpp
   sensor_msgs
-  msg_manual_teleop
+  teleop_msgs
 )
 
 add_executable(
@@ -45,7 +45,7 @@ ament_target_dependencies(
   g923_teleop_node
   rclcpp
   sensor_msgs
-  msg_manual_teleop
+  teleop_msgs
 )
 
 add_executable(
@@ -57,7 +57,7 @@ ament_target_dependencies(
   rs50_teleop_node
   rclcpp
   sensor_msgs
-  msg_manual_teleop
+  teleop_msgs
 )
 
 add_executable(
@@ -68,7 +68,7 @@ add_executable(
 ament_target_dependencies(
   command_gate
   rclcpp
-  msg_manual_teleop
+  teleop_msgs
 )
 
 

@@ -7,8 +7,8 @@ import socket
 
 from std_msgs.msg import Int8
 
-from msg_manual_teleop.msg import TeleopCommand
-from msg_manual_teleop.msg import NetworkMetrics
+from teleop_msgs.msg import TeleopCommand
+from teleop_msgs.msg import NetworkMetrics
 
 class InputTeleopDecoder(Node):
     def __init__(self):

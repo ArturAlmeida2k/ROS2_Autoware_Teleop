@@ -8,9 +8,9 @@
 #include "autoware_vehicle_msgs/msg/hazard_lights_report.hpp"
 #include "autoware_adapi_v1_msgs/msg/operation_mode_state.hpp"
 
-#include "msg_manual_teleop/msg/telemetry_state.hpp"
-#include "msg_manual_teleop/msg/node_metrics.hpp"
-#include "msg_manual_teleop/msg/command_enums.hpp"
+#include "teleop_msgs/msg/telemetry_state.hpp"
+#include "teleop_msgs/msg/node_metrics.hpp"
+#include "teleop_msgs/msg/command_enums.hpp"
 
 #include "std_msgs/msg/int8.hpp"
 
@@ -20,9 +20,9 @@ using GearReport           = autoware_vehicle_msgs::msg::GearReport;
 using TurnIndicatorsReport = autoware_vehicle_msgs::msg::TurnIndicatorsReport;
 using HazardLightsReport   = autoware_vehicle_msgs::msg::HazardLightsReport;
 using OperationModeState   = autoware_adapi_v1_msgs::msg::OperationModeState;
-using TelemetryState       = msg_manual_teleop::msg::TelemetryState;
-using Metrics              = msg_manual_teleop::msg::NodeMetrics;
-using CmdEnums = msg_manual_teleop::msg::CommandEnums;
+using TelemetryState       = teleop_msgs::msg::TelemetryState;
+using Metrics              = teleop_msgs::msg::NodeMetrics;
+using CmdEnums = teleop_msgs::msg::CommandEnums;
 using Int8    = std_msgs::msg::Int8;
 
 

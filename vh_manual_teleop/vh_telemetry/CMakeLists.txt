@@ -5,7 +5,7 @@ find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(autoware_vehicle_msgs REQUIRED)
 find_package(autoware_adapi_v1_msgs REQUIRED)
-find_package(msg_manual_teleop REQUIRED)  
+find_package(teleop_msgs REQUIRED)  
 find_package(std_msgs REQUIRED)
 
 add_executable(
@@ -17,7 +17,7 @@ ament_target_dependencies(telemetry_node
   rclcpp
   autoware_vehicle_msgs
   autoware_adapi_v1_msgs
-  msg_manual_teleop
+  teleop_msgs
 )
 
 install(TARGETS 

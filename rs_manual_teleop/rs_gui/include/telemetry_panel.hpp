@@ -2,10 +2,10 @@
 #include <QWidget>
 #include <QLabel>
 
-#include <msg_manual_teleop/msg/telemetry_state.hpp>
+#include <teleop_msgs/msg/telemetry_state.hpp>
 
  
-using TelemetryState = msg_manual_teleop::msg::TelemetryState;
+using TelemetryState = teleop_msgs::msg::TelemetryState;
 
  
 class TelemetryPanel : public QWidget {

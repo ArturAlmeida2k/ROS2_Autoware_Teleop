@@ -3,13 +3,13 @@
 #include <algorithm>
 #include <memory>
 
-#include "msg_manual_teleop/msg/teleop_command.hpp"
-#include "msg_manual_teleop/msg/command_enums.hpp"
+#include "teleop_msgs/msg/teleop_command.hpp"
+#include "teleop_msgs/msg/command_enums.hpp"
 
 
 using Joy = sensor_msgs::msg::Joy;
-using TeleopCommand = msg_manual_teleop::msg::TeleopCommand;
-using CmdEnums = msg_manual_teleop::msg::CommandEnums;
+using TeleopCommand = teleop_msgs::msg::TeleopCommand;
+using CmdEnums = teleop_msgs::msg::CommandEnums;
 
 class RS50TeleopNode : public rclcpp::Node
 {

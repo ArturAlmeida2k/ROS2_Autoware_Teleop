@@ -5,8 +5,8 @@ from rclpy.serialization import serialize_message
 from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy
 from rclpy.time import Time
 import socket
-from msg_manual_teleop.msg import TelemetryState
-from msg_manual_teleop.msg import NodeMetrics
+from teleop_msgs.msg import TelemetryState
+from teleop_msgs.msg import NodeMetrics
 
 
 class TelemetryEncoder(Node):

@@ -5,8 +5,8 @@ from rclpy.serialization import deserialize_message
 from rclpy.time import Time
 from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy
 import socket
-from msg_manual_teleop.msg import TelemetryState
-from msg_manual_teleop.msg import NetworkMetrics
+from teleop_msgs.msg import TelemetryState
+from teleop_msgs.msg import NetworkMetrics
 
 class TelemetryDecoder(Node):
     def __init__(self):

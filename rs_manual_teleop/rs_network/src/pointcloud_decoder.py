@@ -10,7 +10,7 @@ from rclpy.serialization import deserialize_message
 from rclpy.time import Time
 from sensor_msgs.msg import PointCloud2
 
-from msg_manual_teleop.msg import NetworkMetrics, NodeMetrics
+from teleop_msgs.msg import NetworkMetrics, NodeMetrics
 
 FRAME_MAGIC = b'PCF1'
 HEADER = struct.Struct('>4sIQI')       # magic, length, ingress_ts_ns, seq_id

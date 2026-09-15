@@ -11,7 +11,7 @@ from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPo
 from rclpy.serialization import serialize_message
 from sensor_msgs.msg import PointCloud2
 from std_msgs.msg import Int8
-from msg_manual_teleop.msg import CommandEnums
+from teleop_msgs.msg import CommandEnums
 
 MAX_RATE_HZ = 5.0
 

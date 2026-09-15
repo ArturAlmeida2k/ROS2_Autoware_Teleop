@@ -8,7 +8,7 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(rclpy REQUIRED)
 find_package(sensor_msgs REQUIRED)
-find_package(msg_manual_teleop REQUIRED)
+find_package(teleop_msgs REQUIRED)
 find_package(autoware_perception_msgs REQUIRED)
 
 # --- Python nodes ---

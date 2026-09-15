@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <package format="3">
-  <name>msg_manual_teleop</name>
+  <name>teleop_msgs</name>
   <version>0.0.1</version>
   <description>Custom messages for manual teleoperation</description>
   <maintainer email="you@email.com">you</maintainer>

@@ -10,7 +10,7 @@
 
   <depend>rclcpp</depend>
   <depend>sensor_msgs</depend>
-  <depend>msg_manual_teleop</depend>
+  <depend>teleop_msgs</depend>
 
   <build_depend>libqt5-opengl-dev</build_depend>
   <build_depend>qtbase5-dev</build_depend>

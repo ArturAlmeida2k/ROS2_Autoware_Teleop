@@ -2,11 +2,11 @@
 #include <QWidget>
 #include <QLabel>
 
-#include <msg_manual_teleop/msg/telemetry_state.hpp>
-#include "msg_manual_teleop/msg/command_enums.hpp"
+#include <teleop_msgs/msg/telemetry_state.hpp>
+#include "teleop_msgs/msg/command_enums.hpp"
 
-using TelemetryState = msg_manual_teleop::msg::TelemetryState;
-using CmdEnums = msg_manual_teleop::msg::CommandEnums;
+using TelemetryState = teleop_msgs::msg::TelemetryState;
+using CmdEnums = teleop_msgs::msg::CommandEnums;
 
 class SpeedPanel : public QWidget {
     Q_OBJECT
