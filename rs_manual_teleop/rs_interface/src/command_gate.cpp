@@ -31,7 +31,7 @@ public:
         // --- 2. Subscribers ---
         sub_raw_command_ = this->create_subscription<TeleopCommand>(
             "/teleop/raw_command", 10,
-            std::bind(&ComandGate::raw_command_callback, this, std::placeholders::_1));
+            std::bind(&CommandGate::raw_command_callback, this, std::placeholders::_1));
         
         sub_telemetry_ = this->create_subscription<Telemetry>(
             "/teleop/telemetry", 10,
@@ -60,9 +60,9 @@ public:
         // --- 3. Watchdog Timer (Proteção contra perda de sinal) ---
         // Se passarem 3s sem o watchdog ser reiniciado no callback acima, esta função é chamada
         telemetry_watchdog_ = this->create_wall_timer(
-            3s, std::bind(&ComandGate::telemetry_timeout_callback, this));
+            3s, std::bind(&CommandGate::telemetry_timeout_callback, this));
 
-        RCLCPP_INFO(this->get_logger(), "Nó ComandGate iniciado. A aguardar /teleop/raw_command e /teleop/telemetry.");
+        RCLCPP_INFO(this->get_logger(), "Nó CommandGate iniciado. A aguardar /teleop/raw_command e /teleop/telemetry.");
     }
 
 private:
