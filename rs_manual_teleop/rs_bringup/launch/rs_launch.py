@@ -156,8 +156,8 @@ def generate_launch_description():
             '/metrics/front_camera_network',
             '/metrics/front_camera_decode',
             '/metrics/network/pointcloud',
-            '/metrics/pointcloud_sensor_to_station',
-            '/metrics/pointcloud',
+            '/metrics/e2e_pointcloud_latency',
+            '/metrics/pointcloud_gui',
             '--output', bag_metrics_path
         ],
         output='screen'

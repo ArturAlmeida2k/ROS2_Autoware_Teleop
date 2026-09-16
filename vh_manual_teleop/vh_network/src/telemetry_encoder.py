@@ -20,7 +20,7 @@ class TelemetryEncoder(Node):
 
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
-        self.create_subscription(TelemetryState, '/telemetry/state', self.telemetry_callback, 10)
+        self.create_subscription(TelemetryState, '/teleop/telemetry', self.telemetry_callback, 10)
 
         metrics_qos = QoSProfile(
             depth=10,

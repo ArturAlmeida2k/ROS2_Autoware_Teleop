@@ -14,10 +14,10 @@ using CmdEnums = teleop_msgs::msg::CommandEnums;
 
 using namespace std::chrono_literals; 
 
-class ComandGate : public rclcpp::Node
+class CommandGate : public rclcpp::Node
 {
 public:
-    ComandGate() : Node("comand_gate")
+    CommandGate() : Node("command_gate")
     {
         // --- 1. Publishers ---
         pub_final_command_ = this->create_publisher<TeleopCommand>("/teleop/command", 10);
@@ -29,12 +29,12 @@ public:
         pub_metrics_ = this->create_publisher<Metrics>("/metrics/controller", metrics_qos);
 
         // --- 2. Subscribers ---
-        sub_filtered_command_ = this->create_subscription<TeleopCommand>(
-            "/teleop/filtered_command", 10,
-            std::bind(&ComandGate::filtered_command_callback, this, std::placeholders::_1));
+        sub_raw_command_ = this->create_subscription<TeleopCommand>(
+            "/teleop/raw_command", 10,
+            std::bind(&ComandGate::raw_command_callback, this, std::placeholders::_1));
         
         sub_telemetry_ = this->create_subscription<Telemetry>(
-            "/telemetry/state", 10,
+            "/teleop/telemetry", 10,
             [this](const Telemetry::SharedPtr msg) {
                 
                 telemetry_watchdog_->reset();
@@ -62,7 +62,7 @@ public:
         telemetry_watchdog_ = this->create_wall_timer(
             3s, std::bind(&ComandGate::telemetry_timeout_callback, this));
 
-        RCLCPP_INFO(this->get_logger(), "Nó ComandGate iniciado. A aguardar /teleop/filtered_command e /teleop/telemetry.");
+        RCLCPP_INFO(this->get_logger(), "Nó ComandGate iniciado. A aguardar /teleop/raw_command e /teleop/telemetry.");
     }
 
 private:
@@ -86,7 +86,7 @@ private:
     int current_uplink_mode_ = CmdEnums::UPLINK_VIDEO;
 
     // --- Interfaces ROS 2 ---
-    rclcpp::Subscription<TeleopCommand>::SharedPtr sub_filtered_command_;
+    rclcpp::Subscription<TeleopCommand>::SharedPtr sub_raw_command_;
     rclcpp::Subscription<Telemetry>::SharedPtr sub_telemetry_;
     rclcpp::Publisher<TeleopCommand>::SharedPtr pub_final_command_;
     rclcpp::Publisher<Metrics>::SharedPtr pub_metrics_;
@@ -133,7 +133,7 @@ private:
     }
 
     // --- Callback Principal de Comandos ---
-    void filtered_command_callback(const TeleopCommand::SharedPtr msg)
+    void raw_command_callback(const TeleopCommand::SharedPtr msg)
     {
         auto start_time = this->now();
 
@@ -257,7 +257,7 @@ private:
 int main(int argc, char *argv[])
 {
     rclcpp::init(argc, argv);
-    auto node = std::make_shared<ComandGate>();
+    auto node = std::make_shared<CommandGate>();
     rclcpp::spin(node);
     rclcpp::shutdown();
     return 0;

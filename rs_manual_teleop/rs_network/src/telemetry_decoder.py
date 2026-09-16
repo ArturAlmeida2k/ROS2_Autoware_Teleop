@@ -19,7 +19,7 @@ class TelemetryDecoder(Node):
 
         self.expected_id_ = None
 
-        self.pub_telemetry = self.create_publisher(TelemetryState, '/telemetry/state', 10)
+        self.pub_telemetry = self.create_publisher(TelemetryState, '/teleop/telemetry', 10)
 
         metrics_qos = QoSProfile(
             depth=10,

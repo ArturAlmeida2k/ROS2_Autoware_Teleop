@@ -29,7 +29,7 @@ using Int8    = std_msgs::msg::Int8;
 class TelemetrySubscriber : public rclcpp::Node {
 public:
     TelemetrySubscriber() : Node("autoware_telemetry_node") {
-        pub_telemetry_ = create_publisher<TelemetryState>("/telemetry/state", 10);
+        pub_telemetry_ = create_publisher<TelemetryState>("/teleop/telemetry", 10);
 
         sub_velocity_ = create_subscription<VelocityReport>(
             "/vehicle/status/velocity_status", 10,

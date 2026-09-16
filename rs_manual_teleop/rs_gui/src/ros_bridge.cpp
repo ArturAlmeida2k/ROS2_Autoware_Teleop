@@ -14,10 +14,10 @@ RosBridge::RosBridge(QObject* parent)
     pub_front_camera_      = this->create_publisher<Metrics>("/metrics/front_camera", metrics_qos);
     pub_front_camera_network_ = this->create_publisher<Metrics>("/metrics/front_camera_network", metrics_qos);
     pub_front_camera_decode_  = this->create_publisher<Metrics>("/metrics/front_camera_decode", metrics_qos);
-    pub_pointcloud_   = this->create_publisher<Metrics>("/metrics/pointcloud", metrics_qos);
+    pub_pointcloud_   = this->create_publisher<Metrics>("/metrics/pointcloud_gui", metrics_qos);
     
     sub_telemetry_ = create_subscription<TelemetryState>(
-        "/telemetry/state", 10,
+        "/teleop/telemetry", 10,
         [this](const TelemetryState::SharedPtr msg) {
             rclcpp::Time tempo_rececao = this->now();
 

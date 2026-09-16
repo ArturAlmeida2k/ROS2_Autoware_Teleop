@@ -53,14 +53,14 @@ class XboxTeleopNode : public rclcpp::Node
 public:
     XboxTeleopNode() : Node("xbox_teleop_node")
     {
-        pub_filtered_command_ = this->create_publisher<TeleopCommand>("/teleop/filtered_command", 10);
+        pub_raw_command_ = this->create_publisher<TeleopCommand>("/teleop/raw_command", 10);
 
         sub_joy_ = this->create_subscription<Joy>(
             "/joy_throttled", 10,
             std::bind(&XboxTeleopNode::joy_callback, this, std::placeholders::_1));
 
         RCLCPP_INFO(this->get_logger(),
-            "Nó Xbox Teleop iniciado. Publicando em /teleop/filtered_command.");
+            "Nó Xbox Teleop iniciado. Publicando em /teleop/raw_command.");
     }
 
 private:
@@ -91,7 +91,7 @@ private:
     u_int32_t seq_num_ = 1;
 
     // --- ROS 2 ---
-    rclcpp::Publisher<TeleopCommand>::SharedPtr pub_filtered_command_;
+    rclcpp::Publisher<TeleopCommand>::SharedPtr pub_raw_command_;
     rclcpp::Subscription<Joy>::SharedPtr sub_joy_;
 
     void joy_callback(const Joy::SharedPtr msg)
@@ -195,7 +195,7 @@ private:
         teleop_msg->gear = new_gear;
         teleop_msg->turn_signal = turn_signal;
 
-        pub_filtered_command_->publish(std::move(teleop_msg));
+        pub_raw_command_->publish(std::move(teleop_msg));
     }
 };
 
