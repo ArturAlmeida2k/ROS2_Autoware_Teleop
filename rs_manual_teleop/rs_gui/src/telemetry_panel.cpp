@@ -6,7 +6,7 @@
 
 static const char* PANEL_STYLE = R"(
     QWidget#panel {
-        background-color: rgba(24, 24, 37, 180);
+        background-color: rgba(0, 0, 0, 200);
         border-radius: 8px;
     }
 )";

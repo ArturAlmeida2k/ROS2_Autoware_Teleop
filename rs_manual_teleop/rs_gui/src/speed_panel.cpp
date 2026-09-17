@@ -7,7 +7,7 @@
 SpeedPanel::SpeedPanel(QWidget* parent): QWidget(parent)
 {
     setObjectName("speed");
-    setStyleSheet("QWidget#speed { background-color: rgba(24, 24, 37, 180); border-radius: 8px; }");
+    setStyleSheet("QWidget#speed { background-color: rgba(0, 0, 0, 200); border-radius: 8px; }");
     setAttribute(Qt::WA_StyledBackground, true);
 
     setFixedWidth(450);
