@@ -67,7 +67,7 @@ public:
     }
 
 private:
-    static constexpr float MAX_VLC_ = 10.0f; // m/s
+    static float MAX_VLC_ = 10.0f; // km/h
 
     // --- Variáveis de Leitura da Telemetria ---
     int current_mode_ = 0;
@@ -177,7 +177,7 @@ private:
         // -------------------------------------------------------------
         if (current_mode_ == CmdEnums::OPERATION_MODE_REMOTE) {
             
-            final_msg->target_velocity = msg->target_velocity * (MAX_VLC_ / 3.6f);
+            final_msg->target_velocity = std::clamp(msg->target_velocity, 0.0f, 1.0f) * MAX_VLC_;
             final_msg->brake_factor = msg->brake_factor;
             final_msg->target_steering_angle = msg->target_steering_angle;
 
