@@ -9,16 +9,11 @@ static const char* PANEL_STYLE = R"(
         background-color: rgba(13, 13, 26, 180);
         border-radius: 8px;
     }
-    QFrame#card {
-        background-color: rgba(30, 30, 46, 100);
-        border: 1px solid rgba(49, 50, 68, 150);
-        border-radius: 6px;
-    }
 )";
 
 static QLabel* make_title(const QString& text) {
     auto* l = new QLabel(text);
-    l->setStyleSheet("color: #a6adc8; font-size: 9px; background: transparent;");
+    l->setStyleSheet("color: #a6adc8; font-size: 11px; background: transparent;");
     l->setAlignment(Qt::AlignCenter);
     return l;
 }
@@ -38,6 +33,7 @@ TelemetryPanel::TelemetryPanel(QWidget* parent)
 {
     setObjectName("panel");
     setStyleSheet(PANEL_STYLE);
+    setAttribute(Qt::WA_StyledBackground, true);
     setFixedWidth(220);
 
     auto* layout = new QVBoxLayout(this);

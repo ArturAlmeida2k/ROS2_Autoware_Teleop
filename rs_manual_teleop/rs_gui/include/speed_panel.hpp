@@ -19,8 +19,8 @@ public slots:
     void setTurnSignal(uint8_t turn_signal);
 
 private:
-    QLabel* lbl_gear_  = nullptr;
-    QLabel* lbl_value_ = nullptr;
-    QLabel* lbl_unit_  = nullptr;
-    QLabel* lbl_turn_  = nullptr;
+    QLabel* lbl_gear_ = nullptr;
+    QLabel* lbl_vlc_  = nullptr;
+    QLabel* lbl_unit_ = nullptr;
+    QLabel* lbl_turn_ = nullptr;
 };
