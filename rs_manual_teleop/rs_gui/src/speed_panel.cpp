@@ -66,7 +66,7 @@ SpeedPanel::SpeedPanel(QWidget* parent): QWidget(parent)
     QFont ft("Monospace", 13);
     ft.setBold(true);
     lbl_turn_->setFont(ft);
-    lbl_turn_->setStyleSheet("color: #444; background: transparent;");
+    lbl_turn_->setStyleSheet("color: #cdd6f4; background: transparent;");
     lbl_turn_->setAlignment(Qt::AlignCenter);
     lbl_turn_->setFixedWidth(100);
 
@@ -115,6 +115,6 @@ void SpeedPanel::setTurnSignal(uint8_t turn_signal)
         lbl_turn_->setStyleSheet("color:#e67e22; background:transparent;");
     } else {
         lbl_turn_->setText("–");
-        lbl_turn_->setStyleSheet("color:#444; background:transparent;");
+        lbl_turn_->setStyleSheet("color:#cdd6f4; background:transparent;");
     }
 }
