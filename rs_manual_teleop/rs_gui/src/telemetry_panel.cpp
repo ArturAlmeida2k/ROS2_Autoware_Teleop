@@ -52,6 +52,7 @@ QWidget* TelemetryPanel::make_card(const QString& title, QLabel*& value_label)
 {
     auto* frame = new QFrame();
     frame->setObjectName("card");
+    frame->setStyleSheet("background: transparent; border: none;");
     auto* vl = new QVBoxLayout(frame);
     vl->setContentsMargins(8, 6, 8, 6);
     vl->setSpacing(2);
