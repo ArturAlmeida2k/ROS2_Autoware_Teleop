@@ -70,7 +70,7 @@ SpeedPanel::SpeedPanel(QWidget* parent): QWidget(parent)
     lbl_turn_->setAlignment(Qt::AlignCenter);
     lbl_turn_->setFixedWidth(100);
 
-    auto* lbl_turn_caption = new QLabel("SINAL");
+    auto* lbl_turn_caption = new QLabel("SIGNAL");
     lbl_turn_caption->setStyleSheet(CAPTION_STYLE);
     lbl_turn_caption->setAlignment(Qt::AlignCenter);
     lbl_turn_caption->setFixedWidth(100);

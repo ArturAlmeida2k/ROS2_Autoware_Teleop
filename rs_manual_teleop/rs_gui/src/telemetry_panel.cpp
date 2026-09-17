@@ -40,11 +40,11 @@ TelemetryPanel::TelemetryPanel(QWidget* parent)
     layout->setContentsMargins(12, 16, 12, 16);
     layout->setSpacing(8);
 
-    layout->addWidget(make_card("MODO",                lbl_mode_    = make_value(18)));
-    layout->addWidget(make_card("ENGAGE",              lbl_engage_  = make_value(13)));
-    layout->addWidget(make_card("LIGAÇÃO",             lbl_network_ = make_value(13)));
-    layout->addWidget(make_card("LATÊNCIA VÍDEO (ms)", lbl_latency_ = make_value(18)));
-    layout->addWidget(make_card("CICLO COMPLETO (ms)", lbl_loop_    = make_value(18)));
+    layout->addWidget(make_card("MODE",              lbl_mode_    = make_value(18)));
+    layout->addWidget(make_card("ENGAGE",            lbl_engage_  = make_value(13)));
+    layout->addWidget(make_card("LINK",              lbl_network_ = make_value(13)));
+    layout->addWidget(make_card("VIDEO LATENCY (ms)", lbl_latency_ = make_value(18)));
+    layout->addWidget(make_card("FULL LOOP (ms)",     lbl_loop_    = make_value(18)));
     layout->addStretch();
 }
 
