@@ -23,10 +23,10 @@ MainWindow::MainWindow(RosBridge* bridge, QWidget* parent)
     grid->setSpacing(2);
 
     // A porta define a câmara: 5007 front, 5008 left, 5009 back, 5010 right.
-    cam_front_ = new CameraGLWidget(5007, tab_quad_view_);
-    cam_left_  = new CameraGLWidget(5008, tab_quad_view_);
-    cam_back_  = new CameraGLWidget(5009, tab_quad_view_);
-    cam_right_ = new CameraGLWidget(5010, tab_quad_view_);
+    cam_front_ = new CameraGLWidget(5007, "FRONT", tab_quad_view_);
+    cam_left_  = new CameraGLWidget(5008, "LEFT", tab_quad_view_);
+    cam_back_  = new CameraGLWidget(5009, "BACK", tab_quad_view_);
+    cam_right_ = new CameraGLWidget(5010, "RIGHT", tab_quad_view_);
 
     // Só a câmara frontal transporta SEI, por isso é a única instrumentada.
     connect(cam_front_, &CameraGLWidget::latencyUpdated, this,

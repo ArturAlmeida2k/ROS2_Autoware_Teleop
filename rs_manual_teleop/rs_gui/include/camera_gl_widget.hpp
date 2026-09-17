@@ -3,6 +3,7 @@
 #include <QOpenGLFunctions_3_3_Core>
 #include <QOpenGLTexture>
 #include <QOpenGLShaderProgram>
+#include <QString>
 #include <mutex>
 #include <vector>
 #include <queue>
@@ -12,7 +13,7 @@
 class CameraGLWidget : public QOpenGLWidget {
     Q_OBJECT
 public:
-    explicit CameraGLWidget(int port, QWidget* parent = nullptr);
+    explicit CameraGLWidget(int port, const QString& label = QString(), QWidget* parent = nullptr);
     ~CameraGLWidget() override;
 
 signals:
@@ -24,6 +25,7 @@ protected:
     void initializeGL() override;
     void resizeGL(int w, int h) override;
     void paintGL() override;
+    void paintEvent(QPaintEvent* event) override;
 
 private:
     QOpenGLFunctions_3_3_Core* gl33_  = nullptr;
@@ -31,6 +33,9 @@ private:
     QOpenGLShaderProgram* shader_     = nullptr;
     unsigned int vao_                 = 0;
     unsigned int vbo_                 = 0;
+
+    QString label_;
+    bool has_received_frame_ = false;
 
     std::mutex           frame_mutex_;
     std::vector<uint8_t> pending_frame_;

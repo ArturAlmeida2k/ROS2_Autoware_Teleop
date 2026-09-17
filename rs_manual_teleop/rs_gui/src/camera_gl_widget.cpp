@@ -1,6 +1,8 @@
 #include "camera_gl_widget.hpp"
 #include <QOpenGLFunctions_3_3_Core>
 #include <QDebug>
+#include <QPainter>
+#include <QFont>
 #include <chrono>
 #include <cstring>
 
@@ -30,8 +32,8 @@ static const float QUAD[] = {
      1.f,  1.f, 1.f, 0.f
 };
 
-CameraGLWidget::CameraGLWidget(int port, QWidget *parent)
-    : QOpenGLWidget(parent)
+CameraGLWidget::CameraGLWidget(int port, const QString& label, QWidget *parent)
+    : QOpenGLWidget(parent), label_(label)
 {
     QSurfaceFormat fmt;
     fmt.setVersion(3, 3);
@@ -126,6 +128,27 @@ void CameraGLWidget::paintGL()
         double full_latency_ms = (render_ns - (int64_t)ts_to_emit) / 1000000.0;
         emit latencyUpdated(id_to_emit, full_latency_ms);
     }
+}
+
+// Só para capturas de ecrã da GUI sem o AWSIM ligado: enquanto não chegar
+// nenhum frame real, desenha um placeholder com o nome da câmara em vez de
+// ecrã preto. Desaparece sozinho e para sempre assim que o primeiro frame
+// verdadeiro for descodificado (ver on_new_sample), por isso não interfere
+// nada com o funcionamento normal.
+void CameraGLWidget::paintEvent(QPaintEvent* event)
+{
+    QOpenGLWidget::paintEvent(event);
+
+    if (has_received_frame_ || label_.isEmpty()) return;
+
+    QPainter painter(this);
+    painter.fillRect(rect(), Qt::white);
+    painter.setPen(Qt::black);
+    QFont f = painter.font();
+    f.setPointSize(std::max(14, width() / 12));
+    f.setBold(true);
+    painter.setFont(f);
+    painter.drawText(rect(), Qt::AlignCenter, label_);
 }
 
 void CameraGLWidget::setup_shaders()
@@ -301,6 +324,7 @@ GstFlowReturn CameraGLWidget::on_new_sample(GstElement *sink, gpointer user_data
             widget->pending_ts_ = current_ts;
             widget->dirty_ = true;
         }
+        widget->has_received_frame_ = true;
 
         QMetaObject::invokeMethod(widget, "update", Qt::QueuedConnection);
 
