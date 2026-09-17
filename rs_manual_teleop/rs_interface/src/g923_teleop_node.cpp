@@ -47,7 +47,6 @@ private:
     const int GEAR_PARKED_AXIS = 5; // Parking Button 2 -> D-PAD (UP/DOWN)
     
     // --- Constants ---
-    const float MAX_VLC = 10.0f; // Maximum Velocity in m/s, 5m/s -> 18Km/h
     const float MAX_STEERING_RAD = 0.5f; // Maximum steering angle (~28.6 graus)
 
     // --- Extra variables ---
@@ -94,12 +93,9 @@ private:
             target_vlc = 0.0f;
         } 
         else {
-            // Otherwise the target velocity is controlled by the accelarator pedal.
-            target_vlc = normalized_throttle * MAX_VLC;
+            target_vlc = static_cast<float>(normalized_throttle);
         }
         
-        target_vlc = std::clamp(target_vlc, 0.0f, MAX_VLC);
-
         // --- 3. STEERING CONTROL ---
         
         float steering_input = msg->axes[AXIS_STEERING];

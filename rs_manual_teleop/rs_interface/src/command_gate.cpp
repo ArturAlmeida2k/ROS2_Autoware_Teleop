@@ -1,6 +1,7 @@
 #include "rclcpp/rclcpp.hpp"
 #include <memory>
 #include <chrono> 
+#include <algorithm>
 
 #include "teleop_msgs/msg/teleop_command.hpp"
 #include "teleop_msgs/msg/telemetry_state.hpp" 
@@ -66,6 +67,8 @@ public:
     }
 
 private:
+    static constexpr float MAX_VLC_ = 10.0f; // m/s
+
     // --- Variáveis de Leitura da Telemetria ---
     int current_mode_ = 0;
     bool current_engage_status_ = false;
@@ -174,7 +177,7 @@ private:
         // -------------------------------------------------------------
         if (current_mode_ == CmdEnums::OPERATION_MODE_REMOTE) {
             
-            final_msg->target_velocity = msg->target_velocity;
+            final_msg->target_velocity = msg->target_velocity * (MAX_VLC_ / 3.6f);
             final_msg->brake_factor = msg->brake_factor;
             final_msg->target_steering_angle = msg->target_steering_angle;
 
