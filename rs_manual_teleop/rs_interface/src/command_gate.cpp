@@ -67,7 +67,7 @@ public:
     }
 
 private:
-    static float MAX_VLC_ = 10.0f; // km/h
+    static constexpr MAX_VLC_ = 10.0f; // km/h
 
     // --- Variáveis de Leitura da Telemetria ---
     int current_mode_ = 0;
