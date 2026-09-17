@@ -7,8 +7,7 @@
 SpeedPanel::SpeedPanel(QWidget* parent): QWidget(parent)
 {
     setObjectName("speed");
-    setStyleSheet(
-        "QWidget#speed { background-color: rgba(13, 13, 26, 180); border-radius: 8px; }");
+    setStyleSheet("QWidget#speed { background-color: rgba(13, 13, 26, 180); border-radius: 8px; }");
     setAttribute(Qt::WA_StyledBackground, true);
 
     setFixedWidth(450);
@@ -44,19 +43,19 @@ SpeedPanel::SpeedPanel(QWidget* parent): QWidget(parent)
     auto* speed_col = new QVBoxLayout();
     speed_col->setSpacing(0);
 
-    lbl_value_ = new QLabel("–");
+    lbl_vlc_ = new QLabel("–");
     QFont f("Monospace", 44);
     f.setBold(true);
-    lbl_value_->setFont(f);
-    lbl_value_->setStyleSheet("color: #cdd6f4; background: transparent;");
-    lbl_value_->setAlignment(Qt::AlignCenter);
-    lbl_value_->setFixedWidth(194);
+    lbl_vlc_->setFont(f);
+    lbl_vlc_->setStyleSheet("color: #cdd6f4; background: transparent;");
+    lbl_vlc_->setAlignment(Qt::AlignCenter);
+    lbl_vlc_->setFixedWidth(194);
 
     lbl_unit_ = new QLabel("km/h");
     lbl_unit_->setStyleSheet(CAPTION_STYLE);
     lbl_unit_->setAlignment(Qt::AlignCenter);
 
-    speed_col->addWidget(lbl_value_);
+    speed_col->addWidget(lbl_vlc_);
     speed_col->addWidget(lbl_unit_);
 
     // --- Pisca / hazard, à direita ---
@@ -92,7 +91,7 @@ SpeedPanel::SpeedPanel(QWidget* parent): QWidget(parent)
 
 void SpeedPanel::setVelocity(float kmh)
 {
-    lbl_value_->setText(QString::number(kmh, 'f', 1));
+    lbl_vlc_->setText(QString::number(kmh, 'f', 1));
 }
 
 void SpeedPanel::setGear(uint8_t gear)
