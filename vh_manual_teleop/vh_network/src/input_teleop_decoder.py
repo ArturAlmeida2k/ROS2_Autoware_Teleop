@@ -21,6 +21,8 @@ class InputTeleopDecoder(Node):
 
         self.expected_id_ = None
 
+        self.RESYNC_THRESHOLD = 1000
+
         # 1. Publisher original de comandos
         self.pub_command = self.create_publisher(TeleopCommand, '/teleop/command', 10)
         
@@ -68,6 +70,9 @@ class InputTeleopDecoder(Node):
                 start_time = self.get_clock().now().to_msg()
 
                 msg = deserialize_message(data, TeleopCommand)
+
+                if self.expected_id_ is not None and msg.id < self.expected_id_ - self.RESYNC_THRESHOLD:
+                    self.expected_id_ = None
 
                 if self.expected_id_ is not None and msg.id < self.expected_id_:
                     continue

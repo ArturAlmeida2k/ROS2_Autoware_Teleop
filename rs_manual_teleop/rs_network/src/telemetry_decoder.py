@@ -19,6 +19,8 @@ class TelemetryDecoder(Node):
 
         self.expected_id_ = None
 
+        self.RESYNC_THRESHOLD = 1000
+
         self.pub_telemetry = self.create_publisher(TelemetryState, '/teleop/telemetry', 10)
 
         metrics_qos = QoSProfile(
@@ -69,6 +71,9 @@ class TelemetryDecoder(Node):
                 start_time = self.get_clock().now().to_msg()
 
                 msg = deserialize_message(data, TelemetryState)
+
+                if self.expected_id_ is not None and msg.id < self.expected_id_ - self.RESYNC_THRESHOLD:
+                    self.expected_id_ = None
 
                 if self.expected_id_ is not None and msg.id < self.expected_id_:
                     continue
