@@ -28,6 +28,7 @@ ament_target_dependencies(
   rclcpp 
   sensor_msgs 
   cv_bridge
+  teleop_msgs
 )
 
 target_link_libraries(
