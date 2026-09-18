@@ -83,7 +83,6 @@ private:
     const int BUTTON_LS      = 9;  // Alternar vídeo / pointcloud
 
     // --- Constantes ---
-    const float MAX_VLC           = 10.0f;  // Velocidade máxima em m/s
     const float MAX_STEERING_RAD  =  0.5f;  // Ângulo máximo de direção (~28.6°)
 
     // --- Extra Variables ---
@@ -112,22 +111,16 @@ private:
         bool change_engage_state = engage_button_1 && engage_button_2;
 
         // ── 2. VELOCIDADE (Acelerador e Travão) ────────────────────────────────
-        // Os gatilhos do Xbox vão de 0.0 (solto) a 1.0 (fundo pressionado),
-        // ao contrário dos pedais G923 que vão de -1.0 a 1.0.
-        // Normalização: valor já está em [0.0 – 1.0], não é necessário converter.
         double normalized_throttle = static_cast<double>(msg->axes[AXIS_THROTTLE]);
         double normalized_brake    = static_cast<double>(msg->axes[AXIS_BRAKE]);
 
         float target_vlc = 0.0f;
 
         if (normalized_brake > 0.05) {
-            // Travão pressionado → velocidade alvo = 0
             target_vlc = 0.0f;
         } else {
-            target_vlc = static_cast<float>(normalized_throttle) * MAX_VLC;
+            target_vlc = static_cast<float>(normalized_throttle);
         }
-
-        target_vlc = std::clamp(target_vlc, 0.0f, MAX_VLC);
 
         // ── 3. DIREÇÃO ─────────────────────────────────────────────────────────
         // Left Stick X: -1.0 = esquerda, +1.0 = direita.
