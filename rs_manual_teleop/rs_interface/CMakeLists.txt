@@ -71,6 +71,17 @@ ament_target_dependencies(
   teleop_msgs
 )
 
+add_executable(
+  cpmmand_gate_forsingletest
+  src/cpmmand_gate_forsingletest.cpp
+)
+
+ament_target_dependencies(
+  cpmmand_gate_forsingletest
+  rclcpp
+  teleop_msgs
+)
+
 
 install(TARGETS
   g923_debug
@@ -78,6 +89,7 @@ install(TARGETS
   g923_teleop_node
   rs50_teleop_node
   command_gate
+  cpmmand_gate_forsingletest
   DESTINATION lib/${PROJECT_NAME}
 )
 
