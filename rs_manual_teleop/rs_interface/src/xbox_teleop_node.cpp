@@ -1,6 +1,7 @@
 #include "rclcpp/rclcpp.hpp"
 #include "sensor_msgs/msg/joy.hpp"
 #include <algorithm>
+#include <cmath>
 #include <memory>
 
 #include "teleop_msgs/msg/teleop_command.hpp"
@@ -18,12 +19,16 @@ using CmdEnums = teleop_msgs::msg::CommandEnums;
 //  ─────────────────────────────────────────────────────────
 //  0  │ Left Stick  X    │ -1.0 = esquerda, +1.0 = direita
 //  1  │ Left Stick  Y    │ +1.0 = cima,     -1.0 = baixo
-//  2  │ LT (Travão)      │  0.0 = solto,    +1.0 = fundo
+//  2  │ LT (Travão)      │ +1.0 = solto,    -1.0 = fundo
 //  3  │ Right Stick X    │ -1.0 = esquerda, +1.0 = direita
 //  4  │ Right Stick Y    │ +1.0 = cima,     -1.0 = baixo
-//  5  │ RT (Acelerador)  │  0.0 = solto,    +1.0 = fundo
+//  5  │ RT (Acelerador)  │ +1.0 = solto,    -1.0 = fundo
 //  6  │ D-Pad X          │ -1.0 = esq,      +1.0 = dir
 //  7  │ D-Pad Y          │ +1.0 = cima,     -1.0 = baixo
+//
+//  NOTA: os gatilhos estão em repouso a +1.0 (tal como os pedais do RS50).
+//  Se no teu setup estiverem em repouso a -1.0, muda TRIGGER_REST_VALUE.
+//  Confirma com: ros2 topic echo /joy
 //
 //  BOTÕES (buttons[])
 //  ─────────────────────────────────────────────────────────
@@ -66,8 +71,8 @@ public:
 private:
     // --- Eixos ---
     const int AXIS_STEERING  = 0;  // Left Stick X
-    const int AXIS_BRAKE     = 2;  // LT  — 0.0=solto, 1.0=fundo
-    const int AXIS_THROTTLE  = 5;  // RT  — 0.0=solto, 1.0=fundo
+    const int AXIS_BRAKE     = 2;  // LT  — travão
+    const int AXIS_THROTTLE  = 5;  // RT  — acelerador
     const int AXIS_DPAD_X    = 6;  // D-Pad horizontal
     const int AXIS_DPAD_Y    = 7;  // D-Pad vertical
 
@@ -83,7 +88,8 @@ private:
     const int BUTTON_LS      = 9;  // Alternar vídeo / pointcloud
 
     // --- Constantes ---
-    const float MAX_STEERING_RAD  =  0.5f;  // Ângulo máximo de direção (~28.6°)
+    const float MAX_STEERING_RAD    = 0.5f;  // Ângulo máximo de direção (~28.6°)
+    const double TRIGGER_REST_VALUE = 1.0;   // Valor do gatilho em repouso (+1.0 solto, -1.0 fundo)
 
     // --- Extra Variables ---
 
@@ -97,7 +103,7 @@ private:
     {
         auto start_time = this->now();
 
-        // O comando Xbox necessita de pelo menos 8 eixos e 8 botões
+        // O comando Xbox necessita de pelo menos 8 eixos e 10 botões
         if (msg->axes.size() < 8 || msg->buttons.size() < 10) {
             RCLCPP_WARN_ONCE(this->get_logger(),
                 "Mensagem JOY incompleta. Esperados >= 8 eixos e >= 10 botões.");
@@ -111,12 +117,18 @@ private:
         bool change_engage_state = engage_button_1 && engage_button_2;
 
         // ── 2. VELOCIDADE (Acelerador e Travão) ────────────────────────────────
-        double normalized_throttle = static_cast<double>(msg->axes[AXIS_THROTTLE]);
-        double normalized_brake    = static_cast<double>(msg->axes[AXIS_BRAKE]);
+        // RT = acelerador, LT = travão.
+        float throttle_input = msg->axes[AXIS_THROTTLE];
+        float brake_input    = msg->axes[AXIS_BRAKE];
+
+        // Converte [repouso (1.0) → fundo (-1.0)] para [0.0 → 1.0]
+        double normalized_throttle = std::abs((throttle_input - TRIGGER_REST_VALUE) / 2.0);
+        double normalized_brake    = std::abs((brake_input    - TRIGGER_REST_VALUE) / 2.0);
 
         float target_vlc = 0.0f;
 
-        if (normalized_brake > 0.05) {
+        // Se o travão estiver pressionado (ou o acelerador solto) a velocidade alvo é 0.0
+        if (normalized_brake > 0.05 || normalized_throttle < 0.05) {
             target_vlc = 0.0f;
         } else {
             target_vlc = static_cast<float>(normalized_throttle);
@@ -158,10 +170,10 @@ private:
 
         // ── 5. PISCAS E LUZES DE PERIGO ────────────────────────────────────────
         // Right(1), Left(2), Hazard(3)
-        bool turn_right   = msg->buttons[BUTTON_RB];
-        bool turn_left    = msg->buttons[BUTTON_LB];
+        bool turn_right    = msg->buttons[BUTTON_RB];
+        bool turn_left     = msg->buttons[BUTTON_LB];
         bool hazard_signal = msg->buttons[BUTTON_Y];
-        bool uplink_mode  = msg->buttons[BUTTON_LS];
+        bool uplink_mode   = msg->buttons[BUTTON_LS];
 
         int turn_signal = CmdEnums::TURN_OFF;
 
