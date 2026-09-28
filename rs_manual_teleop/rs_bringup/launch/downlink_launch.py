@@ -94,7 +94,7 @@ def generate_launch_description():
             'teleop_msgs/msg/NetworkMetrics',
             '{latency_ms: 1.0, lost_pkg: 0}'
         ],
-        output='screen'
+        output='log'
     )
 
     # =========================================================================
