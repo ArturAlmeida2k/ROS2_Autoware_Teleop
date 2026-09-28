@@ -20,8 +20,11 @@ protected:
 private:
     void setSingleCameraMode(bool single);
     void reposition_overlays();
+    void onTelemetryUpdated();
+    void updateActivePage();
  
     bool is_single_camera_ = false;
+    uint32_t last_displayed_telemetry_id_ = 0;
  
     QStackedWidget* stack_widget_   = nullptr;
     QWidget*        tab_quad_view_  = nullptr;

@@ -95,44 +95,67 @@ MainWindow::MainWindow(RosBridge* bridge, QWidget* parent)
     speed_->show();
     speed_->raise();
 
-    auto* telemetry_timer = new QTimer(this);
-    connect(telemetry_timer, &QTimer::timeout, this, [this]() {
-        TelemetryState msg;
-        int64_t rx_time_ns;
-        if (!bridge_->latestTelemetry(msg, rx_time_ns)) return;
+    // Telemetria orientada a eventos (ver RosBridge: coalescência, sem
+    // backlog). Substitui o QTimer de 30 Hz, que mostrava sempre a última
+    // amostra com 0–20 ms de idade (média ~10 ms só de espera).
+    connect(bridge_, &RosBridge::telemetryUpdated,
+            this, &MainWindow::onTelemetryUpdated, Qt::QueuedConnection);
 
-        speed_->setVelocity(msg.velocity_kmh);
-        speed_->setGear(msg.gear);
-        speed_->setTurnSignal(msg.turn_signal);
-        panel_->onTelemetryReceived(msg);
-
-        const int64_t display_time_ns = bridge_->nowNanoseconds();
-        const double full_ms = bridge_->publishTelemetryGuiMetrics(
-            msg.id, msg.origin_stamp, msg.e2e_command_ms, rx_time_ns, display_time_ns);
-        panel_->setLoopLatency(full_ms);
-
-        QWidget* target = (bridge_->currentUplinkMode() == CmdEnums::UPLINK_POINTCLOUD)
-                               ? tab_pointcloud_ : tab_quad_view_;
-        if (stack_widget_->currentWidget() != target) {
-            stack_widget_->setCurrentWidget(target);
-            // setCurrentWidget traz a página nova para cima de tudo o que
-            // está no stack_widget_ — incluindo o panel_/speed_, que só
-            // foram raise()ados uma vez no arranque. Sem isto, a
-            // telemetria fica tapada assim que troca de página.
-            panel_->raise();
-            speed_->raise();
-            // A posição depende de qual página está ativa (ver
-            // reposition_overlays), por isso recalcula ao trocar.
-            reposition_overlays();
-        }
-    });
-    telemetry_timer->start(33); // ~30Hz, desacoplado da taxa de origem (50Hz)
+    // A troca vídeo/pointcloud não é sensível à latência e não deve
+    // depender de haver telemetria, por isso tem o seu próprio timer.
+    auto* page_timer = new QTimer(this);
+    connect(page_timer, &QTimer::timeout, this, &MainWindow::updateActivePage);
+    page_timer->start(50);
 
     resize(1440, 900);
 
     // A geometria só está resolvida depois do primeiro ciclo de eventos,
     // por isso o posicionamento inicial do velocímetro é adiado.
     QTimer::singleShot(0, this, [this]() { reposition_overlays(); });
+}
+
+// ---------------------------------------------------------------------
+void MainWindow::onTelemetryUpdated()
+{
+    // Limpar ANTES de ler: uma chegada a partir daqui gera novo evento,
+    // por isso nunca se perde a última amostra.
+    bridge_->clearTelemetryPending();
+
+    TelemetryState msg;
+    int64_t rx_time_ns;
+    if (!bridge_->latestTelemetry(msg, rx_time_ns)) return;
+
+    // Pode haver um evento extra com a mesma amostra (corrida entre o clear
+    // e a leitura) — não redesenhar nem duplicar a métrica.
+    if (msg.id == last_displayed_telemetry_id_) return;
+    last_displayed_telemetry_id_ = msg.id;
+
+    speed_->setVelocity(msg.velocity_kmh);
+    speed_->setGear(msg.gear);
+    speed_->setTurnSignal(msg.turn_signal);
+    panel_->onTelemetryReceived(msg);
+
+    const int64_t display_time_ns = bridge_->nowNanoseconds();
+    const double full_ms = bridge_->publishTelemetryGuiMetrics(
+        msg.id, msg.origin_stamp, msg.e2e_command_ms, rx_time_ns, display_time_ns);
+    panel_->setLoopLatency(full_ms);
+}
+
+// ---------------------------------------------------------------------
+void MainWindow::updateActivePage()
+{
+    QWidget* target = (bridge_->currentUplinkMode() == CmdEnums::UPLINK_POINTCLOUD)
+                           ? tab_pointcloud_ : tab_quad_view_;
+    if (stack_widget_->currentWidget() == target) return;
+
+    stack_widget_->setCurrentWidget(target);
+    // setCurrentWidget traz a página nova para cima de tudo o que está no
+    // stack_widget_ — incluindo o panel_/speed_. Sem isto, a telemetria
+    // fica tapada assim que troca de página.
+    panel_->raise();
+    speed_->raise();
+    // A posição depende de qual página está ativa, por isso recalcula.
+    reposition_overlays();
 }
 
 // ---------------------------------------------------------------------

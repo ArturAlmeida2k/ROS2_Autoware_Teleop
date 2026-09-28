@@ -4,6 +4,7 @@ from rclpy.node import Node
 from rclpy.serialization import deserialize_message
 from rclpy.time import Time
 import socket
+import threading
 
 from std_msgs.msg import Int8
 
@@ -33,9 +34,15 @@ class InputTeleopDecoder(Node):
         
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.bind(('0.0.0.0', self.port))
-        self.sock.setblocking(False)
+        # Socket bloqueante numa thread dedicada: o pacote é lido e carimbado
+        # assim que o kernel o entrega, em vez de esperar pelo próximo tick
+        # de um timer de polling (o antigo create_timer de 5 ms acrescentava
+        # 0–5 ms uniformes a cada pacote). O timeout só serve para a thread
+        # conseguir verificar rclpy.ok() e terminar no shutdown.
+        self.sock.settimeout(0.5)
 
-        self.create_timer(0.005, self.receive_packet)  # 200Hz
+        self.rx_thread = threading.Thread(target=self.receive_loop, daemon=True)
+        self.rx_thread.start()
 
         self.get_logger().info(f"Command Decoder → {self.port} from {self.allowed_ip}")
 
@@ -59,8 +66,8 @@ class InputTeleopDecoder(Node):
         
         self.pub_metrics.publish(metrics_msg)
 
-    def receive_packet(self):
-        while True:
+    def receive_loop(self):
+        while rclpy.ok():
             try:
                 data, addr = self.sock.recvfrom(65535)
 
@@ -88,12 +95,14 @@ class InputTeleopDecoder(Node):
 
                 self.publish_metrics(msg.id, start_time, incoming_stamp)
                 
-            except BlockingIOError:
+            except socket.timeout:
+                continue
+            except OSError:
+                # Socket fechado no shutdown.
                 break
             except Exception as e:
                 if rclpy.ok():
                     self.get_logger().error(f"Erro: {e}")
-                break
 
 def main(args=None):
     rclpy.init(args=args)

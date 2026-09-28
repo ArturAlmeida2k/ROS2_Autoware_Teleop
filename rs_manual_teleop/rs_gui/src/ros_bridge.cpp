@@ -23,10 +23,22 @@ RosBridge::RosBridge(QObject* parent)
 
             publish_metric(pub_telemetry_decoder_, msg->id, tempo_rececao, rclcpp::Time(msg->header.stamp));
 
-            std::lock_guard<std::mutex> lock(telemetry_mutex_);
-            latest_telemetry_ = *msg;
-            latest_telemetry_rx_time_ns_ = tempo_rececao.nanoseconds();
-            has_telemetry_ = true;
+            {
+                std::lock_guard<std::mutex> lock(telemetry_mutex_);
+                latest_telemetry_ = *msg;
+                latest_telemetry_rx_time_ns_ = tempo_rececao.nanoseconds();
+                has_telemetry_ = true;
+            }
+
+            // Atualização orientada a eventos com coalescência: só se põe um
+            // evento na fila do Qt se não houver já um pendente. Se a GUI se
+            // atrasar, as chegadas intermédias são simplesmente absorvidas
+            // (o slot lê sempre a mais recente), por isso não há backlog —
+            // o problema que tinha levado ao QTimer de 30 Hz — mas também
+            // não há os 0–20 ms de espera que esse timer introduzia.
+            if (!telemetry_update_pending_.exchange(true, std::memory_order_acq_rel)) {
+                emit telemetryUpdated();
+            }
         });
 
     sub_pointcloud_ = create_subscription<PointCloud2>(
