@@ -4,6 +4,7 @@ from launch.actions import DeclareLaunchArgument, ExecuteProcess
 from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
 
 
 def generate_launch_description():
@@ -22,9 +23,13 @@ def generate_launch_description():
     )
     controller = LaunchConfiguration('controller')
 
-    # =========================================================================
-    # Captura do input físico
-    # =========================================================================
+    max_velocity_arg = DeclareLaunchArgument(
+        'max_vlc',
+        default_value='10.0',
+        description="Velocidade máxima permitida em km/h (pedal a fundo)"
+    )
+    max_velocity = LaunchConfiguration('max_vlc')
+
     joy_node = Node(
         package='joy',
         executable='joy_node',
@@ -68,25 +73,14 @@ def generate_launch_description():
         condition=IfCondition(PythonExpression(["'", controller, "' == 'xbox'"]))
     )
 
-    # =========================================================================
-    # Lado RS: filtragem
-    # =========================================================================
-    # Versão de teste, sem verificação de telemetria (ver
-    # cpmmand_gate_forsingletest.cpp) — sem isto nada passaria, porque não
-    # há nenhum /teleop/telemetry real a chegar sem os nós de rede.
     command_gate_test_node = Node(
         package="rs_interface",
         executable='cpmmand_gate_forsingletest',
         name='command_gate',
-        output='screen'
+        output='screen',
+        parameters=[{'max_velocity_kmh': ParameterValue(max_velocity, value_type=float)}]
     )
 
-    # =========================================================================
-    # "Rede saudável" falsa — só para desbloquear o topic_monitor, que de
-    # outra forma nunca recebe nada (isso normalmente vem do
-    # input_teleop_decoder, que aqui não está a correr) e o safety_gate
-    # fica preso em STATE_ERROR para sempre. topic_monitor e safety_gate
-    # em si não são tocados, correm exatamente como no sistema real.
     fake_network_health = ExecuteProcess(
         cmd=[
             'ros2', 'topic', 'pub', '-r', '50',
@@ -97,12 +91,6 @@ def generate_launch_description():
         output='log'
     )
 
-    # =========================================================================
-    # Lado VH: segurança e ligação ao Autoware
-    # (assume-se que o Autoware/AWSIM já está a correr à parte — não faz
-    # parte deste launch, tal como não faz parte de nenhum dos pacotes
-    # desenvolvidos neste trabalho.)
-    # =========================================================================
     topic_monitor_node = Node(
         package='vh_teleop_to_autoware',
         executable='topic_monitor',
@@ -127,6 +115,7 @@ def generate_launch_description():
     return LaunchDescription([
         device_id_arg,
         controller_arg,
+        max_velocity_arg,
         joy_node,
         throttle_node,
         rs50_teleop_node,

@@ -20,6 +20,13 @@ class CommandGate : public rclcpp::Node
 public:
     CommandGate() : Node("command_gate")
     {
+        MAX_VLC_ = static_cast<float>(this->declare_parameter<double>("max_vlc", 10.0));
+        if (MAX_VLC_ <= 0.0f) {
+            RCLCPP_WARN(this->get_logger(), "max_velocity_kmh inválido (%.2f) — a usar 10 km/h.", MAX_VLC_);
+            MAX_VLC_ = 10.0f;
+        }
+        RCLCPP_INFO(this->get_logger(), "Velocidade máxima: %.1f km/h", MAX_VLC_);
+
         // --- 1. Publishers ---
         pub_final_command_ = this->create_publisher<TeleopCommand>("/teleop/command", 10);
 
@@ -67,15 +74,10 @@ public:
     }
 
 private:
-    static constexpr float MAX_VLC_ = 10.0f; // km/h
+    float MAX_VLC_ = 10.0f; // km/h — definido pelo parâmetro max_velocity_kmh
 
     // --- Variáveis de Leitura da Telemetria ---
-    // >>> SÓ PARA TESTE DE DOWNLINK, SEM VH LIGADO <<<
-    // Forçado a REMOTE porque não há telemetria real a chegar para o
-    // definir. Reverter para "= 0;" antes de qualquer teste com o sistema
-    // completo (VH + telemetria) — com isto fixo, o command_gate nunca
-    // deteta se o veículo saiu de REMOTE.
-    int current_mode_ = CmdEnums::OPERATION_MODE_REMOTE;
+    int current_mode_ = 0;
     bool current_engage_status_ = false;
     float current_velocity_ = 0.0f;
     int current_turn_signal_ = 0;
@@ -152,16 +154,11 @@ private:
         final_msg->origin_stamp = msg->origin_stamp;
         final_msg->id = msg->id;
 
-        // >>> SÓ PARA TESTE DE DOWNLINK, SEM VH LIGADO <<<
-        // Sem isto, nenhum comando passa nunca, porque is_telemetry_valid_
-        // só fica true quando chega uma mensagem real em /teleop/telemetry.
-        // Reverter este "if" (e o current_mode_ acima) antes de testar com
-        // o VH real — sem eles, perdes o watchdog de telemetria E a
-        // deteção de saída do modo REMOTE, que são proteções de segurança.
-        // if (!is_telemetry_valid_) {
-        //     RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000, "Sem telemetria válida. Comandos suprimidos.");
-        //     return; 
-        // }
+        // Se não houver telemetria ativa
+        if (!is_telemetry_valid_) {
+            RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000, "Sem telemetria válida. Comandos suprimidos.");
+            return; 
+        }
 
         // -------------------------------------------------------------
         // 2. LÓGICA DO ENGAGE (Deteção de Flanco Positivo)
