@@ -110,7 +110,7 @@ private:
             
             is_telemetry_valid_ = false;
 
-            current_mode_ = 0; 
+            current_mode_ = CmdEnums::OPERATION_MODE_REMOTE; 
             current_velocity_ = 0.0f;
             current_gear_ = 0;
 
@@ -153,12 +153,6 @@ private:
         final_msg->header.frame_id = "command_gate";  
         final_msg->origin_stamp = msg->origin_stamp;
         final_msg->id = msg->id;
-
-        // Se não houver telemetria ativa
-        if (!is_telemetry_valid_) {
-            RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000, "Sem telemetria válida. Comandos suprimidos.");
-            return; 
-        }
 
         // -------------------------------------------------------------
         // 2. LÓGICA DO ENGAGE (Deteção de Flanco Positivo)

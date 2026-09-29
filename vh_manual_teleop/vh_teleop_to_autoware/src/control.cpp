@@ -47,7 +47,7 @@ public:
             "/system/operation_mode/state", 10,
             std::bind(&AutowareControllerNode::operation_mode_callback, this, std::placeholders::_1));
 
-        // 2. Publicadores Autoware (GateMode removido)
+        // 2. Publicadores Autoware 
         pub_control_cmd_     = this->create_publisher<Control>("/external/selected/control_cmd", rclcpp::QoS(1));
         pub_gear_cmd_        = this->create_publisher<GearCommand>("/external/selected/gear_cmd", 1);
         pub_turn_indicators_ = this->create_publisher<TurnIndicatorsCommand>("/external/selected/turn_indicators_cmd", 1);
