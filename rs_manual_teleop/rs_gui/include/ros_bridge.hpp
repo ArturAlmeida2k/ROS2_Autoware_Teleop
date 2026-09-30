@@ -38,6 +38,7 @@ public:
     void publishFrontCameraMetrics(uint32_t frame_id, double latency_ms);
     void publishFrontCameraNetwork(uint32_t frame_id, double latency_ms);
     void publishFrontCameraDecode(uint32_t frame_id, double latency_ms);
+    void publishFrontCameraEncode(uint32_t frame_id, double latency_ms);
     void publishPointCloudMetrics(uint32_t id, double latency_ms);
 
     signals:
@@ -58,6 +59,7 @@ private:
     rclcpp::Publisher<Metrics>::SharedPtr pub_front_camera_;
     rclcpp::Publisher<Metrics>::SharedPtr pub_front_camera_network_;
     rclcpp::Publisher<Metrics>::SharedPtr pub_front_camera_decode_;
+    rclcpp::Publisher<Metrics>::SharedPtr pub_front_camera_encode_;
     rclcpp::Publisher<Metrics>::SharedPtr pub_pointcloud_;
 
     rclcpp::executors::SingleThreadedExecutor         executor_;

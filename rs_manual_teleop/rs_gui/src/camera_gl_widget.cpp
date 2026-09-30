@@ -264,6 +264,12 @@ GstPadProbeReturn CameraGLWidget::pad_probe_callback(GstPad *pad, GstPadProbeInf
                 double network_ms = diff_ns / 1000000.0;
                 emit widget->networkLatencyUpdated(frame_id, network_ms);
 
+                // METRICA 0 — encode no VH (captura -> saída do encoder).
+                // TS e TS2 são ambos do relógio do VH: diferença exata, sem
+                // erro de sincronização entre máquinas.
+                double encode_ms = ((int64_t)ts2_ns - (int64_t)ts_ns) / 1000000.0;
+                emit widget->encodeLatencyUpdated(frame_id, encode_ms);
+
                 {
                     std::lock_guard<std::mutex> lock(widget->queue_mutex_);
                     while (widget->sei_queue_.size() > 3) {

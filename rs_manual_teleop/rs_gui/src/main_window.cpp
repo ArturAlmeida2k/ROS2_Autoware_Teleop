@@ -45,6 +45,11 @@ MainWindow::MainWindow(RosBridge* bridge, QWidget* parent)
         bridge_->publishFrontCameraDecode(static_cast<uint32_t>(frame_id), latency_ms);
     }, Qt::QueuedConnection);
 
+    connect(cam_front_, &CameraGLWidget::encodeLatencyUpdated, this,
+            [this](uint64_t frame_id, double latency_ms) {
+        bridge_->publishFrontCameraEncode(static_cast<uint32_t>(frame_id), latency_ms);
+    }, Qt::QueuedConnection);
+
     grid->addWidget(cam_left_,  0, 0, 2, 1);
     grid->addWidget(cam_front_, 0, 1, 1, 1);
     grid->addWidget(cam_back_,  1, 1, 1, 1);

@@ -20,6 +20,7 @@ signals:
     void latencyUpdated(uint64_t frame_id, double latency_ms);
     void networkLatencyUpdated(uint64_t frame_id, double latency_ms);
     void decodeLatencyUpdated(uint64_t frame_id, double latency_ms);
+    void encodeLatencyUpdated(uint64_t frame_id, double latency_ms);
 
 protected:
     void initializeGL() override;

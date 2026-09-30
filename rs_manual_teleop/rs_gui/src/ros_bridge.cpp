@@ -14,6 +14,7 @@ RosBridge::RosBridge(QObject* parent)
     pub_front_camera_      = this->create_publisher<Metrics>("/metrics/front_camera", metrics_qos);
     pub_front_camera_network_ = this->create_publisher<Metrics>("/metrics/front_camera_network", metrics_qos);
     pub_front_camera_decode_  = this->create_publisher<Metrics>("/metrics/front_camera_decode", metrics_qos);
+    pub_front_camera_encode_  = this->create_publisher<Metrics>("/metrics/front_camera_encode", metrics_qos);
     pub_pointcloud_   = this->create_publisher<Metrics>("/metrics/pointcloud_gui", metrics_qos);
     
     sub_telemetry_ = create_subscription<TelemetryState>(
@@ -138,6 +139,16 @@ void RosBridge::publishFrontCameraDecode(uint32_t frame_id, double latency_ms)
     msg->rx = this->now();
     msg->latency_ms = latency_ms;
     pub_front_camera_decode_->publish(std::move(msg));
+}
+
+void RosBridge::publishFrontCameraEncode(uint32_t frame_id, double latency_ms)
+{
+    auto msg = std::make_unique<Metrics>();
+    msg->id = frame_id;
+    msg->tx = this->now();
+    msg->rx = this->now();
+    msg->latency_ms = latency_ms;
+    pub_front_camera_encode_->publish(std::move(msg));
 }
 
 void RosBridge::publishPointCloudMetrics(uint32_t id, double latency_ms)
