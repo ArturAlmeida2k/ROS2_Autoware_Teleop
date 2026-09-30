@@ -183,6 +183,7 @@ void CameraGLWidget::start_pipeline(int port)
         "caps=\"application/x-rtp, media=video, clock-rate=90000, encoding-name=H264, payload=96\" ! "
         "rtpjitterbuffer latency=0 drop-on-latency=true ! "
         "rtph264depay ! "
+        "video/x-h264,alignment=au ! "
         "h264parse name=parser ! "
         "video/x-h264,stream-format=byte-stream,alignment=au ! "
         "queue max-size-buffers=5 max-size-bytes=0 max-size-time=0 ! "
