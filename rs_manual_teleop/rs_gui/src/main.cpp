@@ -19,7 +19,6 @@ int main(int argc, char* argv[])
     qRegisterMetaType<PointCloud2::SharedPtr>("PointCloud2::SharedPtr");
 
     auto* bridge = new RosBridge();
-    bridge->spin();
 
     rclcpp::on_shutdown([]() {
         QMetaObject::invokeMethod(qApp, "quit", Qt::QueuedConnection);
@@ -27,6 +26,8 @@ int main(int argc, char* argv[])
 
     MainWindow window(bridge);
     window.show();
+
+    bridge->spin();
 
     int ret = app.exec();
 
