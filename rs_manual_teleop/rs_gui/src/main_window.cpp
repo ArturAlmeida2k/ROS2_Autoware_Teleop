@@ -32,7 +32,9 @@ MainWindow::MainWindow(RosBridge* bridge, QWidget* parent)
     connect(cam_front_, &CameraGLWidget::latencyUpdated, this,
             [this](uint64_t frame_id, double latency_ms) {
         bridge_->publishFrontCameraMetrics(static_cast<uint32_t>(frame_id), latency_ms);
-        if (panel_) panel_->setVideoLatency(latency_ms);
+        // Só mostra a latência de vídeo quando é o vídeo que está no ecrã.
+        if (panel_ && stack_widget_->currentWidget() == tab_quad_view_)
+            panel_->setVideoLatency(latency_ms);
     }, Qt::QueuedConnection);
 
     connect(cam_front_, &CameraGLWidget::networkLatencyUpdated, this,
@@ -82,6 +84,9 @@ MainWindow::MainWindow(RosBridge* bridge, QWidget* parent)
     connect(pc_widget_, &PointCloudGLWidget::displayLatencyUpdated, this,
         [this](uint32_t id, double latency_ms) {
         bridge_->publishPointCloudMetrics(id, latency_ms);
+        // No modo pointcloud, o cartão de latência passa a mostrar esta.
+        if (panel_ && stack_widget_->currentWidget() == tab_pointcloud_)
+            panel_->setVideoLatency(latency_ms);
     }, Qt::QueuedConnection);
 
     // =====================================================================
@@ -154,6 +159,7 @@ void MainWindow::updateActivePage()
     if (stack_widget_->currentWidget() == target) return;
 
     stack_widget_->setCurrentWidget(target);
+    panel_->setPointCloudMode(target == tab_pointcloud_);
     // setCurrentWidget traz a página nova para cima de tudo o que está no
     // stack_widget_ — incluindo o panel_/speed_. Sem isto, a telemetria
     // fica tapada assim que troca de página.

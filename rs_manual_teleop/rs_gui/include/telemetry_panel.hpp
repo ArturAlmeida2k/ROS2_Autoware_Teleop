@@ -16,6 +16,7 @@ public:
 public slots:
     void onTelemetryReceived(TelemetryState msg);
     void setVideoLatency(double latency_ms);
+    void setPointCloudMode(bool pointcloud);
     void setLoopLatency(double latency_ms);
  
 private:
@@ -23,7 +24,9 @@ private:
     QLabel* lbl_engage_  = nullptr;
     QLabel* lbl_network_ = nullptr;
     QLabel* lbl_latency_ = nullptr;
+    QLabel* lbl_latency_title_ = nullptr;
     QLabel* lbl_loop_    = nullptr;
  
-    QWidget* make_card(const QString& title, QLabel*& value_label);
+    QWidget* make_card(const QString& title, QLabel*& value_label,
+                       QLabel** title_out = nullptr);
 };

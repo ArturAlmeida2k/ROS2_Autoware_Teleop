@@ -43,12 +43,14 @@ TelemetryPanel::TelemetryPanel(QWidget* parent)
     layout->addWidget(make_card("MODE",              lbl_mode_    = make_value(18)));
     layout->addWidget(make_card("ENGAGE",            lbl_engage_  = make_value(13)));
     layout->addWidget(make_card("LINK",              lbl_network_ = make_value(13)));
-    layout->addWidget(make_card("VIDEO LATENCY (ms)", lbl_latency_ = make_value(18)));
+    layout->addWidget(make_card("VIDEO LATENCY (ms)", lbl_latency_ = make_value(18),
+                                &lbl_latency_title_));
     layout->addWidget(make_card("FULL LOOP (ms)",     lbl_loop_    = make_value(18)));
     layout->addStretch();
 }
 
-QWidget* TelemetryPanel::make_card(const QString& title, QLabel*& value_label)
+QWidget* TelemetryPanel::make_card(const QString& title, QLabel*& value_label,
+                                   QLabel** title_out)
 {
     auto* frame = new QFrame();
     frame->setObjectName("card");
@@ -56,7 +58,9 @@ QWidget* TelemetryPanel::make_card(const QString& title, QLabel*& value_label)
     auto* vl = new QVBoxLayout(frame);
     vl->setContentsMargins(8, 6, 8, 6);
     vl->setSpacing(2);
-    vl->addWidget(make_title(title));
+    QLabel* title_label = make_title(title);
+    if (title_out) *title_out = title_label;
+    vl->addWidget(title_label);
     vl->addWidget(value_label);
     return frame;
 }
@@ -119,6 +123,14 @@ void TelemetryPanel::setVideoLatency(double latency_ms)
         lbl_latency_->setStyleSheet(
             "color: #e74c3c; background: transparent; font-weight: bold;");
     }
+}
+
+void TelemetryPanel::setPointCloudMode(bool pointcloud)
+{
+    lbl_latency_title_->setText(pointcloud ? "POINTCLOUD LATENCY (ms)"
+                                           : "VIDEO LATENCY (ms)");
+    lbl_latency_->setText("–");
+    lbl_latency_->setStyleSheet("color: #cdd6f4; background: transparent;");
 }
 
 void TelemetryPanel::setLoopLatency(double latency_ms)
