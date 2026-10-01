@@ -103,6 +103,14 @@ class PointCloudDecoder(Node):
             msg = deserialize_message(payload, PointCloud2)
             sensor_stamp = msg.header.stamp
 
+            # O stamp original vem do Autoware/AWSIM, que usa tempo de
+            # simulação (segundos desde o arranque do simulador), não o
+            # relógio de parede. Comparado com o relógio do RS dava valores
+            # absurdos (~1.8e12 ms) no GUI. Passa-se a usar o instante de
+            # entrada no encoder do VH (relógio de parede, sincronizado por
+            # chrony) — o mesmo ponto de partida que a captura no vídeo.
+            msg.header.stamp = Time(nanoseconds=ingress_ns).to_msg()
+
             msg.header.frame_id = f"{msg.header.frame_id}#{seq_id}"
 
             self.pub_pointcloud.publish(msg)
@@ -128,13 +136,23 @@ class PointCloudDecoder(Node):
         self.pub_network.publish(net)
 
         # Sensor -> estação: inclui o tempo de percepção e de serialização.
-        e2e = NodeMetrics()
-        e2e.id = seq_id
-        e2e.tx = sensor_stamp
-        e2e.rx = rx_msg
-        e2e.latency_ms = (
-            rx_time - Time.from_msg(sensor_stamp)).nanoseconds / 1e6
-        self.pub_e2e.publish(e2e)
+        # Só faz sentido se o stamp do sensor estiver no relógio de parede.
+        # Com o Autoware em tempo de simulação dá valores absurdos, por isso
+        # não se publica (em vez de sujar o rosbag) e avisa-se uma vez.
+        e2e_ms = (rx_time.nanoseconds
+                  - Time.from_msg(sensor_stamp).nanoseconds) / 1e6
+        if 0.0 <= e2e_ms < 60000.0:
+            e2e = NodeMetrics()
+            e2e.id = seq_id
+            e2e.tx = sensor_stamp
+            e2e.rx = rx_msg
+            e2e.latency_ms = e2e_ms
+            self.pub_e2e.publish(e2e)
+        else:
+            self.get_logger().warn(
+                "Stamp do sensor não está no relógio de parede (tempo de "
+                "simulação?) — /metrics/e2e_pointcloud_latency não publicado.",
+                once=True)
 
     def shutdown(self):
         self._running = False
