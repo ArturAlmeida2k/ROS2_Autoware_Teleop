@@ -5,7 +5,6 @@
 #include <QPainter>
 #include <QFont>
 #include <chrono>
-#include <cstdio>
 #include <cstring>
 
 static const char *VERT_SRC = R"(#version 330 core
@@ -179,14 +178,14 @@ void CameraGLWidget::start_pipeline(int port)
     std::string pipeline_str =
         "udpsrc port=" + std::to_string(port) + " "
         "caps=\"application/x-rtp, media=video, clock-rate=90000, encoding-name=H264, payload=96\" ! "
-        "rtpjitterbuffer name=jb latency=0 drop-on-latency=true ! "
+        "rtpjitterbuffer latency=0 drop-on-latency=true ! "
         "rtph264depay ! "
         "video/x-h264,alignment=au ! "
         "h264parse name=parser ! "
         "video/x-h264,stream-format=byte-stream,alignment=au ! "
         "queue max-size-buffers=5 max-size-bytes=0 max-size-time=0 ! "
-        "avdec_h264 name=dec max-threads=4 ! "
-        "videoconvert name=conv n-threads=4 ! "
+        "avdec_h264 max-threads=4 ! "
+        "videoconvert n-threads=4 ! "
         "video/x-raw,format=RGB ! "
         "appsink name=mysink sync=false max-buffers=2 emit-signals=true";
 
@@ -194,7 +193,7 @@ void CameraGLWidget::start_pipeline(int port)
     pipeline_ = gst_parse_launch(pipeline_str.c_str(), &error);
 
     if (error) {
-        qWarning() << "Erro GStreamer:" << error->message;
+        qWarning() << "GStreamer error:" << error->message;
         g_error_free(error);
         return;
     }
@@ -210,22 +209,11 @@ void CameraGLWidget::start_pipeline(int port)
     g_signal_connect(appsink, "new-sample", G_CALLBACK(on_new_sample), this);
     gst_object_unref(appsink);
 
-    diag_.attach(pipeline_);
     gst_element_set_state(pipeline_, GST_STATE_PLAYING);
-
-    if (!diag_timer_) {
-        diag_timer_ = new QTimer(this);
-        connect(diag_timer_, &QTimer::timeout, this, [this]() {
-            std::fprintf(stderr, "[%s] RS video: %s\n",
-                         label_.toStdString().c_str(), diag_.summary().c_str());
-        });
-    }
-    diag_timer_->start(10000);
 }
 
 void CameraGLWidget::stop_pipeline()
 {
-    if (diag_timer_) diag_timer_->stop();
     if (pipeline_) {
         gst_element_set_state(pipeline_, GST_STATE_NULL);
         gst_object_unref(pipeline_);
@@ -297,7 +285,6 @@ GstPadProbeReturn CameraGLWidget::pad_probe_callback(GstPad *pad, GstPadProbeInf
 GstFlowReturn CameraGLWidget::on_new_sample(GstElement *sink, gpointer user_data)
 {
     auto *widget = static_cast<CameraGLWidget*>(user_data);
-    widget->diag_.mark_appsink();
     GstSample *sample;
     g_signal_emit_by_name(sink, "pull-sample", &sample);
 

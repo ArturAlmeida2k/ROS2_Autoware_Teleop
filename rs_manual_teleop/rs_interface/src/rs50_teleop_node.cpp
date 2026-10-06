@@ -24,7 +24,7 @@ public:
             "/joy_throttled", 10, 
             std::bind(&RS50TeleopNode::joy_callback, this, std::placeholders::_1));
 
-        RCLCPP_INFO(this->get_logger(), "Nó RS50 Teleop iniciado. Mapeamento de controlo ativo. Publicando em /teleop/raw_command.");
+        RCLCPP_INFO(this->get_logger(), "RS50 teleop started, publishing on /teleop/raw_command.");
     }
 
 private:

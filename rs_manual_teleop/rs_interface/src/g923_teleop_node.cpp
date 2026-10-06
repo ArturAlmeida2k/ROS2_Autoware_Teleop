@@ -23,7 +23,7 @@ public:
             "/joy_throttled", 10, 
             std::bind(&G923TeleopNode::joy_callback, this, std::placeholders::_1));
 
-        RCLCPP_INFO(this->get_logger(), "Nó G923 Teleop iniciado. Mapeamento de controlo ativo. Publicando em /teleop/raw_command.");
+        RCLCPP_INFO(this->get_logger(), "G923 teleop started, publishing on /teleop/raw_command.");
     }
 
 private:

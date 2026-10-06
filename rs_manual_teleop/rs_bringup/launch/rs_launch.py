@@ -13,42 +13,42 @@ def generate_launch_description():
     device_id_arg = DeclareLaunchArgument(
         'device_id',
         default_value='0',
-        description="ID do dispositivo (Logitech ou Xbox) no sistema"
+        description="Joystick device ID (Logitech or Xbox)"
     )
     device_id_config = LaunchConfiguration('device_id')
 
     controller_arg = DeclareLaunchArgument(
         'controller',
         default_value='rs50',
-        description="Escolher o tipo de controlador usado para controlar o carro: 'rs50'(default), 'g923', ou 'xbox'"
+        description="Controller type: 'rs50' (default), 'g923' or 'xbox'"
     )
     controller = LaunchConfiguration('controller')
 
     ip_address_arg = DeclareLaunchArgument(
         'ip_address',
         default_value='10.0.0.1',
-        description="Endereço IP para os nós de rede."
+        description="IP address used by the network nodes"
     )
     ip_address = LaunchConfiguration('ip_address')
 
     input_port_arg = DeclareLaunchArgument(
         'input_port',
         default_value='5005',
-        description="Porta UDP para o input_teleop_encoder"
+        description="UDP port for input_teleop_encoder"
     )
     input_port = LaunchConfiguration('input_port')
 
     telemetry_port_arg = DeclareLaunchArgument(
         'telemetry_port',
         default_value='5006',
-        description="Porta UDP para o telemetry_decoder"
+        description="UDP port for telemetry_decoder"
     )
     telemetry_port = LaunchConfiguration('telemetry_port')
 
     pointcloud_port_arg = DeclareLaunchArgument(
         'pointcloud_port',
         default_value='5011',
-        description="Porta TCP para o pointcloud_decoder"
+        description="TCP port for pointcloud_decoder"
     )
     pointcloud_port = LaunchConfiguration('pointcloud_port')
 

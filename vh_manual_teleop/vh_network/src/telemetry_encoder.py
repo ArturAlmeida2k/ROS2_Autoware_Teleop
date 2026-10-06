@@ -31,7 +31,7 @@ class TelemetryEncoder(Node):
 
         self.pub_metrics = self.create_publisher(NodeMetrics, '/metrics/telemetry_aggregator', metrics_qos)
 
-        self.get_logger().info(f"Telemetry Encoder → {self.target_ip}:{self.port}")
+        self.get_logger().info(f"Telemetry encoder -> {self.target_ip}:{self.port}")
 
     def publish_metrics(self, msg_id, rx_time_msg, tx_time_msg):
         metrics_msg = NodeMetrics()
@@ -60,7 +60,7 @@ class TelemetryEncoder(Node):
 
             self.publish_metrics(msg.id, start_time, incoming_stamp)
         except Exception as e:
-            self.get_logger().error(f"Erro ao enviar: {e}")
+            self.get_logger().error(f"Send failed: {e}")
 
 def main(args=None):
     rclpy.init(args=args)

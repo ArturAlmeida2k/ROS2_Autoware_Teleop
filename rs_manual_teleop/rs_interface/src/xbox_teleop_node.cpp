@@ -26,7 +26,7 @@ public:
             std::bind(&XboxTeleopNode::joy_callback, this, std::placeholders::_1));
 
         RCLCPP_INFO(this->get_logger(),
-            "Nó Xbox Teleop iniciado. Publicando em /teleop/raw_command.");
+            "Xbox teleop started, publishing on /teleop/raw_command.");
     }
 
 private:
@@ -62,7 +62,7 @@ private:
 
         if (msg->axes.size() < 8 || msg->buttons.size() < 10) {
             RCLCPP_WARN_ONCE(this->get_logger(),
-                "Mensagem JOY incompleta. Esperados >= 8 eixos e >= 10 botões.");
+                "Incomplete Joy message, expected >= 8 axes and >= 10 buttons.");
             return;
         }
 

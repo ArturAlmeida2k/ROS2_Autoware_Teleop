@@ -9,8 +9,6 @@
 #include <queue>
 #include <gst/gst.h>
 #include <gst/app/gstappsink.h>
-#include <QTimer>
-#include "video_diag.hpp"
 
 // Mostra uma camara recebida por RTP/H264 e emite as latencias medidas via SEI.
 class CameraGLWidget : public QOpenGLWidget {
@@ -56,10 +54,6 @@ private:
     GstElement* pipeline_ = nullptr;
     void start_pipeline(int port);
     void stop_pipeline();
-
-    // tempos por etapa e perdas RTP, escritos a cada 10 s
-    VideoDiag diag_;
-    QTimer   *diag_timer_ = nullptr;
 
     static GstPadProbeReturn pad_probe_callback(GstPad *pad, GstPadProbeInfo *info, gpointer user_data);
     static GstFlowReturn on_new_sample(GstElement *sink, gpointer user_data);

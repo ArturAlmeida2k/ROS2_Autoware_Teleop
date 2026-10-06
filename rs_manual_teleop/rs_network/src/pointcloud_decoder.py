@@ -66,17 +66,17 @@ class PointCloudDecoder(Node):
 
             if addr[0] != self.allowed_ip:
                 self.get_logger().warn(
-                    f"Ligação recusada de {addr[0]} (esperado {self.allowed_ip}).")
+                    f"Rejected connection from {addr[0]} (expected {self.allowed_ip}).")
                 conn.close()
                 continue
 
-            self.get_logger().info(f"Emissor ligado: {addr}")
+            self.get_logger().info(f"Sender connected: {addr}")
             conn.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
             self._expected_id = None
             try:
                 self._handle(conn)
             except Exception as e:
-                self.get_logger().warn(f"Ligação terminada: {e}")
+                self.get_logger().warn(f"Connection closed: {e}")
             finally:
                 conn.close()
         srv.close()
@@ -143,8 +143,8 @@ class PointCloudDecoder(Node):
             self.pub_e2e.publish(e2e)
         else:
             self.get_logger().warn(
-                "Stamp do sensor não está no relógio de parede (tempo de "
-                "simulação?) — /metrics/e2e_pointcloud_latency não publicado.",
+                "Sensor stamp is not wall-clock time (sim time?), "
+                "/metrics/e2e_pointcloud_latency not published.",
                 once=True)
 
     def shutdown(self):

@@ -24,10 +24,10 @@ public:
     {
         MAX_VLC_ = static_cast<float>(this->declare_parameter<double>("max_vlc", 10.0));
         if (MAX_VLC_ <= 0.0f) {
-            RCLCPP_WARN(this->get_logger(), "max_velocity_kmh inválido (%.2f) — a usar 10 km/h.", MAX_VLC_);
+            RCLCPP_WARN(this->get_logger(), "Invalid max_vlc (%.2f), using 10 km/h.", MAX_VLC_);
             MAX_VLC_ = 10.0f;
         }
-        RCLCPP_INFO(this->get_logger(), "Velocidade máxima: %.1f km/h", MAX_VLC_);
+        RCLCPP_INFO(this->get_logger(), "Max velocity: %.1f km/h", MAX_VLC_);
 
         pub_final_command_ = this->create_publisher<TeleopCommand>("/teleop/command", 10);
 
@@ -55,7 +55,7 @@ public:
 
                     is_telemetry_valid_ = true;
                     
-                    RCLCPP_INFO(this->get_logger(), "Telemetria sincronizada.");
+                    RCLCPP_INFO(this->get_logger(), "Telemetry synchronized.");
                 }
 
                 current_mode_ = msg->mode;
@@ -69,7 +69,7 @@ public:
         telemetry_watchdog_ = this->create_wall_timer(
             3s, std::bind(&CommandGate::telemetry_timeout_callback, this));
 
-        RCLCPP_INFO(this->get_logger(), "Nó CommandGate iniciado. A aguardar /teleop/raw_command e /teleop/telemetry.");
+        RCLCPP_INFO(this->get_logger(), "CommandGate started. Waiting for /teleop/raw_command and /teleop/telemetry.");
     }
 
 private:
@@ -103,7 +103,7 @@ private:
     void telemetry_timeout_callback()
     {
         if (is_telemetry_valid_) {
-            RCLCPP_WARN(this->get_logger(), "Sinal de telemetria perdido! Comandos suspensos.");
+            RCLCPP_WARN(this->get_logger(), "Telemetry lost, commands suspended.");
             
             is_telemetry_valid_ = false;
 
@@ -157,9 +157,9 @@ private:
         if (current_engage_button && !last_received_engage_button_) {
             if (current_velocity_ < 0.1f) {
                 target_engage_state_ = !target_engage_state_;
-                RCLCPP_INFO(this->get_logger(), "Toggle Engage recebido. Novo estado objetivo: %s", target_engage_state_ ? "TRUE" : "FALSE");
+                RCLCPP_INFO(this->get_logger(), "Engage toggled, target state: %s", target_engage_state_ ? "TRUE" : "FALSE");
             } else {
-                RCLCPP_WARN(this->get_logger(), "Tentativa de alterar Engage bloqueada: Veículo em movimento (Velocidade: %.2f)", current_velocity_);
+                RCLCPP_WARN(this->get_logger(), "Engage change blocked, vehicle moving (%.1f km/h)", current_velocity_);
             }
         }
         
@@ -187,7 +187,7 @@ private:
                     last_requested_gear_ = requested_gear;  
                 } else {
                     RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
-                        "Tentativa de mudar de mudança bloqueada: Veículo em movimento (Velocidade: %.2f)", current_velocity_);
+                        "Gear change blocked, vehicle moving (%.1f km/h)", current_velocity_);
                 }
             } else if (requested_gear == CmdEnums::GEAR_NONE) {
                 last_requested_gear_ = CmdEnums::GEAR_NONE;

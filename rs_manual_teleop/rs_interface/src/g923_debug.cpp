@@ -19,9 +19,7 @@ public:
             "/joy", 10, 
             std::bind(&G923TeleopNode::joy_callback, this, std::placeholders::_1));
 
-        RCLCPP_INFO(this->get_logger(), "--- NÓ DE DEBUG G923 INICIADO ---");
-        RCLCPP_INFO(this->get_logger(), "Mova o volante e pedais para ver os índices.");
-        RCLCPP_INFO(this->get_logger(), "----------------------------------");
+        RCLCPP_INFO(this->get_logger(), "G923 debug: move the wheel and pedals to see the axis/button indices.");
     }
 
 private:
@@ -31,12 +29,12 @@ private:
     {
         std::stringstream ss;
         
-        ss << "EIXOS (" << msg->axes.size() << "): ";
+        ss << "AXES (" << msg->axes.size() << "): ";
         for (size_t i = 0; i < msg->axes.size(); ++i) {
             ss << "[" << i << ": " << std::fixed << std::setprecision(2) << msg->axes[i] << "] ";
         }
         
-        ss << "\nBOTÕES (" << msg->buttons.size() << "): ";
+        ss << "\nBUTTONS (" << msg->buttons.size() << "): ";
         
         for (size_t i = 0; i < msg->buttons.size(); ++i) {
             if (msg->buttons[i] == 1) {

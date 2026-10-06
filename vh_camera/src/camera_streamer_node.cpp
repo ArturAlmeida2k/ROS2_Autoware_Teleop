@@ -60,7 +60,7 @@ public:
 
         cap_.open(cam_pipeline, cv::CAP_GSTREAMER);
         if (!cap_.isOpened()) {
-            RCLCPP_ERROR(this->get_logger(), "Falha ao abrir a camara via GStreamer.");
+            RCLCPP_ERROR(this->get_logger(), "Failed to open the camera with GStreamer.");
             return;
         }
 
@@ -71,7 +71,7 @@ public:
             streams_.push_back(std::move(ctx));
         }
 
-        RCLCPP_INFO(this->get_logger(), "%d stream(s) a transmitir para %s, portas %d-%d",
+        RCLCPP_INFO(this->get_logger(), "Streaming %d stream(s) to %s, ports %d-%d",
                     num_streams, ip_address_.c_str(), base_port, base_port + num_streams - 1);
 
         capture_thread_ = std::thread(&CameraStreamerNode::capture_loop, this);
@@ -124,7 +124,7 @@ private:
         GError *error = nullptr;
         ctx->pipeline = gst_parse_launch(pipeline_str.c_str(), &error);
         if (error) {
-            RCLCPP_ERROR(this->get_logger(), "Erro ao criar pipeline (porta %d): %s",
+            RCLCPP_ERROR(this->get_logger(), "Failed to create pipeline (port %d): %s",
                          ctx->port, error->message);
             g_error_free(error);
             return;

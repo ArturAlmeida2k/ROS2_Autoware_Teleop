@@ -116,10 +116,9 @@ public:
             StreamCtx *raw = ctx.get();
             ctx->sub = create_subscription<Image>(ctx->topic, qos,
                 [this, raw](const Image::SharedPtr msg) { image_callback(msg, raw); });
-            RCLCPP_INFO(get_logger(), "%s -> %s:%d", ctx->topic.c_str(), ip_address_.c_str(), ctx->port);
             streams_.push_back(std::move(ctx));
         }
-        RCLCPP_INFO(get_logger(), "Encoder iniciado: %d câmara(s), %d kbit/s, %d fps, intra-refresh %s.",
+        RCLCPP_INFO(get_logger(), "Video encoder started: %d camera(s), %d kbit/s, %d fps, intra-refresh %s.",
                     n, bitrate_, framerate_, intra_refresh_ ? "on" : "off");
     }
 
@@ -223,7 +222,7 @@ private:
                         ctx->pending.pop_back();
                 }
                 RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 1000,
-                                     "GStreamer rejeitou o buffer em %s (erro %d)", ctx->topic.c_str(), ret);
+                                     "GStreamer rejected buffer on %s (error %d)", ctx->topic.c_str(), ret);
             }
         } catch (const cv_bridge::Exception &e) {
             RCLCPP_ERROR(get_logger(), "cv_bridge (%s): %s", ctx->topic.c_str(), e.what());
@@ -251,7 +250,7 @@ private:
         GError *error = nullptr;
         ctx->pipeline = gst_parse_launch(pipeline_str.c_str(), &error);
         if (error) {
-            RCLCPP_ERROR(get_logger(), "Erro ao criar pipeline (porta %d): %s", ctx->port, error->message);
+            RCLCPP_ERROR(get_logger(), "Failed to create pipeline (port %d): %s", ctx->port, error->message);
             g_error_free(error);
             return;
         }
@@ -265,10 +264,10 @@ private:
         }
 
         if (gst_element_set_state(ctx->pipeline, GST_STATE_PLAYING) == GST_STATE_CHANGE_FAILURE) {
-            RCLCPP_ERROR(get_logger(), "A pipeline da porta %d recusou-se a iniciar.", ctx->port);
+            RCLCPP_ERROR(get_logger(), "Pipeline on port %d failed to start.", ctx->port);
             return;
         }
-        RCLCPP_INFO(get_logger(), "Pipeline ativa: %s %dx%d -> %dx%d -> %s:%d",
+        RCLCPP_INFO(get_logger(), "Pipeline running: %s %dx%d -> %dx%d -> %s:%d",
                     ctx->topic.c_str(), width, height, OUT_W, OUT_H, ip_address_.c_str(), ctx->port);
         ctx->initialized = true;
     }

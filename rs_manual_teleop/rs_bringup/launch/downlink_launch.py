@@ -14,21 +14,21 @@ def generate_launch_description():
     device_id_arg = DeclareLaunchArgument(
         'device_id',
         default_value='0',
-        description="ID do dispositivo (Logitech ou Xbox) no sistema"
+        description="Joystick device ID (Logitech or Xbox)"
     )
     device_id_config = LaunchConfiguration('device_id')
 
     controller_arg = DeclareLaunchArgument(
         'controller',
         default_value='xbox',
-        description="Escolher o tipo de controlador usado para controlar o carro: 'rs50'(default), 'g923', ou 'xbox'"
+        description="Controller type: 'rs50' (default), 'g923' or 'xbox'"
     )
     controller = LaunchConfiguration('controller')
 
     max_velocity_arg = DeclareLaunchArgument(
         'max_vlc',
         default_value='10.0',
-        description="Velocidade máxima permitida em km/h (pedal a fundo)"
+        description="Max velocity in km/h at full throttle"
     )
     max_velocity = LaunchConfiguration('max_vlc')
 
@@ -80,7 +80,7 @@ def generate_launch_description():
         executable='cpmmand_gate_forsingletest',
         name='command_gate',
         output='screen',
-        parameters=[{'max_velocity_kmh': ParameterValue(max_velocity, value_type=float)}]
+        parameters=[{'max_vlc': ParameterValue(max_velocity, value_type=float)}]
     )
 
     # métricas falsas para o topic_monitor ficar em OK

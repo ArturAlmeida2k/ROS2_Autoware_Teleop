@@ -13,7 +13,7 @@ def generate_launch_description():
 
     sim_arg = DeclareLaunchArgument(
         'sim', default_value='awsim',
-        description="Perfil de configuração: 'awsim' ou 'carla'")
+        description="Config profile: 'awsim' or 'carla'")
     sim = LaunchConfiguration('sim')
 
     config_file = PathJoinSubstitution([
@@ -24,35 +24,35 @@ def generate_launch_description():
     ip_address_arg = DeclareLaunchArgument(
         'ip_address',
         default_value='10.0.0.2',
-        description="Endereço IP da estação de controlo"
+        description="IP address of the remote station"
     )
     ip_address = LaunchConfiguration('ip_address')
 
     input_port_arg = DeclareLaunchArgument(
         'input_port',
         default_value='5005',
-        description="Porta UDP para o input_teleop_decoder"
+        description="UDP port for input_teleop_decoder"
     )
     input_port = LaunchConfiguration('input_port')
 
     telemetry_port_arg = DeclareLaunchArgument(
         'telemetry_port',
         default_value='5006',
-        description="Porta UDP para o telemetry_encoder"
+        description="UDP port for telemetry_encoder"
     )
     telemetry_port = LaunchConfiguration('telemetry_port')
 
     camera_port_arg = DeclareLaunchArgument(
         'camera_port',
         default_value='5007',
-        description="Porta base UDP do vídeo. A câmara i usa camera_port + i"
+        description="Base UDP port for video, camera i uses camera_port + i"
     )
     camera_port = LaunchConfiguration('camera_port')
 
     pointcloud_port_arg = DeclareLaunchArgument(
         'pointcloud_port',
         default_value='5011',
-        description="Porta TCP para o pointcloud_encoder"
+        description="TCP port for pointcloud_encoder"
     )
     pointcloud_port = LaunchConfiguration('pointcloud_port')
 

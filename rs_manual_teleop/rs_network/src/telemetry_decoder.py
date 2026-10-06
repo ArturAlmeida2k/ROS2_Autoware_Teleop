@@ -43,7 +43,7 @@ class TelemetryDecoder(Node):
         self.rx_thread = threading.Thread(target=self.receive_loop, daemon=True)
         self.rx_thread.start()
 
-        self.get_logger().info(f"Telemetry Decoder → {self.port} from {self.allowed_ip}")
+        self.get_logger().info(f"Telemetry decoder on port {self.port}, from {self.allowed_ip}")
 
     def publish_metrics(self, msg_id, rx_time_msg, tx_time_msg):
         metrics_msg = NetworkMetrics()
@@ -99,7 +99,7 @@ class TelemetryDecoder(Node):
                 break
             except Exception as e:
                 if rclpy.ok():
-                    self.get_logger().error(f"Erro: {e}")
+                    self.get_logger().error(f"Receive error: {e}")
 
 def main(args=None):
     rclpy.init(args=args)
