@@ -2,5 +2,6 @@
   ros__parameters:
     num_cameras: 1
     bitrate: 8000
+    intra_refresh: true
     camera_topics:
       - /sensing/camera/traffic_light/image_raw
