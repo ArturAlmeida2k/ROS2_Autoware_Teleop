@@ -2,6 +2,8 @@
   ros__parameters:
     num_cameras: 4
     bitrate: 2000
+    intra_refresh: true
+    framerate: 4      # taxa real das câmaras do CARLA (~3.6 Hz)
     camera_topics:
       - /sensing/camera/CAM_FRONT/image_raw
       - /sensing/camera/CAM_FRONT_LEFT/image_raw
