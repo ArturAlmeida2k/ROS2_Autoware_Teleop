@@ -254,7 +254,9 @@ GstPadProbeReturn CameraGLWidget::pad_probe_callback(GstPad *pad, GstPadProbeInf
             return GST_PAD_PROBE_OK;
         }
 
-        size_t search_limit = std::min(map.size - 16, (size_t)128);
+        // O SEI vem antes do primeiro slice, depois do AUD/SPS/PPS (e, no
+        // primeiro keyframe, do SEI do x264 com a versão, ~700 bytes).
+        size_t search_limit = std::min(map.size - 16, (size_t)4096);
         for (size_t i = 0; i < search_limit - 16; ++i) {
             if (std::memcmp(map.data + i, uuid, 16) == 0) {
                 size_t str_len = std::min(map.size - i - 16, (size_t)96);

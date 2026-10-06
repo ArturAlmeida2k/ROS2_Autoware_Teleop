@@ -332,6 +332,20 @@ private:
         return GST_PAD_PROBE_OK;
     }
 
+    // Posição (início do start code) do primeiro NAL de slice (tipos 1–5) num
+    // access unit em byte-stream. Se não encontrar, devolve 0 (insere no início).
+    static size_t first_vcl_offset(const uint8_t *d, size_t n) {
+        for (size_t i = 0; i + 3 < n; ++i) {
+            if (d[i] == 0 && d[i + 1] == 0 && d[i + 2] == 1) {
+                const uint8_t type = d[i + 3] & 0x1F;
+                if (type >= 1 && type <= 5)
+                    return (i > 0 && d[i - 1] == 0) ? i - 1 : i;   // start code de 4 bytes
+                i += 2;
+            }
+        }
+        return 0;
+    }
+
     // Saída do h264parse: insere o SEI com ID, TS (chegada da imagem) e
     // TS2 (saída do encoder), e publica as métricas do frame.
     static GstPadProbeReturn probe_parser_out(GstPad *, GstPadProbeInfo *info, gpointer ud) {
@@ -363,12 +377,20 @@ private:
         sei.insert(sei.end(), uuid, uuid + 16);
         sei.insert(sei.end(), payload.begin(), payload.end());
 
+        // O SEI tem de ficar DENTRO do access unit, imediatamente antes do
+        // primeiro slice (depois do AUD/SPS/PPS). Se ficar antes do AUD, o AUD
+        // abre um access unit novo: o rtph264pay marca o fim do frame logo a
+        // seguir ao SEI e o RS recebe dois "frames" (o SEI sozinho, à chegada do
+        // primeiro pacote, e o frame real no fim). A métrica de rede passava a
+        // medir só o primeiro pacote e o resto da transmissão caía no decode.
         GstMapInfo old_map, new_map;
         gst_buffer_map(buffer, &old_map, GST_MAP_READ);
+        const size_t at = first_vcl_offset(old_map.data, old_map.size);
         GstBuffer *new_buf = gst_buffer_new_allocate(nullptr, sei.size() + old_map.size, nullptr);
         gst_buffer_map(new_buf, &new_map, GST_MAP_WRITE);
-        std::memcpy(new_map.data, sei.data(), sei.size());
-        std::memcpy(new_map.data + sei.size(), old_map.data, old_map.size);
+        std::memcpy(new_map.data, old_map.data, at);
+        std::memcpy(new_map.data + at, sei.data(), sei.size());
+        std::memcpy(new_map.data + at + sei.size(), old_map.data + at, old_map.size - at);
         gst_buffer_unmap(new_buf, &new_map);
         gst_buffer_unmap(buffer, &old_map);
 
