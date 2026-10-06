@@ -302,6 +302,7 @@ GstPadProbeReturn CameraGLWidget::pad_probe_callback(GstPad *pad, GstPadProbeInf
 GstFlowReturn CameraGLWidget::on_new_sample(GstElement *sink, gpointer user_data)
 {
     auto *widget = static_cast<CameraGLWidget*>(user_data);
+    widget->diag_.mark_appsink();
     GstSample *sample;
     g_signal_emit_by_name(sink, "pull-sample", &sample);
 

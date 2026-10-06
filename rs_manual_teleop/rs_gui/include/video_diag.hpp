@@ -5,17 +5,22 @@
 // chamada. Sem dependências de Qt, para poder ser testado à parte.
 //
 // Etapas (todas com o relógio do RS):
-//   queue   : saída do parser   -> entrada do avdec_h264
-//   decode  : entrada do avdec  -> saída do avdec
-//   convert : saída do avdec    -> saída do videoconvert
+//   queue   : saída do parser       -> entrada do avdec_h264
+//   decode  : entrada do avdec      -> saída do avdec
+//   convert : saída do avdec        -> saída do videoconvert
+//   sink    : saída do videoconvert -> início da callback do appsink
+//   total   : saída do parser       -> início da callback do appsink
+//             (é o que a métrica do CSV mede como decode isolado)
 //
-// Os frames são associados entre probes pelo PTS do buffer, que o decoder e
-// o videoconvert preservam (o x264 está em zerolatency, sem B-frames).
+// Os frames são associados por ordem (FIFO), não pelo PTS: cada etapa recebe
+// e entrega os frames 1:1 e pela mesma ordem (x264 em zerolatency, sem
+// B-frames). Na versão anterior, por PTS, a maioria dos frames não emparelhava.
 
 #include <gst/gst.h>
 #include <algorithm>
 #include <chrono>
 #include <cstdio>
+#include <deque>
 #include <map>
 #include <mutex>
 #include <string>
@@ -27,17 +32,26 @@ public:
     //   jb (rtpjitterbuffer), parser (h264parse), dec (avdec_h264), conv (videoconvert)
     void attach(GstElement *pipeline) {
         pipeline_ = pipeline;
-        add_probe("parser", "src",  &VideoDiag::on_parser_out);
-        add_probe("dec",    "sink", &VideoDiag::on_dec_in);
-        add_probe("dec",    "src",  &VideoDiag::on_dec_out);
-        add_probe("conv",   "src",  &VideoDiag::on_conv_out);
-    }
-
-    std::string summary() {
-        std::vector<double> q, d, c;
         {
             std::lock_guard<std::mutex> lk(mtx_);
-            q.swap(q_ms_); d.swap(dec_ms_); c.swap(conv_ms_);
+            for (auto &f : fifo_) f.clear();
+        }
+        add_probe("parser", "src",  0);
+        add_probe("dec",    "sink", 1);
+        add_probe("dec",    "src",  2);
+        add_probe("conv",   "src",  3);
+    }
+
+    // Chamar no início da callback new-sample do appsink.
+    void mark_appsink() { stage(4, now_ns()); }
+
+    std::string summary() {
+        std::vector<double> v[5];
+        size_t resync;
+        {
+            std::lock_guard<std::mutex> lk(mtx_);
+            for (int i = 0; i < 5; ++i) v[i].swap(ms_[i]);
+            resync = resync_; resync_ = 0;
         }
         guint64 pushed = 0, lost = 0, late = 0, dup = 0;
         if (pipeline_) {
@@ -54,24 +68,27 @@ public:
                 }
             }
         }
-        char buf[320];
+        // v[0]=queue v[1]=decode v[2]=convert v[3]=sink v[4]=total
+        char buf[400];
         std::snprintf(buf, sizeof buf,
-            "frames=%zu | queue med %.2f p95 %.2f | decode med %.2f p95 %.2f | "
-            "convert med %.2f p95 %.2f ms | RTP total pushed=%llu lost=%llu late=%llu dup=%llu",
-            d.size(), pct(q, .5), pct(q, .95), pct(d, .5), pct(d, .95), pct(c, .5), pct(c, .95),
+            "frames=%zu | queue %.2f | decode %.2f/%.2f | convert %.2f | sink %.2f/%.2f | "
+            "TOTAL %.2f/%.2f ms (med/p95) | resync=%zu | RTP pushed=%llu lost=%llu late=%llu dup=%llu",
+            v[4].size(), pct(v[0], .5), pct(v[1], .5), pct(v[1], .95), pct(v[2], .5),
+            pct(v[3], .5), pct(v[3], .95), pct(v[4], .5), pct(v[4], .95), resync,
             (unsigned long long)pushed, (unsigned long long)lost,
             (unsigned long long)late, (unsigned long long)dup);
         return buf;
     }
 
 private:
-    using Cb = void (VideoDiag::*)(GstClockTime pts, uint64_t now);
-    struct ProbeCtx { VideoDiag *self; Cb cb; };
+    struct ProbeCtx { VideoDiag *self; int stage; };
+    struct Entry { uint64_t t0, prev; };   // t0 = saída do parser, prev = etapa anterior
 
     GstElement *pipeline_ = nullptr;
     std::mutex mtx_;
-    std::map<GstClockTime, uint64_t> t_parse_, t_dec_in_, t_dec_out_;
-    std::vector<double> q_ms_, dec_ms_, conv_ms_;
+    std::deque<Entry> fifo_[4];   // frames à espera da etapa seguinte
+    std::vector<double> ms_[5];
+    size_t resync_ = 0;
 
     static uint64_t now_ns() {
         return std::chrono::duration_cast<std::chrono::nanoseconds>(
@@ -84,57 +101,44 @@ private:
         return v[std::min(v.size() - 1, static_cast<size_t>(p * (v.size() - 1) + 0.5))];
     }
 
-    void add_probe(const char *elem, const char *pad, Cb cb) {
+    void add_probe(const char *elem, const char *pad, int st) {
         GstElement *e = gst_bin_get_by_name(GST_BIN(pipeline_), elem);
         if (!e) { std::fprintf(stderr, "[video_diag] elemento '%s' não encontrado\n", elem); return; }
         GstPad *p = gst_element_get_static_pad(e, pad);
         gst_pad_add_probe(p, GST_PAD_PROBE_TYPE_BUFFER, &VideoDiag::probe,
-                          new ProbeCtx{this, cb},
+                          new ProbeCtx{this, st},
                           [](gpointer d) { delete static_cast<ProbeCtx *>(d); });
         gst_object_unref(p);
         gst_object_unref(e);
     }
 
-    static GstPadProbeReturn probe(GstPad *, GstPadProbeInfo *info, gpointer user_data) {
+    static GstPadProbeReturn probe(GstPad *, GstPadProbeInfo *, gpointer user_data) {
         auto *ctx = static_cast<ProbeCtx *>(user_data);
-        GstBuffer *b = GST_PAD_PROBE_INFO_BUFFER(info);
-        if (b && GST_BUFFER_PTS_IS_VALID(b))
-            (ctx->self->*(ctx->cb))(GST_BUFFER_PTS(b), now_ns());
+        ctx->self->stage(ctx->stage, now_ns());
         return GST_PAD_PROBE_OK;
     }
 
-    // Guarda t em m[pts], limitando o tamanho para não crescer com frames descartados.
-    static void put(std::map<GstClockTime, uint64_t> &m, GstClockTime pts, uint64_t t) {
-        m[pts] = t;
-        while (m.size() > 32) m.erase(m.begin());
-    }
-    static bool take(std::map<GstClockTime, uint64_t> &m, GstClockTime pts, uint64_t &t) {
-        auto it = m.find(pts);
-        if (it == m.end()) return false;
-        t = it->second;
-        m.erase(it);
-        return true;
-    }
-
-    void on_parser_out(GstClockTime pts, uint64_t now) {
+    // Etapa 0 abre o frame; etapas 1..4 tiram-no da fila anterior, registam
+    // o tempo desde a etapa anterior e (exceto a última) passam-no à seguinte.
+    // Se uma fila crescer demais (frame descartado algures), esvazia tudo.
+    void stage(int st, uint64_t now) {
         std::lock_guard<std::mutex> lk(mtx_);
-        put(t_parse_, pts, now);
-    }
-    void on_dec_in(GstClockTime pts, uint64_t now) {
-        std::lock_guard<std::mutex> lk(mtx_);
-        uint64_t t;
-        if (take(t_parse_, pts, t)) q_ms_.push_back((now - t) / 1e6);
-        put(t_dec_in_, pts, now);
-    }
-    void on_dec_out(GstClockTime pts, uint64_t now) {
-        std::lock_guard<std::mutex> lk(mtx_);
-        uint64_t t;
-        if (take(t_dec_in_, pts, t)) dec_ms_.push_back((now - t) / 1e6);
-        put(t_dec_out_, pts, now);
-    }
-    void on_conv_out(GstClockTime pts, uint64_t now) {
-        std::lock_guard<std::mutex> lk(mtx_);
-        uint64_t t;
-        if (take(t_dec_out_, pts, t)) conv_ms_.push_back((now - t) / 1e6);
+        if (st == 0) {
+            fifo_[0].push_back({now, now});
+        } else {
+            auto &in = fifo_[st - 1];
+            if (in.empty()) return;
+            Entry e = in.front(); in.pop_front();
+            ms_[st - 1].push_back((now - e.prev) / 1e6);
+            if (st == 4) ms_[4].push_back((now - e.t0) / 1e6);
+            else         fifo_[st].push_back({e.t0, now});
+        }
+        for (auto &f : fifo_) {
+            if (f.size() > 8) {
+                for (auto &g : fifo_) g.clear();
+                ++resync_;
+                break;
+            }
+        }
     }
 };
