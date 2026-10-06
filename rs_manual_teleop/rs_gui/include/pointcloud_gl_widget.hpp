@@ -43,16 +43,16 @@ private:
     unsigned int car_vbo_ = 0;
  
     std::mutex frame_mutex_;
-    std::vector<float> points_; // Guarda sequencialmente X, Y, Z
+    std::vector<float> points_; // x, y, z seguidos
     bool dirty_ = false;
  
     builtin_interfaces::msg::Time pending_stamp_;
     uint32_t pending_id_ = 0;
  
-    // Controlos de Câmara
-    float yaw_ = 0.0f;       // Volta a meter a 0
+    // camara orbital
+    float yaw_ = 0.0f;
     float pitch_ = -60.0f;     
-    float distance_ = 50.0f; // Mantém os 50 para o zoom out
+    float distance_ = 50.0f;
     QPoint last_mouse_pos_;
 };
  

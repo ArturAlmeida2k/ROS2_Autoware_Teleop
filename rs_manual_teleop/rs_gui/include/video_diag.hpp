@@ -1,20 +1,7 @@
 #pragma once
-// Diagnóstico do pipeline de vídeo no RS. Mede, por frame, quanto tempo passa
-// em cada etapa entre o h264parse e o appsink, e lê as estatísticas do
-// rtpjitterbuffer. summary() devolve uma linha com as medianas desde a última
-// chamada. Sem dependências de Qt, para poder ser testado à parte.
-//
-// Etapas (todas com o relógio do RS):
-//   queue   : saída do parser       -> entrada do avdec_h264
-//   decode  : entrada do avdec      -> saída do avdec
-//   convert : saída do avdec        -> saída do videoconvert
-//   sink    : saída do videoconvert -> início da callback do appsink
-//   total   : saída do parser       -> início da callback do appsink
-//             (é o que a métrica do CSV mede como decode isolado)
-//
-// Os frames são associados por ordem (FIFO), não pelo PTS: cada etapa recebe
-// e entrega os frames 1:1 e pela mesma ordem (x264 em zerolatency, sem
-// B-frames). Na versão anterior, por PTS, a maioria dos frames não emparelhava.
+// Tempos por etapa do pipeline de video no RS (parser, decode, convert, appsink)
+// e estatisticas do rtpjitterbuffer.
+// frames emparelhados por ordem (FIFO), sem B-frames a ordem nao muda
 
 #include <gst/gst.h>
 #include <algorithm>
@@ -28,8 +15,7 @@
 
 class VideoDiag {
 public:
-    // Elementos com estes nomes têm de existir no pipeline:
-    //   jb (rtpjitterbuffer), parser (h264parse), dec (avdec_h264), conv (videoconvert)
+    // o pipeline tem de ter elementos jb, parser, dec e conv
     void attach(GstElement *pipeline) {
         pipeline_ = pipeline;
         {
@@ -42,7 +28,7 @@ public:
         add_probe("conv",   "src",  3);
     }
 
-    // Chamar no início da callback new-sample do appsink.
+    // chamar no inicio do new-sample
     void mark_appsink() { stage(4, now_ns()); }
 
     std::string summary() {
@@ -82,11 +68,11 @@ public:
 
 private:
     struct ProbeCtx { VideoDiag *self; int stage; };
-    struct Entry { uint64_t t0, prev; };   // t0 = saída do parser, prev = etapa anterior
+    struct Entry { uint64_t t0, prev; };   // t0: saida do parser, prev: etapa anterior
 
     GstElement *pipeline_ = nullptr;
     std::mutex mtx_;
-    std::deque<Entry> fifo_[4];   // frames à espera da etapa seguinte
+    std::deque<Entry> fifo_[4];
     std::vector<double> ms_[5];
     size_t resync_ = 0;
 
@@ -118,9 +104,7 @@ private:
         return GST_PAD_PROBE_OK;
     }
 
-    // Etapa 0 abre o frame; etapas 1..4 tiram-no da fila anterior, registam
-    // o tempo desde a etapa anterior e (exceto a última) passam-no à seguinte.
-    // Se uma fila crescer demais (frame descartado algures), esvazia tudo.
+    // se uma fila passar de 8 houve frame descartado, limpa tudo
     void stage(int st, uint64_t now) {
         std::lock_guard<std::mutex> lk(mtx_);
         if (st == 0) {

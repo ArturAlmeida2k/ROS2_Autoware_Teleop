@@ -13,6 +13,7 @@ using TeleopCommand = teleop_msgs::msg::TeleopCommand;
 using Metrics = teleop_msgs::msg::NodeMetrics;
 using CmdEnums = teleop_msgs::msg::CommandEnums;
 
+// Filtra o /teleop/command conforme o estado da rede (OK/WARN/ERROR) e publica em /teleop/safe_command.
 class TeleopSafetyGateNode : public rclcpp::Node {
 public:
     static constexpr int8_t STATE_OK = 0;
@@ -20,13 +21,10 @@ public:
     static constexpr int8_t STATE_ERROR = 2;
 
     TeleopSafetyGateNode() : Node("teleop_safety_gate_node") {
-        // Parâmetros de segurança
-        this->declare_parameter<float>("warning_velocity_limit", 2.77f); // ~10 km/h
-        
+        this->declare_parameter<float>("warning_velocity_limit", 2.77f); // m/s (10 km/h)
+
         warning_velocity_limit_ = this->get_parameter("warning_velocity_limit").as_double();
 
-        // Subscrições
-        // Recebe o comando que vem diretamente da rede (do Decoder)
         sub_teleop_cmd_ = this->create_subscription<TeleopCommand>(
             "/teleop/command", 10,
             std::bind(&TeleopSafetyGateNode::teleop_cmd_callback, this, std::placeholders::_1));
@@ -35,10 +33,9 @@ public:
             "/teleop/safety_state", 10,
             std::bind(&TeleopSafetyGateNode::safety_state_callback, this, std::placeholders::_1));
 
-        // Publicador do comando seguro (ainda com o formato customizado para reter o ID e origin_stamp)
+        // mantém o TeleopCommand para não perder o id e o origin_stamp
         pub_safe_cmd_ = this->create_publisher<TeleopCommand>("/teleop/safe_command", 10);
 
-        // For metrics
         rclcpp::QoS metrics_qos(10);       
         metrics_qos.best_effort();    
         metrics_qos.durability_volatile();
@@ -68,7 +65,7 @@ private:
         safe_msg->id = 0;
         
         safe_msg->target_velocity = 0.0f;
-        safe_msg->brake_factor = 1.0f; // Força travagem máxima
+        safe_msg->brake_factor = 1.0f; // travagem máxima
         safe_msg->target_steering_angle = 0.0f;
         safe_msg->engage_command = last_engage_;
         safe_msg->gear = last_gear_;
@@ -112,8 +109,7 @@ private:
         auto start_time = this->now();
 
         auto safe_msg = std::make_unique<TeleopCommand>(*msg);
-        
-        // Atualiza o header stamp para o salto atual
+
         safe_msg->header.stamp = start_time;
         safe_msg->header.frame_id = "safety_gate";
 
@@ -123,11 +119,9 @@ private:
         switch (current_state_)
         {
             case STATE_OK:
-                // Sem restrições
                 break;
-                
+
             case STATE_WARN:
-                // Limita a velocidade máxima (frente e marcha-atrás)
                 safe_msg->target_velocity = std::clamp(
                     safe_msg->target_velocity, 
                     0.0f, 
@@ -139,9 +133,9 @@ private:
                 
             case STATE_ERROR:
             default:
-                // Força paragem do veículo, altera mudanças para Neutro/Park e ativa 4 piscas
+                // pára o carro e liga os 4 piscas
                 safe_msg->target_velocity = 0.0f;
-                safe_msg->brake_factor = 1.0f; // Força travagem máxima no próximo nó
+                safe_msg->brake_factor = 1.0f;
                 safe_msg->target_steering_angle = 0.0f;
                 safe_msg->turn_signal = CmdEnums::TURN_HAZARD;
                 

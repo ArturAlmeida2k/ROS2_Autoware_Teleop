@@ -1,3 +1,5 @@
+// Lê o volante Logitech RS50 (/joy_throttled) e publica os comandos crus em /teleop/raw_command.
+
 #include "rclcpp/rclcpp.hpp"
 #include "sensor_msgs/msg/joy.hpp"
 #include <algorithm>
@@ -16,10 +18,8 @@ class RS50TeleopNode : public rclcpp::Node
 public:
     RS50TeleopNode() : Node("rs50_teleop_node")
     {
-        // Pub to the Autoware Controller Node
         pub_raw_command_ = this->create_publisher<TeleopCommand>("/teleop/raw_command", 10);
 
-        // Sub to the Joystick
         sub_joy_ = this->create_subscription<Joy>(
             "/joy_throttled", 10, 
             std::bind(&RS50TeleopNode::joy_callback, this, std::placeholders::_1));
@@ -28,68 +28,60 @@ public:
     }
 
 private:
-    // --- Mapping of the Axis and Buttons (Logitech RS50) ---
+    // mapeamento do RS50 (índices do joy_node)
 
-    // Axis (vals from -1.0 a 1.0)
-    const int AXIS_STEERING =  0;   // Sterring Wheel, 0 repose, -1 right, 1 left
-    const int AXIS_THROTTLE = 3;   // Acceleration, 1 repose
-    const int AXIS_BRAKE = 4;      // Brake, 1 repose 
+    // eixos entre -1.0 e 1.0
+    const int AXIS_STEERING =  0;   // volante: 0 ao centro, -1 direita, 1 esquerda
+    const int AXIS_THROTTLE = 3;   // acelerador, 1 em repouso
+    const int AXIS_BRAKE = 4;      // travão, 1 em repouso
     
-    const int BUTTON_ENGAGE_1 = 6; // Engage Button 1 -> R2
-    const int BUTTON_ENGAGE_2 = 7; // Engage Button 2 -> L2
-    const int BUTTON_TURN_SIGNAL_RIGHT = 10; // Turn Signal Right -> R3
-    const int BUTTON_TURN_SIGNAL_LEFT = 11; // Turn Signal Left -> L3
-    const int BUTTON_HAZARD_SIGNAL = 27; // Turn Hazard Lights -> "Enter" Button
+    const int BUTTON_ENGAGE_1 = 6; // R2
+    const int BUTTON_ENGAGE_2 = 7; // L2
+    const int BUTTON_TURN_SIGNAL_RIGHT = 10; // R3
+    const int BUTTON_TURN_SIGNAL_LEFT = 11; // L3
+    const int BUTTON_HAZARD_SIGNAL = 27; // botão Enter
 
-    const int GEAR_REVERSE = 5; //  Left padle
-    const int GEAR_DRIVE = 4; //  Right padle
-    const int PARKING = 2; // Enter Parking -> Circle
+    const int GEAR_REVERSE = 5; // patilha esquerda
+    const int GEAR_DRIVE = 4; // patilha direita
+    const int PARKING = 2; // círculo
 
-    const int UPLINK_MODE = 0; // Switch between video and pointcloud, 0 maintain, 1 switch -> X
+    const int UPLINK_MODE = 0; // X, alterna vídeo / pointcloud
 
-    // --- Constants ---
-    const float MAX_STEERING_RAD = 0.5f; // Maximum steering angle (~28.6 graus)
-
-    // --- Extra variables ---
+    const float MAX_STEERING_RAD = 0.5f; // ~28.6 graus
 
     u_int16_t seq_num_ = 1;
     
-    // --- ROS 2 ---
     rclcpp::Publisher<TeleopCommand>::SharedPtr pub_raw_command_;
     rclcpp::Subscription<Joy>::SharedPtr sub_joy_;
   
     void joy_callback(const Joy::SharedPtr msg)
     {
 
-        // Get the time as soon has possible for metrics
+        // timestamp logo à entrada, para as métricas
         auto start_time = this->now();
 
-        // Check if the joy mensage is complete (it should have 4 axis and 8 buttons)
+        // o RS50 tem 10 eixos e 79 botões
         if (msg->axes.size() < 10 || msg->buttons.size() < 79) {
             RCLCPP_WARN_ONCE(this->get_logger(), "JOY message incomplete.");
             return;
         }
         
-        // --- 1. ENGAGE OF THE CAR ---
-    
-        // To engage both the L2 and R2 need to be pressed at the same time 
+        // engage: L2 e R2 premidos ao mesmo tempo
         bool engage_button_1 = msg->buttons[BUTTON_ENGAGE_1];
         bool engage_button_2 = msg->buttons[BUTTON_ENGAGE_2];
         
         bool change_engage_state = engage_button_1 && engage_button_2;
         
-        // --- 2. VELOCITY CONTROL (ACCEL & BRAKE) ---
-
         float throttle_input = msg->axes[AXIS_THROTTLE];
         float brake_input = msg->axes[AXIS_BRAKE];
 
-        // Change from [-1.0 (Repose) to 1.0 (Fully Pressed)] to [0.0 to 1.0]
+        // pedais de [1 repouso, -1 fundo] para [0, 1]
         double normalized_throttle = abs((throttle_input - 1.0) / 2.0);
         double normalized_brake = abs((brake_input - 1.0) / 2.0);
         
         float target_vlc = 0.0f;
         
-        // If the brake is pressed the target velocity is 0.0
+        // com travão carregado ou acelerador solto a velocidade alvo é 0
         if (normalized_brake > 0.05 || normalized_throttle < 0.05) {
             target_vlc = 0.0f;
         } 
@@ -97,12 +89,9 @@ private:
             target_vlc = static_cast<float>(normalized_throttle);
         }
         
-        // --- 3. STEERING CONTROL ---
-        
         float steering_input = msg->axes[AXIS_STEERING];
         float target_steering_angle = steering_input * MAX_STEERING_RAD;
 
-        // --- 4. GEAR CONTROL ---
         bool drive = msg->buttons[GEAR_DRIVE];
         bool reverse = msg->buttons[GEAR_REVERSE];
         bool park = msg->buttons[PARKING];
@@ -118,8 +107,6 @@ private:
         else if (reverse) {
             new_gear = CmdEnums::GEAR_REVERSE;
         }
-
-        // --- 5. TURN SIGNAL ----
 
         bool turn_right = msg->buttons[BUTTON_TURN_SIGNAL_RIGHT];
         bool turn_left = msg->buttons[BUTTON_TURN_SIGNAL_LEFT];
@@ -137,11 +124,8 @@ private:
             turn_signal = CmdEnums::TURN_HAZARD;
         }
 
-        // --- 6. VIDEO MODE ---
-
         bool uplink_mode = msg->buttons[UPLINK_MODE];
 
-        // --- 7. PUBLISHING ---  
         auto teleop_msg = std::make_unique<TeleopCommand>();
 
         teleop_msg->header.stamp = start_time;

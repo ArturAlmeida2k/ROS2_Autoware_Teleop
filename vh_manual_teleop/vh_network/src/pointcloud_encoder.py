@@ -17,6 +17,7 @@ FRAME_MAGIC = b'PCF1'
 HEADER = struct.Struct('>4sIQI')     # magic, length, ingress_ts_ns, seq_id
 
 
+# Envia a nuvem de pontos para o RS por TCP quando o uplink está em modo pointcloud.
 class PointCloudEncoder(Node):
     def __init__(self):
         super().__init__('pointcloud_encoder')
@@ -45,7 +46,6 @@ class PointCloudEncoder(Node):
         self._thread = threading.Thread(target=self._sender_loop, daemon=True)
         self._thread.start()
 
-    # ------------------------------------------------------------------
     def on_mode(self, msg):
         active = (msg.data == CommandEnums.UPLINK_POINTCLOUD)
         if active != self._active:
@@ -57,8 +57,7 @@ class PointCloudEncoder(Node):
         if not self._active:
             return
 
-        # Sem limite de taxa: cada nuvem é enviada assim que chega. Se o TCP
-        # não acompanhar, a fila de tamanho 1 descarta a mais antiga.
+        # se o TCP não acompanhar, a fila de 1 deita fora a mais antiga
         now_ns = self.get_clock().now().nanoseconds
 
         self._seq = (self._seq + 1) & 0xFFFFFFFF
@@ -77,7 +76,6 @@ class PointCloudEncoder(Node):
             except queue.Full:
                 pass
 
-    # ------------------------------------------------------------------
     def _connect(self):
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.settimeout(2.0)

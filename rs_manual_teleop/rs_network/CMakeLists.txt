@@ -11,7 +11,7 @@ find_package(sensor_msgs REQUIRED)
 find_package(teleop_msgs REQUIRED)
 find_package(autoware_perception_msgs REQUIRED)
 
-# --- Python nodes ---
+# nós python
 install(PROGRAMS
   src/input_teleop_encoder.py
   DESTINATION lib/${PROJECT_NAME}

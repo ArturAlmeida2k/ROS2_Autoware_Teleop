@@ -29,12 +29,12 @@ using Metrics                = teleop_msgs::msg::NodeMetrics;
 using CmdEnums = teleop_msgs::msg::CommandEnums;
 
 
+// Converte o /teleop/safe_command em comandos do Autoware (control, gear, piscas) e troca STOP/REMOTE.
 class AutowareControllerNode : public rclcpp::Node
 {
 public:
     AutowareControllerNode() : Node("autoware_controller_node")
     {
-        // 1. Subscrições
         sub_safe_command_ = this->create_subscription<TeleopCommand>(
             "/teleop/safe_command", 10,
             std::bind(&AutowareControllerNode::safe_command_callback, this, std::placeholders::_1));
@@ -47,17 +47,16 @@ public:
             "/system/operation_mode/state", 10,
             std::bind(&AutowareControllerNode::operation_mode_callback, this, std::placeholders::_1));
 
-        // 2. Publicadores Autoware 
-        pub_control_cmd_     = this->create_publisher<Control>("/external/selected/control_cmd", rclcpp::QoS(1));
+        pub_control_cmd_    = this->create_publisher<Control>("/external/selected/control_cmd", rclcpp::QoS(1));
         pub_gear_cmd_        = this->create_publisher<GearCommand>("/external/selected/gear_cmd", 1);
         pub_turn_indicators_ = this->create_publisher<TurnIndicatorsCommand>("/external/selected/turn_indicators_cmd", 1);
         pub_hazard_lights_   = this->create_publisher<HazardLightsCommand>("/external/selected/hazard_lights_cmd", 1);
         
-        // 3. Clientes Autoware para alterar os Modos de Operação
+        // serviços para mudar o modo de operação
         client_remote_ = this->create_client<ChangeOperationModeSrv>("/api/operation_mode/change_to_remote");
         client_stop_   = this->create_client<ChangeOperationModeSrv>("/api/operation_mode/change_to_stop");
 
-        // 4. Publicadores de Métricas
+        // métricas
         rclcpp::QoS metrics_qos(10);       
         metrics_qos.best_effort();    
         metrics_qos.durability_volatile();
@@ -131,11 +130,10 @@ private:
         steering_angle_target_ = msg->target_steering_angle;
         brake_factor_          = msg->brake_factor;
 
-        // 3. ALTERNÂNCIA DE MODOS (STOP / REMOTE)
+        // só pede mudança de modo quando o engage muda
         bool engage_cmd = msg->engage_command;
         if (engage_cmd != last_engage_cmd_) {
             if (engage_cmd) {
-                // Pedido para passar a REMOTE
                 if (client_remote_->service_is_ready()) {
                     auto req = std::make_shared<ChangeOperationModeSrv::Request>();
                     client_remote_->async_send_request(req, []([[maybe_unused]] rclcpp::Client<ChangeOperationModeSrv>::SharedFuture) {});
@@ -146,7 +144,6 @@ private:
                 last_engage_cmd_ = engage_cmd;
 
             } else {
-                // Pedido para passar a STOP
                 if (client_stop_->service_is_ready()) {
                     auto req = std::make_shared<ChangeOperationModeSrv::Request>();
                     client_stop_->async_send_request(req, []([[maybe_unused]] rclcpp::Client<ChangeOperationModeSrv>::SharedFuture) {});
@@ -158,7 +155,7 @@ private:
             }
         }
 
-        // 4. AUTOWARE TRANSLATION
+        // só publica comandos com o Autoware em REMOTE
         if (current_mode_ == OperationModeState::REMOTE) {
             
             TurnIndicatorsCommand turn_cmd;
@@ -190,6 +187,7 @@ private:
             double velocity_error   = static_cast<double>(vlc_target_) - std::abs(vlc_current_);
             double acceleration_cmd = 0.0;
 
+            // a travar, o ganho sobe com o brake_factor (P simples na velocidade)
             if (vlc_target_ <= 0.01f && brake_factor_ > 0.01f) {
                 double dynamic_kp = BASE_KP_GAIN + (BRAKE_KP_MAX - BASE_KP_GAIN) * brake_factor_;
                 acceleration_cmd  = std::clamp(dynamic_kp * velocity_error, -MAX_DECEL, 0.0);
@@ -209,10 +207,9 @@ private:
             pub_control_cmd_->publish(std::move(control_cmd));
         }
 
-        // 5. Regista o tempo de conclusão do nó
         auto end_time = this->now();
 
-        // 6. PUBLICAÇÃO DAS MÉTRICAS
+        // id 0 = paragem gerada pelo safety gate, não entra nas métricas
         if (msg->id != 0)
         {
             publish_metric(pub_metrics_safety_gate_, msg->id, start_time, rclcpp::Time(msg->header.stamp));

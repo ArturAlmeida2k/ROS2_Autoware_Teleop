@@ -1,7 +1,6 @@
 #include <memory>
 #include "rclcpp/rclcpp.hpp"
 
-// Mensagens Autoware
 #include "autoware_vehicle_msgs/msg/velocity_report.hpp"
 #include "autoware_vehicle_msgs/msg/gear_report.hpp"
 #include "autoware_vehicle_msgs/msg/turn_indicators_report.hpp"
@@ -26,6 +25,7 @@ using CmdEnums = teleop_msgs::msg::CommandEnums;
 using Int8    = std_msgs::msg::Int8;
 
 
+// Junta o estado do veículo vindo do Autoware e publica /teleop/telemetry a 50 Hz.
 class TelemetrySubscriber : public rclcpp::Node {
 public:
     TelemetrySubscriber() : Node("autoware_telemetry_node") {

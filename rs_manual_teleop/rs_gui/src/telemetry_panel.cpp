@@ -1,3 +1,4 @@
+// Painel com modo, engage, estado da ligacao e latencias.
 #include "telemetry_panel.hpp"
 #include <QVBoxLayout>
 #include <QFrame>
@@ -67,7 +68,7 @@ QWidget* TelemetryPanel::make_card(const QString& title, QLabel*& value_label,
 
 void TelemetryPanel::onTelemetryReceived(TelemetryState msg)
 {
-    // Modo de operação do Autoware
+    // modo de operacao do Autoware
     static const std::unordered_map<int, std::pair<QString, QString>> mode_map = {
         {0, {"UNKNOWN", "#888888"}},
         {1, {"STOP",    "#e74c3c"}},
@@ -82,13 +83,12 @@ void TelemetryPanel::onTelemetryReceived(TelemetryState msg)
             QString("color: %1; background: transparent; font-weight: bold;").arg(color));
     }
 
-    // Engage
     const bool eng = msg.engaged;
     lbl_engage_->setText(eng ? "● ENGAGED" : "○ DISENGAGED");
     lbl_engage_->setStyleSheet(
         QString("color: %1; background: transparent;").arg(eng ? "#2ecc71" : "#e74c3c"));
 
-    // Estado da ligação, avaliado no veículo pelo Topic Monitor.
+    // estado da ligacao, vem do Topic Monitor no veiculo
     switch (msg.network_state) {
         case 0:
             lbl_network_->setText("● OK");

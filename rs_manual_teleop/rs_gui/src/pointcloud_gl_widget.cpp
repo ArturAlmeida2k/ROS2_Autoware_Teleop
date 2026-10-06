@@ -1,3 +1,4 @@
+// Vista 3D da point cloud com o contorno do carro, camara orbital com o rato.
 #include "pointcloud_gl_widget.hpp"
 #include <cstring>
 #include <chrono>
@@ -34,17 +35,17 @@ void main() { FragColor = vec4(1.0, 0.2, 0.2, 1.0); } // Cor: Vermelho vivo
 )";
 
 static const float CAR_VERTICES[] = {
-    // Base (Chão)
+    // base
     -1.0f, -1.0f, 0.0f,   3.0f, -1.0f, 0.0f,
      3.0f, -1.0f, 0.0f,   3.0f,  1.0f, 0.0f,
      3.0f,  1.0f, 0.0f,  -1.0f,  1.0f, 0.0f,
     -1.0f,  1.0f, 0.0f,  -1.0f, -1.0f, 0.0f,
-    // Topo (Tejadilho)
+    // tejadilho
     -1.0f, -1.0f, 1.5f,   3.0f, -1.0f, 1.5f,
      3.0f, -1.0f, 1.5f,   3.0f,  1.0f, 1.5f,
      3.0f,  1.0f, 1.5f,  -1.0f,  1.0f, 1.5f,
     -1.0f,  1.0f, 1.5f,  -1.0f, -1.0f, 1.5f,
-    // Pilares (Ligar Base ao Topo)
+    // pilares
     -1.0f, -1.0f, 0.0f,  -1.0f, -1.0f, 1.5f,
      3.0f, -1.0f, 0.0f,   3.0f, -1.0f, 1.5f,
      3.0f,  1.0f, 0.0f,   3.0f,  1.0f, 1.5f,
@@ -56,7 +57,7 @@ PointCloudGLWidget::PointCloudGLWidget(QWidget* parent) : QOpenGLWidget(parent) 
     QSurfaceFormat fmt;
     fmt.setVersion(3, 3);
     fmt.setProfile(QSurfaceFormat::CoreProfile);
-    fmt.setDepthBufferSize(24); // Necessário para 3D
+    fmt.setDepthBufferSize(24);
     setFormat(fmt);
 }
 
@@ -114,7 +115,6 @@ void PointCloudGLWidget::resizeGL(int w, int h) {
 void PointCloudGLWidget::paintGL() {
     gl33_->glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    // Calcular Matrizes da Câmara
     QMatrix4x4 proj, view, model;
     proj.perspective(45.0f, float(width()) / float(height() ? height() : 1), 0.1f, 1000.0f);
     
@@ -159,15 +159,14 @@ void PointCloudGLWidget::paintGL() {
     gl33_->glBindVertexArray(0);
     shader_->release();
 
-    // === DESENHAR O CARRO ===
+    // carro
     car_shader_->bind();
-    car_shader_->setUniformValue("u_MVP", mvp); // Usamos a mesma matriz da câmara
+    car_shader_->setUniformValue("u_MVP", mvp);
     gl33_->glBindVertexArray(car_vao_);
     
-    // Configurar a grossura da linha (opcional)
     gl33_->glLineWidth(2.0f); 
     
-    // Desenhar os 24 vértices como Linhas (12 segmentos)
+    // 24 vertices = 12 arestas
     gl33_->glDrawArrays(GL_LINES, 0, 24); 
     
     gl33_->glBindVertexArray(0);

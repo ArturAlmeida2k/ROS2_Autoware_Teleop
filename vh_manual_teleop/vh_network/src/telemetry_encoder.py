@@ -9,6 +9,7 @@ from teleop_msgs.msg import TelemetryState
 from teleop_msgs.msg import NodeMetrics
 
 
+# Envia a telemetria do veículo para o RS por UDP.
 class TelemetryEncoder(Node):
     def __init__(self):
         super().__init__('telemetry_encoder')
@@ -35,16 +36,13 @@ class TelemetryEncoder(Node):
     def publish_metrics(self, msg_id, rx_time_msg, tx_time_msg):
         metrics_msg = NodeMetrics()
         metrics_msg.id = msg_id
-        
-        # 1. Atribuição direta dos tempos absolutos para o rosbag
+
         metrics_msg.tx = tx_time_msg
         metrics_msg.rx = rx_time_msg
 
-        # 2. Converter de builtin_interfaces para rclpy.time.Time para a matemática
         rx_time = Time.from_msg(rx_time_msg)
         tx_time = Time.from_msg(tx_time_msg)
 
-        # 3. Calcular a diferença e converter para ms (em Python a duração dá-nos nanosegundos diretamente)
         latency = rx_time - tx_time
         metrics_msg.latency_ms = latency.nanoseconds / 1000000.0
 

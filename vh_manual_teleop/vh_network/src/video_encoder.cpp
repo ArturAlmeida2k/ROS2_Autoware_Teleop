@@ -20,6 +20,8 @@
 #include <string>
 #include <vector>
 
+// Codifica as câmaras em H.264 e envia por RTP/UDP para o RS (SEI com ids e TS na frontal).
+
 using Image    = sensor_msgs::msg::Image;
 using Int8     = std_msgs::msg::Int8;
 using CmdEnums = teleop_msgs::msg::CommandEnums;
@@ -35,7 +37,7 @@ static inline uint64_t now_ns() {
 
 class VideoEncoderTX;
 
-// Instantes (relógio do VH, ns) de um frame dentro do encoder.
+// tempos (ns, relógio do VH) de cada frame no encoder
 struct FrameTimes {
     uint64_t id = 0;
     uint64_t rx = 0;       // entrada no callback ROS (TS do SEI)
@@ -44,7 +46,7 @@ struct FrameTimes {
     uint64_t enc_out = 0;  // saída do x264enc
 };
 
-// Um stream = uma câmara = uma pipeline de encode independente.
+// uma pipeline por câmara
 struct StreamCtx {
     VideoEncoderTX *node = nullptr;
     std::string topic;
@@ -57,14 +59,11 @@ struct StreamCtx {
     bool initialized     = false;
     uint64_t frame_counter = 1;
 
-    // Seguimento de cada frame: até ao encoder pelo PTS (que a queue leaky
-    // não desalinha quando descarta frames); depois do encoder pela ordem,
-    // porque o GstVideoEncoder altera o PTS e o x264 em zerolatency produz
-    // exatamente um frame por cada frame de entrada, pela mesma ordem.
+    // até ao encoder segue-se pelo PTS, depois pela ordem (o encoder mexe no PTS)
     std::mutex mtx;
-    std::deque<FrameTimes> pending;               // entregues ao appsrc, sem PTS
-    std::map<GstClockTime, FrameTimes> by_pts;    // appsrc -> entrada do encoder
-    std::deque<FrameTimes> in_enc, after_enc;     // dentro / depois do encoder
+    std::deque<FrameTimes> pending;               // ainda sem PTS
+    std::map<GstClockTime, FrameTimes> by_pts;
+    std::deque<FrameTimes> in_enc, after_enc;
 };
 
 class VideoEncoderTX : public rclcpp::Node {
@@ -74,14 +73,8 @@ public:
         declare_parameter<int>("port", 5007);
         declare_parameter<int>("num_cameras", 1);
         declare_parameter<int>("bitrate", 5000);
-        // Intra-refresh: em vez de um keyframe inteiro a cada key-int-max frames,
-        // o x264 renova a imagem por colunas ao longo desses frames. Os frames
-        // ficam com tamanho mais uniforme e os picos dos keyframes desaparecem.
         declare_parameter<bool>("intra_refresh", false);
-        // Frame rate declarado ao x264. O controlo de taxa divide o bitrate por
-        // este valor para decidir o tamanho de cada frame, por isso tem de bater
-        // com a taxa real do tópico da câmara (AWSIM ~5.4 Hz). Com 30 declarado
-        // e ~5.4 reais, o débito efetivo fica em ~1/5 do bitrate configurado.
+        // tem de bater com a taxa real do tópico, senão o x264 erra o bitrate
         declare_parameter<int>("framerate", 30);
         declare_parameter<std::vector<std::string>>("camera_topics",
             std::vector<std::string>{
@@ -167,7 +160,6 @@ private:
     rclcpp::Subscription<Int8>::SharedPtr sub_mode_;
     std::atomic<bool> active_{true};
 
-    // -----------------------------------------------------------------
     void image_callback(const Image::SharedPtr msg, StreamCtx *ctx) {
         if (!active_.load(std::memory_order_relaxed)) return;
 
@@ -175,7 +167,7 @@ private:
         ft.rx = now_ns();
 
         try {
-            // Usa a imagem do ROS sem cópia quando o formato é conhecido.
+            // formatos conhecidos usam a imagem sem cópia
             int code = -1;
             const std::string &enc = msg->encoding;
             if      (enc == sensor_msgs::image_encodings::BGR8)  code = cv::COLOR_BGR2YUV_I420;
@@ -196,10 +188,10 @@ private:
             if (!ctx->initialized) {
                 init_pipeline(ctx, src.cols, src.rows);
                 if (!ctx->initialized) return;
-                ft.rx = now_ns();   // não contar o arranque da pipeline no 1.º frame
+                ft.rx = now_ns();   // não contar o arranque da pipeline
             }
 
-            // Redimensiona e converte para I420 diretamente no buffer do GStreamer.
+            // converte para I420 direto no buffer do gst
             cv::Mat scaled = src;
             if (src.cols != OUT_W || src.rows != OUT_H)
                 cv::resize(src, scaled, cv::Size(OUT_W, OUT_H), 0, 0, cv::INTER_LINEAR);
@@ -214,8 +206,7 @@ private:
             ft.pre = now_ns();
             ft.id = ctx->frame_counter++;
 
-            // Registar antes do push: a thread do appsrc pode empurrar o buffer
-            // para a pipeline antes de o push-buffer retornar.
+            // registar antes do push, o appsrc pode usar o buffer antes de retornar
             if (ctx->instrumented) {
                 std::lock_guard<std::mutex> lock(ctx->mtx);
                 ctx->pending.push_back(ft);
@@ -241,7 +232,6 @@ private:
         }
     }
 
-    // -----------------------------------------------------------------
     void init_pipeline(StreamCtx *ctx, int width, int height) {
         const std::string pipeline_str =
             "appsrc name=mysrc is-live=true do-timestamp=true format=time "
@@ -291,8 +281,7 @@ private:
         gst_object_unref(e);
     }
 
-    // -----------------------------------------------------------------
-    // appsrc entrega o buffer: associa o registo ao PTS.
+    // associa o frame ao PTS
     static GstPadProbeReturn probe_appsrc(GstPad *, GstPadProbeInfo *info, gpointer ud) {
         auto *ctx = static_cast<StreamCtx *>(ud);
         const GstClockTime pts = GST_BUFFER_PTS(GST_PAD_PROBE_INFO_BUFFER(info));
@@ -300,7 +289,7 @@ private:
         if (ctx->pending.empty()) return GST_PAD_PROBE_OK;
         ctx->by_pts[pts] = ctx->pending.front();
         ctx->pending.pop_front();
-        // Frames descartados pela queue leaky nunca chegam ao encoder.
+        // a queue leaky descarta frames, estes nunca saem do mapa
         while (ctx->by_pts.size() > 16) ctx->by_pts.erase(ctx->by_pts.begin());
         return GST_PAD_PROBE_OK;
     }
@@ -310,7 +299,7 @@ private:
         const GstClockTime pts = GST_BUFFER_PTS(GST_PAD_PROBE_INFO_BUFFER(info));
         const uint64_t t = now_ns();
         std::lock_guard<std::mutex> lock(ctx->mtx);
-        FrameTimes ft;                        // sem registo: entra vazio para manter a ordem
+        FrameTimes ft;                        // vazio se não houver registo, para manter a ordem
         auto it = ctx->by_pts.find(pts);
         if (it != ctx->by_pts.end()) { ft = it->second; ctx->by_pts.erase(it); }
         ft.enc_in = t;
@@ -332,8 +321,7 @@ private:
         return GST_PAD_PROBE_OK;
     }
 
-    // Posição (início do start code) do primeiro NAL de slice (tipos 1–5) num
-    // access unit em byte-stream. Se não encontrar, devolve 0 (insere no início).
+    // offset do start code do primeiro slice (NAL 1-5), 0 se não houver
     static size_t first_vcl_offset(const uint8_t *d, size_t n) {
         for (size_t i = 0; i + 3 < n; ++i) {
             if (d[i] == 0 && d[i + 1] == 0 && d[i + 2] == 1) {
@@ -346,8 +334,7 @@ private:
         return 0;
     }
 
-    // Saída do h264parse: insere o SEI com ID, TS (chegada da imagem) e
-    // TS2 (saída do encoder), e publica as métricas do frame.
+    // SEI com ID, TS (chegada da imagem) e TS2 (saída do encoder)
     static GstPadProbeReturn probe_parser_out(GstPad *, GstPadProbeInfo *info, gpointer ud) {
         auto *ctx = static_cast<StreamCtx *>(ud);
         GstBuffer *buffer = GST_PAD_PROBE_INFO_BUFFER(info);
@@ -377,12 +364,7 @@ private:
         sei.insert(sei.end(), uuid, uuid + 16);
         sei.insert(sei.end(), payload.begin(), payload.end());
 
-        // O SEI tem de ficar DENTRO do access unit, imediatamente antes do
-        // primeiro slice (depois do AUD/SPS/PPS). Se ficar antes do AUD, o AUD
-        // abre um access unit novo: o rtph264pay marca o fim do frame logo a
-        // seguir ao SEI e o RS recebe dois "frames" (o SEI sozinho, à chegada do
-        // primeiro pacote, e o frame real no fim). A métrica de rede passava a
-        // medir só o primeiro pacote e o resto da transmissão caía no decode.
+        // SEI tem de ir antes do primeiro slice, senão o AUD abre um frame novo
         GstMapInfo old_map, new_map;
         gst_buffer_map(buffer, &old_map, GST_MAP_READ);
         const size_t at = first_vcl_offset(old_map.data, old_map.size);

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Publica uma nuvem de pontos aleatória em /lidar/points, para testar sem o simulador.
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import PointCloud2, PointField
@@ -12,7 +13,7 @@ class FakePointCloudNode(Node):
         self.publisher_ = self.create_publisher(PointCloud2, '/lidar/points', 10)
         self.timer = self.create_timer(0.1, self.publish_points) # 10 Hz
 
-        # Gerar 10.000 pontos aleatórios num cubo 3D (X, Y, Z entre -5 e 5)
+        # 10k pontos aleatórios num cubo de -5 a 5 m
         self.points = np.random.uniform(-5.0, 5.0, (10000, 3)).astype(np.float32)
 
     def publish_points(self):
@@ -24,7 +25,7 @@ class FakePointCloudNode(Node):
         msg.height = 1
         msg.width = len(self.points)
         
-        # Estrutura do dado: 3 floats (X, Y, Z)
+        # x, y, z em float32
         msg.fields = [
             PointField(name='x', offset=0, datatype=PointField.FLOAT32, count=1),
             PointField(name='y', offset=4, datatype=PointField.FLOAT32, count=1),
@@ -36,7 +37,6 @@ class FakePointCloudNode(Node):
         msg.row_step = msg.point_step * msg.width
         msg.is_dense = True
         
-        # Converter matriz numpy para bytes crus
         msg.data = self.points.tobytes()
         
         self.publisher_.publish(msg)

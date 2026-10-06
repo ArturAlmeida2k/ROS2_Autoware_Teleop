@@ -12,8 +12,9 @@
 #include <thread>
 #include <atomic>
 
-// Um stream = uma pipeline de encode+envio independente, alimentada
-// pela mesma captura. Permite testar N enc/dec com uma só câmara.
+// Captura uma webcam (v4l2), codifica em H.264 com SEI de ids/TS e envia por RTP/UDP.
+
+// uma pipeline por stream, todas com a mesma captura (para testar N enc/dec com uma câmara)
 struct StreamCtx {
     int port = 0;
     GstElement *pipeline = nullptr;
@@ -35,7 +36,7 @@ public:
         this->declare_parameter<std::string>("ip_address", "127.0.0.1");
         this->declare_parameter<int>("port", 5007);
         this->declare_parameter<int>("bitrate", 5000);
-        // N streams em paralelo a partir da mesma captura: portas port..port+N-1
+        // portas port..port+N-1
         this->declare_parameter<int>("num_streams", 1);
 
         int camera_id  = this->get_parameter("camera_id").as_int();
@@ -106,8 +107,7 @@ private:
                                ",height=" + std::to_string(height) +
                                ",framerate=" + std::to_string(fps) + "/1";
 
-        // intra-refresh removido: sem IDR real o decoder nunca purga o DPB.
-        // key-int-max=15 dá IDRs a cada 0.5s, que limpam a lista de referencias.
+        // sem intra-refresh: precisa de IDRs reais para o decoder limpar as referências
         std::string pipeline_str =
             "appsrc name=mysrc is-live=true do-timestamp=true format=time caps=\"" + caps_str + "\" ! "
             "videoconvert ! "
@@ -157,7 +157,6 @@ private:
 
                 guint size = frame.total() * frame.elemSize();
 
-                // Mesmo frame empurrado para todas as pipelines de encode
                 for (auto &ctx : streams_) {
                     if (!ctx->appsrc) continue;
 

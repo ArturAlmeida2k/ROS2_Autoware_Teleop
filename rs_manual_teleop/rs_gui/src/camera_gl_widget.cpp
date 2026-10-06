@@ -1,3 +1,4 @@
+// Widget OpenGL que recebe uma camara por RTP/H264, descodifica com GStreamer e desenha.
 #include "camera_gl_widget.hpp"
 #include <QOpenGLFunctions_3_3_Core>
 #include <QDebug>
@@ -122,7 +123,7 @@ void CameraGLWidget::paintGL()
     texture_->release();
     shader_->release();
 
-    // METRICA 3 — captura -> desenhado
+    // metrica 3: captura ate desenhado
     if (id_to_emit > 0 && ts_to_emit > 0) {
         auto now = std::chrono::system_clock::now().time_since_epoch();
         int64_t render_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(now).count();
@@ -131,11 +132,7 @@ void CameraGLWidget::paintGL()
     }
 }
 
-// Só para capturas de ecrã da GUI sem o AWSIM ligado: enquanto não chegar
-// nenhum frame real, desenha um placeholder com o nome da câmara em vez de
-// ecrã preto. Desaparece sozinho e para sempre assim que o primeiro frame
-// verdadeiro for descodificado (ver on_new_sample), por isso não interfere
-// nada com o funcionamento normal.
+// placeholder com o nome da camara ate chegar o primeiro frame
 void CameraGLWidget::paintEvent(QPaintEvent* event)
 {
     QOpenGLWidget::paintEvent(event);
@@ -236,7 +233,7 @@ void CameraGLWidget::stop_pipeline()
     }
 }
 
-// Antes do decode. METRICA 1 — rede isolada.
+// antes do decode, metrica 1 (so rede)
 GstPadProbeReturn CameraGLWidget::pad_probe_callback(GstPad *pad, GstPadProbeInfo *info, gpointer user_data)
 {
     auto *widget = static_cast<CameraGLWidget*>(user_data);
@@ -254,8 +251,7 @@ GstPadProbeReturn CameraGLWidget::pad_probe_callback(GstPad *pad, GstPadProbeInf
             return GST_PAD_PROBE_OK;
         }
 
-        // O SEI vem antes do primeiro slice, depois do AUD/SPS/PPS (e, no
-        // primeiro keyframe, do SEI do x264 com a versão, ~700 bytes).
+        // o SEI vem depois de AUD/SPS/PPS, no 1o keyframe ainda ha o SEI do x264
         size_t search_limit = std::min(map.size - 16, (size_t)4096);
         for (size_t i = 0; i < search_limit - 16; ++i) {
             if (std::memcmp(map.data + i, uuid, 16) == 0) {
@@ -273,15 +269,12 @@ GstPadProbeReturn CameraGLWidget::pad_probe_callback(GstPad *pad, GstPadProbeInf
                 auto now = std::chrono::system_clock::now().time_since_epoch();
                 int64_t now_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(now).count();
 
-                // Cast com sinal: TS2 vem do relogio do TX. Sem isto, um
-                // offset NTP de ~1ms faz a subtracao unsigned enrolar para ~2^64.
+                // com sinal, senao um offset NTP pequeno faz a subtracao dar a volta
                 int64_t diff_ns = now_ns - (int64_t)ts2_ns;
                 double network_ms = diff_ns / 1000000.0;
                 emit widget->networkLatencyUpdated(frame_id, network_ms);
 
-                // METRICA 0 — encode no VH (captura -> saída do encoder).
-                // TS e TS2 são ambos do relógio do VH: diferença exata, sem
-                // erro de sincronização entre máquinas.
+                // metrica 0: encode no VH, TS e TS2 sao do mesmo relogio
                 double encode_ms = ((int64_t)ts2_ns - (int64_t)ts_ns) / 1000000.0;
                 emit widget->encodeLatencyUpdated(frame_id, encode_ms);
 
@@ -300,7 +293,7 @@ GstPadProbeReturn CameraGLWidget::pad_probe_callback(GstPad *pad, GstPadProbeInf
     return GST_PAD_PROBE_OK;
 }
 
-// Depois do decode. METRICA 2 — captura -> pronto para o paintGL.
+// depois do decode, metrica 2 (captura ate frame pronto)
 GstFlowReturn CameraGLWidget::on_new_sample(GstElement *sink, gpointer user_data)
 {
     auto *widget = static_cast<CameraGLWidget*>(user_data);

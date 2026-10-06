@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Serializa o /teleop/command e envia-o por UDP para o veículo.
 import rclpy
 from rclpy.node import Node
 from rclpy.serialization import serialize_message
@@ -36,15 +37,14 @@ class InputTeleopEncoder(Node):
         metrics_msg = NodeMetrics()
         metrics_msg.id = msg_id
         
-        # 1. Atribuição direta dos tempos absolutos para o rosbag
+        # tempos absolutos, para o rosbag
         metrics_msg.tx = tx_time_msg
         metrics_msg.rx = rx_time_msg
 
-        # 2. Converter de builtin_interfaces para rclpy.time.Time para a matemática
         rx_time = Time.from_msg(rx_time_msg)
         tx_time = Time.from_msg(tx_time_msg)
 
-        # 3. Calcular a diferença e converter para ms (em Python a duração dá-nos nanosegundos diretamente)
+        # Duration em python já vem em ns
         latency = rx_time - tx_time
         metrics_msg.latency_ms = latency.nanoseconds / 1000000.0
 

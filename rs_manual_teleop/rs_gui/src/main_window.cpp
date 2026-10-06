@@ -1,3 +1,4 @@
+// Janela principal: camaras ou point cloud, com telemetria e velocimetro por cima.
 #include "main_window.hpp"
 #include <QGridLayout>
 #include <QVBoxLayout>
@@ -14,25 +15,22 @@ MainWindow::MainWindow(RosBridge* bridge, QWidget* parent)
     stack_widget_ = new QStackedWidget(this);
     setCentralWidget(stack_widget_);
 
-    // =====================================================================
-    // PÁGINA 1 — vistas das câmaras
-    // =====================================================================
+    // pagina das camaras
     tab_quad_view_ = new QWidget();
     auto* grid = new QGridLayout(tab_quad_view_);
     grid->setContentsMargins(0, 0, 0, 0);
     grid->setSpacing(2);
 
-    // A porta define a câmara: 5007 front, 5008 left, 5009 back, 5010 right.
+    // portas: 5007 front, 5008 left, 5009 back, 5010 right
     cam_front_ = new CameraGLWidget(5007, "FRONT", tab_quad_view_);
     cam_left_  = new CameraGLWidget(5008, "LEFT", tab_quad_view_);
     cam_back_  = new CameraGLWidget(5009, "BACK", tab_quad_view_);
     cam_right_ = new CameraGLWidget(5010, "RIGHT", tab_quad_view_);
 
-    // Só a câmara frontal transporta SEI, por isso é a única instrumentada.
+    // so a frontal leva SEI
     connect(cam_front_, &CameraGLWidget::latencyUpdated, this,
             [this](uint64_t frame_id, double latency_ms) {
         bridge_->publishFrontCameraMetrics(static_cast<uint32_t>(frame_id), latency_ms);
-        // Só mostra a latência de vídeo quando é o vídeo que está no ecrã.
         if (panel_ && stack_widget_->currentWidget() == tab_quad_view_)
             panel_->setVideoLatency(latency_ms);
     }, Qt::QueuedConnection);
@@ -65,9 +63,7 @@ MainWindow::MainWindow(RosBridge* bridge, QWidget* parent)
 
     stack_widget_->addWidget(tab_quad_view_);
 
-    // =====================================================================
-    // PÁGINA 2 — point cloud
-    // =====================================================================
+    // pagina da point cloud
     tab_pointcloud_ = new QWidget();
     auto* layout_pc = new QVBoxLayout(tab_pointcloud_);
     layout_pc->setContentsMargins(0, 0, 0, 0);
@@ -84,17 +80,11 @@ MainWindow::MainWindow(RosBridge* bridge, QWidget* parent)
     connect(pc_widget_, &PointCloudGLWidget::displayLatencyUpdated, this,
         [this](uint32_t id, double latency_ms) {
         bridge_->publishPointCloudMetrics(id, latency_ms);
-        // No modo pointcloud, o cartão de latência passa a mostrar esta.
         if (panel_ && stack_widget_->currentWidget() == tab_pointcloud_)
             panel_->setVideoLatency(latency_ms);
     }, Qt::QueuedConnection);
 
-    // =====================================================================
-    // Telemetria — sempre visível, independente da página atual
-    // =====================================================================
-    // Os dois flutuam sobre o stack_widget_ (não sobre uma página
-    // específica), por isso ficam por cima tanto das câmaras como do
-    // pointcloud, em vez de desaparecerem ao trocar de página.
+    // filhos do stack_widget_ para ficarem visiveis nas duas paginas
     panel_ = new TelemetryPanel(stack_widget_);
     panel_->adjustSize();
     panel_->show();
@@ -105,38 +95,30 @@ MainWindow::MainWindow(RosBridge* bridge, QWidget* parent)
     speed_->show();
     speed_->raise();
 
-    // Telemetria orientada a eventos (ver RosBridge: coalescência, sem
-    // backlog). Substitui o QTimer de 30 Hz, que mostrava sempre a última
-    // amostra com 0–20 ms de idade (média ~10 ms só de espera).
     connect(bridge_, &RosBridge::telemetryUpdated,
             this, &MainWindow::onTelemetryUpdated, Qt::QueuedConnection);
 
-    // A troca vídeo/pointcloud não é sensível à latência e não deve
-    // depender de haver telemetria, por isso tem o seu próprio timer.
+    // troca de pagina num timer proprio, nao depende da telemetria
     auto* page_timer = new QTimer(this);
     connect(page_timer, &QTimer::timeout, this, &MainWindow::updateActivePage);
     page_timer->start(50);
 
     resize(1440, 900);
 
-    // A geometria só está resolvida depois do primeiro ciclo de eventos,
-    // por isso o posicionamento inicial do velocímetro é adiado.
+    // so ha geometria depois do primeiro ciclo de eventos
     QTimer::singleShot(0, this, [this]() { reposition_overlays(); });
 }
 
-// ---------------------------------------------------------------------
 void MainWindow::onTelemetryUpdated()
 {
-    // Limpar ANTES de ler: uma chegada a partir daqui gera novo evento,
-    // por isso nunca se perde a última amostra.
+    // limpar antes de ler para nao perder a ultima amostra
     bridge_->clearTelemetryPending();
 
     TelemetryState msg;
     int64_t rx_time_ns;
     if (!bridge_->latestTelemetry(msg, rx_time_ns)) return;
 
-    // Pode haver um evento extra com a mesma amostra (corrida entre o clear
-    // e a leitura) — não redesenhar nem duplicar a métrica.
+    // pode vir um evento repetido com a mesma amostra
     if (msg.id == last_displayed_telemetry_id_) return;
     last_displayed_telemetry_id_ = msg.id;
 
@@ -151,7 +133,6 @@ void MainWindow::onTelemetryUpdated()
     panel_->setLoopLatency(full_ms);
 }
 
-// ---------------------------------------------------------------------
 void MainWindow::updateActivePage()
 {
     QWidget* target = (bridge_->currentUplinkMode() == CmdEnums::UPLINK_POINTCLOUD)
@@ -160,16 +141,12 @@ void MainWindow::updateActivePage()
 
     stack_widget_->setCurrentWidget(target);
     panel_->setPointCloudMode(target == tab_pointcloud_);
-    // setCurrentWidget traz a página nova para cima de tudo o que está no
-    // stack_widget_ — incluindo o panel_/speed_. Sem isto, a telemetria
-    // fica tapada assim que troca de página.
+    // setCurrentWidget poe a pagina por cima dos overlays
     panel_->raise();
     speed_->raise();
-    // A posição depende de qual página está ativa, por isso recalcula.
     reposition_overlays();
 }
 
-// ---------------------------------------------------------------------
 void MainWindow::reposition_overlays()
 {
     if (!speed_ || !panel_ || !stack_widget_) return;
@@ -177,7 +154,6 @@ void MainWindow::reposition_overlays()
 
     const bool on_pointcloud = (stack_widget_->currentWidget() == tab_pointcloud_);
 
-    // --- Painel de telemetria (modo, latência, etc.) ---
     if (on_pointcloud) {
         panel_->move(stack_widget_->width() / 3, padding);
     } else if (is_single_camera_) {
@@ -186,7 +162,6 @@ void MainWindow::reposition_overlays()
         panel_->move(stack_widget_->width() / 6 + padding, padding);
     }
 
-    // --- Velocímetro ---
     int speed_y;
     if (!on_pointcloud && !is_single_camera_) {
         speed_y = static_cast<int>(stack_widget_->height() * 2/3) - speed_->height() - padding;
@@ -240,6 +215,6 @@ void MainWindow::setSingleCameraMode(bool single)
         grid->setRowStretch(1, 1);
     }
 
-    // A posição da vista frontal mudou; reposicionar depois do relayout.
+    // esperar pelo relayout
     QTimer::singleShot(50, this, [this]() { reposition_overlays(); });
 }

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Recebe a telemetria do veículo por UDP e publica em /teleop/telemetry.
 import rclpy
 from rclpy.node import Node
 from rclpy.serialization import deserialize_message
@@ -20,6 +21,7 @@ class TelemetryDecoder(Node):
 
         self.expected_id_ = None
 
+        # se o id recuar mais do que isto, assume que o emissor reiniciou
         self.RESYNC_THRESHOLD = 1000
 
         self.pub_telemetry = self.create_publisher(TelemetryState, '/teleop/telemetry', 10)
@@ -34,11 +36,8 @@ class TelemetryDecoder(Node):
 
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.bind(('0.0.0.0', self.port))
-        # Socket bloqueante numa thread dedicada: o pacote é lido e carimbado
-        # assim que o kernel o entrega, em vez de esperar pelo próximo tick
-        # de um timer de polling (o antigo create_timer de 5 ms acrescentava
-        # 0–5 ms uniformes a cada pacote). O timeout só serve para a thread
-        # conseguir verificar rclpy.ok() e terminar no shutdown.
+        # thread com socket bloqueante para carimbar o pacote mal chega;
+        # o timeout é só para conseguir sair no shutdown
         self.sock.settimeout(0.5)
 
         self.rx_thread = threading.Thread(target=self.receive_loop, daemon=True)
@@ -64,7 +63,6 @@ class TelemetryDecoder(Node):
         self.expected_id_ = msg_id + 1
         metrics_msg.lost_pkg = lost
         
-        # 4. Publicar métricas
         self.pub_metrics.publish(metrics_msg)
 
     def receive_loop(self):
@@ -82,6 +80,7 @@ class TelemetryDecoder(Node):
                 if self.expected_id_ is not None and msg.id < self.expected_id_ - self.RESYNC_THRESHOLD:
                     self.expected_id_ = None
 
+                # pacote atrasado ou repetido
                 if self.expected_id_ is not None and msg.id < self.expected_id_:
                     continue
 
@@ -96,7 +95,7 @@ class TelemetryDecoder(Node):
             except socket.timeout:
                 continue
             except OSError:
-                # Socket fechado no shutdown.
+                # socket fechado no shutdown
                 break
             except Exception as e:
                 if rclpy.ok():

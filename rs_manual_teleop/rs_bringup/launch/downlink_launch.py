@@ -6,6 +6,8 @@ from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 
+# Teste local sem rede: joystick ligado diretamente ao safety gate e ao controlo do veículo.
+
 
 def generate_launch_description():
 
@@ -81,6 +83,7 @@ def generate_launch_description():
         parameters=[{'max_velocity_kmh': ParameterValue(max_velocity, value_type=float)}]
     )
 
+    # métricas falsas para o topic_monitor ficar em OK
     fake_network_health = ExecuteProcess(
         cmd=[
             'ros2', 'topic', 'pub', '-r', '50',

@@ -1,3 +1,4 @@
+// Ligacao entre o ROS e a GUI: recebe telemetria e point cloud, publica as metricas.
 #include "ros_bridge.hpp"
 
 RosBridge::RosBridge(QObject* parent)
@@ -31,12 +32,7 @@ RosBridge::RosBridge(QObject* parent)
                 has_telemetry_ = true;
             }
 
-            // Atualização orientada a eventos com coalescência: só se põe um
-            // evento na fila do Qt se não houver já um pendente. Se a GUI se
-            // atrasar, as chegadas intermédias são simplesmente absorvidas
-            // (o slot lê sempre a mais recente), por isso não há backlog —
-            // o problema que tinha levado ao QTimer de 30 Hz — mas também
-            // não há os 0–20 ms de espera que esse timer introduzia.
+            // so emite se nao houver ja um evento pendente, a GUI le sempre a mais recente
             if (!telemetry_update_pending_.exchange(true, std::memory_order_acq_rel)) {
                 emit telemetryUpdated();
             }
@@ -80,22 +76,19 @@ void RosBridge::publish_metric(const rclcpp::Publisher<Metrics>::SharedPtr& pub,
     pub->publish(std::move(msg));
 }
 
-// Tópicos 2 e 3 (Telemetria GUI e End-to-End)
 double RosBridge::publishTelemetryGuiMetrics(uint32_t id, const builtin_interfaces::msg::Time &origin_stamp, double e2e_command_ms, int64_t rx_time_ns, int64_t display_time_ns)
 {
     rclcpp::Time rx_time(rx_time_ns, RCL_ROS_TIME);
     rclcpp::Time display_time(display_time_ns, RCL_ROS_TIME);
     rclcpp::Time origin_time(origin_stamp, RCL_ROS_TIME);
 
-    // Tópico 2: Latência apenas da interface (Display - Rx)
+    // so a GUI: display - rx
     publish_metric(pub_telemetry_gui_, id, display_time, rx_time);
 
-    // Tópico 3: E2E Telemetry = (Display - Origin)
-    // Usamos a função genérica para calcular automaticamente e fazer o publish
+    // e2e telemetria: display - origem
     publish_metric(pub_e2e_telemetry_, id, display_time, origin_time);
 
-    // Tópico 4: Full Latency = E2E Telemetry + E2E Command
-    // Como a full latency é uma soma e não uma simples diferença de tempos, preenchemos o msg à mão
+    // full = e2e telemetria + e2e comando
     double e2e_telemetry_ms = (display_time - origin_time).seconds() * 1000.0;
     const double full_latency_ms = e2e_telemetry_ms + e2e_command_ms;
 
@@ -109,7 +102,6 @@ double RosBridge::publishTelemetryGuiMetrics(uint32_t id, const builtin_interfac
     return full_latency_ms;
 }
 
-// Tópico 5 (Câmara Frontal)
 void RosBridge::publishFrontCameraMetrics(uint32_t frame_id, double latency_ms)
 {
     auto msg = std::make_unique<Metrics>();

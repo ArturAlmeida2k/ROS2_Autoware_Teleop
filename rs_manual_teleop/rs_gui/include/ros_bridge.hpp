@@ -17,6 +17,7 @@ using TeleopCommand = teleop_msgs::msg::TeleopCommand;
 using CmdEnums = teleop_msgs::msg::CommandEnums;
 using Metrics = teleop_msgs::msg::NodeMetrics;
 
+// Node ROS da GUI do RS, o executor corre numa thread propria.
 class RosBridge : public QObject, public rclcpp::Node {
     Q_OBJECT
 public:
@@ -30,8 +31,7 @@ public:
 
     uint8_t currentUplinkMode() const { return uplink_mode_.load(std::memory_order_relaxed); }
 
-    // Chamado pela GUI no início do slot de atualização: a partir daqui,
-    // uma nova chegada volta a gerar um sinal telemetryUpdated().
+    // chamar no inicio do slot, para a proxima chegada voltar a emitir
     void clearTelemetryPending() { telemetry_update_pending_.store(false, std::memory_order_release); }
 
     double publishTelemetryGuiMetrics(uint32_t id, const builtin_interfaces::msg::Time &origin_stamp, double e2e_command, int64_t rx_time_ns, int64_t display_time_ns);
@@ -43,8 +43,7 @@ public:
 
     signals:
     void pointCloudReceived(PointCloud2::SharedPtr msg);
-    // Emitido (da thread ROS) quando chega telemetria nova e não há já uma
-    // atualização pendente na fila do Qt — nunca acumula backlog.
+    // emitido da thread do ROS, no maximo um pendente
     void telemetryUpdated();
 private:
     rclcpp::Subscription<TelemetryState>::SharedPtr   sub_telemetry_;

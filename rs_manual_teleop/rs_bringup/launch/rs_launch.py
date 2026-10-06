@@ -6,6 +6,8 @@ from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node
 from datetime import datetime
 
+# Lança a estação remota: joystick, mapeamento do controlador, rede, GUI e bag de métricas.
+
 def generate_launch_description():
 
     device_id_arg = DeclareLaunchArgument(
@@ -50,7 +52,7 @@ def generate_launch_description():
     )
     pointcloud_port = LaunchConfiguration('pointcloud_port')
 
-    # 1. Nó do Sistema: Leitura do Joystick com throttle para 50hz
+    # joy limitado a 60 Hz pelo throttle
     joy_node = Node(
         package='joy',
         executable='joy_node',
@@ -70,7 +72,7 @@ def generate_launch_description():
         arguments=['messages', '/joy', '60.0', '/joy_throttled']
     )
 
-    # 2a. Nó de Mapeamento: Logitech RS50
+    # só arranca o nó do controlador escolhido
     rs50_teleop_node = Node(
         package="rs_interface",
         executable='rs50_teleop_node',
@@ -79,7 +81,6 @@ def generate_launch_description():
         condition=IfCondition(PythonExpression(["'", controller, "' == 'rs50'"]))
     )
 
-    # 2b. Nó de Mapeamento: Logitech G923
     g923_teleop_node = Node(
         package="rs_interface",
         executable='g923_teleop_node',
@@ -88,7 +89,6 @@ def generate_launch_description():
         condition=IfCondition(PythonExpression(["'", controller, "' == 'g923'"]))
     )
 
-    # 2c. Nó de Mapeamento: Xbox
     xbox_teleop_node = Node(
         package="rs_interface",
         executable='xbox_teleop_node',
@@ -97,7 +97,6 @@ def generate_launch_description():
         condition=IfCondition(PythonExpression(["'", controller, "' == 'xbox'"]))
     )
 
-    # 3. Gate e Network
     command_gate_node = Node(
         package="rs_interface",
         executable='command_gate',
@@ -136,7 +135,7 @@ def generate_launch_description():
         output='screen'
     )
 
-    # Rosbag
+    # bag com as métricas, uma pasta por execução
     bag_dir = os.path.expanduser('~/bags')
     os.makedirs(bag_dir, exist_ok=True)
 

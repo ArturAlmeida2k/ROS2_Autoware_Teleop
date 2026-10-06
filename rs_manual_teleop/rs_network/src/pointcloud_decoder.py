@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Recebe a pointcloud do veículo por TCP (header PCF1 + PointCloud2 serializada) e publica em /teleop/pointcloud.
 import socket
 import struct
 import threading
@@ -48,7 +49,6 @@ class PointCloudDecoder(Node):
         self._thread = threading.Thread(target=self._server_loop, daemon=True)
         self._thread.start()
 
-    # ------------------------------------------------------------------
     def _server_loop(self):
         srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -103,12 +103,8 @@ class PointCloudDecoder(Node):
             msg = deserialize_message(payload, PointCloud2)
             sensor_stamp = msg.header.stamp
 
-            # O stamp original vem do Autoware/AWSIM, que usa tempo de
-            # simulação (segundos desde o arranque do simulador), não o
-            # relógio de parede. Comparado com o relógio do RS dava valores
-            # absurdos (~1.8e12 ms) no GUI. Passa-se a usar o instante de
-            # entrada no encoder do VH (relógio de parede, sincronizado por
-            # chrony) — o mesmo ponto de partida que a captura no vídeo.
+            # o stamp do AWSIM está em tempo de simulação; usa-se o instante de entrada
+            # no encoder do VH (relógio de parede, sincronizado por chrony)
             msg.header.stamp = Time(nanoseconds=ingress_ns).to_msg()
 
             msg.header.frame_id = f"{msg.header.frame_id}#{seq_id}"
@@ -116,11 +112,10 @@ class PointCloudDecoder(Node):
             self.pub_pointcloud.publish(msg)
             self._publish_metrics(seq_id, sensor_stamp, ingress_ns, rx_time)
 
-    # ------------------------------------------------------------------
     def _publish_metrics(self, seq_id, sensor_stamp, ingress_ns, rx_time):
         rx_msg = rx_time.to_msg()
 
-        # Perda: quantas frames foram descartadas no emissor antes desta.
+        # frames descartadas no emissor antes desta
         lost = 0
         if self._expected_id is not None:
             lost = (seq_id - self._expected_id) & 0xFFFFFFFF
@@ -135,10 +130,8 @@ class PointCloudDecoder(Node):
         net.lost_pkg = lost
         self.pub_network.publish(net)
 
-        # Sensor -> estação: inclui o tempo de percepção e de serialização.
-        # Só faz sentido se o stamp do sensor estiver no relógio de parede.
-        # Com o Autoware em tempo de simulação dá valores absurdos, por isso
-        # não se publica (em vez de sujar o rosbag) e avisa-se uma vez.
+        # latência sensor-estação só faz sentido com o stamp em relógio de parede;
+        # em tempo de simulação não se publica
         e2e_ms = (rx_time.nanoseconds
                   - Time.from_msg(sensor_stamp).nanoseconds) / 1e6
         if 0.0 <= e2e_ms < 60000.0:

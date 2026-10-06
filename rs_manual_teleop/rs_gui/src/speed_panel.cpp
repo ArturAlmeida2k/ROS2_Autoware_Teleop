@@ -1,3 +1,4 @@
+// Barra de baixo com mudanca, velocidade e pisca.
 #include "speed_panel.hpp"
 #include <QHBoxLayout>
 #include <QVBoxLayout>
@@ -18,7 +19,7 @@ SpeedPanel::SpeedPanel(QWidget* parent): QWidget(parent)
 
     static const char* CAPTION_STYLE = "color: #a6adc8; font-size: 11px; background: transparent;";
 
-    // --- Gear, à esquerda ---
+    // esquerda: mudanca
     auto* gear_col = new QVBoxLayout();
     gear_col->setSpacing(0);
 
@@ -39,7 +40,7 @@ SpeedPanel::SpeedPanel(QWidget* parent): QWidget(parent)
     gear_col->addSpacing(14);
     gear_col->addWidget(lbl_gear_caption);
 
-    // --- Velocidade, ao centro ---
+    // centro: velocidade
     auto* speed_col = new QVBoxLayout();
     speed_col->setSpacing(0);
 
@@ -58,7 +59,7 @@ SpeedPanel::SpeedPanel(QWidget* parent): QWidget(parent)
     speed_col->addWidget(lbl_vlc_);
     speed_col->addWidget(lbl_unit_);
 
-    // --- Pisca / hazard, à direita ---
+    // direita: pisca / hazard
     auto* turn_col = new QVBoxLayout();
     turn_col->setSpacing(0);
 

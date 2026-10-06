@@ -13,7 +13,7 @@ int main(int argc, char* argv[])
 
     qRegisterMetaType<int64_t>("int64_t");
 
-    // Registos para o Qt::QueuedConnection
+    // necessario para passar nos sinais com Qt::QueuedConnection
     qRegisterMetaType<TelemetryState>("TelemetryState");
 
     qRegisterMetaType<PointCloud2::SharedPtr>("PointCloud2::SharedPtr");

@@ -11,6 +11,7 @@ from std_msgs.msg import Int8
 from teleop_msgs.msg import TeleopCommand
 from teleop_msgs.msg import NetworkMetrics
 
+# Recebe os comandos do RS por UDP e publica em /teleop/command.
 class InputTeleopDecoder(Node):
     def __init__(self):
         super().__init__('input_teleop_decoder')
@@ -22,23 +23,18 @@ class InputTeleopDecoder(Node):
 
         self.expected_id_ = None
 
+        # id muito abaixo do esperado = o RS reiniciou
         self.RESYNC_THRESHOLD = 1000
 
-        # 1. Publisher original de comandos
         self.pub_command = self.create_publisher(TeleopCommand, '/teleop/command', 10)
-        
-        # 2. Publisher dedicado ao estado do Uplink
+
         self.pub_uplink = self.create_publisher(Int8, '/teleop/uplink_mode', 10)
 
         self.pub_metrics = self.create_publisher(NetworkMetrics, '/metrics/network/teleop_commands', 10)
         
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.bind(('0.0.0.0', self.port))
-        # Socket bloqueante numa thread dedicada: o pacote é lido e carimbado
-        # assim que o kernel o entrega, em vez de esperar pelo próximo tick
-        # de um timer de polling (o antigo create_timer de 5 ms acrescentava
-        # 0–5 ms uniformes a cada pacote). O timeout só serve para a thread
-        # conseguir verificar rclpy.ok() e terminar no shutdown.
+        # timeout só para conseguir sair no shutdown
         self.sock.settimeout(0.5)
 
         self.rx_thread = threading.Thread(target=self.receive_loop, daemon=True)
@@ -98,7 +94,7 @@ class InputTeleopDecoder(Node):
             except socket.timeout:
                 continue
             except OSError:
-                # Socket fechado no shutdown.
+                # socket fechado no shutdown
                 break
             except Exception as e:
                 if rclpy.ok():

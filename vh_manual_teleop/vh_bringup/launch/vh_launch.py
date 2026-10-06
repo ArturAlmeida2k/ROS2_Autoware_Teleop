@@ -6,10 +6,11 @@ from launch.actions import DeclareLaunchArgument, ExecuteProcess
 from launch.substitutions import LaunchConfiguration, PythonExpression, PathJoinSubstitution
 from launch_ros.actions import Node
 
+# Lança os nós do lado do veículo (rede, telemetria, controlo) e grava as métricas num bag.
+
 
 def generate_launch_description():
 
-    # --- Argumentos do Launch ---
     sim_arg = DeclareLaunchArgument(
         'sim', default_value='awsim',
         description="Perfil de configuração: 'awsim' ou 'carla'")
@@ -27,7 +28,6 @@ def generate_launch_description():
     )
     ip_address = LaunchConfiguration('ip_address')
 
-    # --- Portas ---
     input_port_arg = DeclareLaunchArgument(
         'input_port',
         default_value='5005',
@@ -56,7 +56,7 @@ def generate_launch_description():
     )
     pointcloud_port = LaunchConfiguration('pointcloud_port')
 
-    # --- Nós do pacote: vh_network ---
+    # vh_network
     input_teleop_decoder_node = Node(
         package='vh_network',
         executable='input_teleop_decoder',
@@ -92,7 +92,6 @@ def generate_launch_description():
         parameters=[{'ip_address': ip_address, 'port': pointcloud_port}]
     )
 
-    # --- Nós do pacote: vh_telemetry ---
     telemetry_node = Node(
         package='vh_telemetry',
         executable='telemetry_node',
@@ -100,7 +99,7 @@ def generate_launch_description():
         output='screen'
     )
 
-    # --- Nós do pacote: vh_teleop_to_autoware ---
+    # vh_teleop_to_autoware
     control_node = Node(
         package='vh_teleop_to_autoware',
         executable='control',
@@ -122,7 +121,7 @@ def generate_launch_description():
         output='screen'
     )
 
-    # --- Rosbag ---
+    # bag com as métricas, uma pasta por execução
     bag_dir = os.path.expanduser('~/bags')
     os.makedirs(bag_dir, exist_ok=True)
 

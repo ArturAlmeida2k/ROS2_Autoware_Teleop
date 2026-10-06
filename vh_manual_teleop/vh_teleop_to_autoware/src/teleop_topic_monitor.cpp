@@ -8,6 +8,7 @@ using Int8    = std_msgs::msg::Int8;
 using Float32 = std_msgs::msg::Float32;
 using CommandMetrics = teleop_msgs::msg::NetworkMetrics;
 
+// Vê a latência/silêncio dos comandos que chegam e publica o estado da rede em /teleop/safety_state.
 class TeleopTopicMonitorNode : public rclcpp::Node {
 public:
     static constexpr int8_t STATE_OK    = 0;
@@ -68,6 +69,7 @@ private:
 
         const int8_t previous_state = current_state_;
 
+        // piora logo, mas só recupera depois de recovery_cycles_ ciclos seguidos (20 ms cada)
         if (new_state > current_state_) {
             current_state_ = new_state;
             recovery_count_ = 0;

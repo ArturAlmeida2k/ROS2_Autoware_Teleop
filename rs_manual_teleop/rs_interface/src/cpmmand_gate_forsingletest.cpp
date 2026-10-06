@@ -1,3 +1,5 @@
+// Cópia do command_gate para os testes isolados: max_vlc vem por parâmetro e não bloqueia sem telemetria.
+
 #include "rclcpp/rclcpp.hpp"
 #include <memory>
 #include <chrono> 
@@ -27,16 +29,14 @@ public:
         }
         RCLCPP_INFO(this->get_logger(), "Velocidade máxima: %.1f km/h", MAX_VLC_);
 
-        // --- 1. Publishers ---
         pub_final_command_ = this->create_publisher<TeleopCommand>("/teleop/command", 10);
 
-        // For metrics
+        // métricas em best effort
         rclcpp::QoS metrics_qos(10);       
         metrics_qos.best_effort();    
         metrics_qos.durability_volatile();
         pub_metrics_ = this->create_publisher<Metrics>("/metrics/controller", metrics_qos);
 
-        // --- 2. Subscribers ---
         sub_raw_command_ = this->create_subscription<TeleopCommand>(
             "/teleop/raw_command", 10,
             std::bind(&CommandGate::raw_command_callback, this, std::placeholders::_1));
@@ -47,7 +47,7 @@ public:
                 
                 telemetry_watchdog_->reset();
 
-                // Sincronização Inicial ou Reconexão
+                // primeira telemetria (ou reconexão): alinha o estado pretendido com o carro
                 if (!is_telemetry_valid_) {
                     target_engage_state_ = (msg->mode == CmdEnums::OPERATION_MODE_REMOTE);
                     target_gear_ = msg->gear;
@@ -65,8 +65,7 @@ public:
                 current_gear_ = msg->gear;
             });
 
-        // --- 3. Watchdog Timer (Proteção contra perda de sinal) ---
-        // Se passarem 3s sem o watchdog ser reiniciado no callback acima, esta função é chamada
+        // se passarem 3 s sem telemetria, faz reset ao estado
         telemetry_watchdog_ = this->create_wall_timer(
             3s, std::bind(&CommandGate::telemetry_timeout_callback, this));
 
@@ -74,16 +73,16 @@ public:
     }
 
 private:
-    float MAX_VLC_ = 10.0f; // km/h — definido pelo parâmetro max_velocity_kmh
+    float MAX_VLC_ = 10.0f; // km/h, vem do parâmetro max_vlc
 
-    // --- Variáveis de Leitura da Telemetria ---
+    // estado lido da telemetria
     int current_mode_ = 0;
     bool current_engage_status_ = false;
     float current_velocity_ = 0.0f;
     int current_turn_signal_ = 0;
     int current_gear_ = 0;
 
-    // --- Variáveis de Retenção de Estado (A tua Lógica) ---
+    // estado pretendido (toggles dos botões)
     bool is_telemetry_valid_ = false;
     bool target_engage_state_ = false;
     bool last_received_engage_button_ = false;
@@ -95,14 +94,12 @@ private:
     int last_received_turn_button_ = 0;
     int current_uplink_mode_ = CmdEnums::UPLINK_VIDEO;
 
-    // --- Interfaces ROS 2 ---
     rclcpp::Subscription<TeleopCommand>::SharedPtr sub_raw_command_;
     rclcpp::Subscription<Telemetry>::SharedPtr sub_telemetry_;
     rclcpp::Publisher<TeleopCommand>::SharedPtr pub_final_command_;
     rclcpp::Publisher<Metrics>::SharedPtr pub_metrics_;
     rclcpp::TimerBase::SharedPtr telemetry_watchdog_;
 
-    // --- Callback do Watchdog (Perda de Telemetria) ---
     void telemetry_timeout_callback()
     {
         if (is_telemetry_valid_) {
@@ -110,6 +107,7 @@ private:
             
             is_telemetry_valid_ = false;
 
+            // nos testes fica em modo remoto mesmo sem telemetria
             current_mode_ = CmdEnums::OPERATION_MODE_REMOTE; 
             current_velocity_ = 0.0f;
             current_gear_ = 0;
@@ -142,7 +140,6 @@ private:
 
     }
 
-    // --- Callback Principal de Comandos ---
     void raw_command_callback(const TeleopCommand::SharedPtr msg)
     {
         auto start_time = this->now();
@@ -154,12 +151,9 @@ private:
         final_msg->origin_stamp = msg->origin_stamp;
         final_msg->id = msg->id;
 
-        // -------------------------------------------------------------
-        // 2. LÓGICA DO ENGAGE (Deteção de Flanco Positivo)
-        // -------------------------------------------------------------
+        // engage: só muda no flanco positivo e com o carro parado
         bool current_engage_button = msg->engage_command;
 
-        // Flanco positivo: o botão está a ser premido agora, mas não estava no ciclo anterior
         if (current_engage_button && !last_received_engage_button_) {
             if (current_velocity_ < 0.1f) {
                 target_engage_state_ = !target_engage_state_;
@@ -173,9 +167,7 @@ private:
         
         final_msg->engage_command = target_engage_state_;
 
-        // -------------------------------------------------------------
-        // 3. VALIDAÇÃO DE MODO E BLOCO DE LÓGICA
-        // -------------------------------------------------------------
+        // fora do modo remoto vai tudo a zero
         if (current_mode_ == CmdEnums::OPERATION_MODE_REMOTE) {
             
             final_msg->target_velocity = std::clamp(msg->target_velocity, 0.0f, 1.0f) * (MAX_VLC_ / 3.6f);
@@ -247,12 +239,8 @@ private:
             final_msg->uplink_mode = current_uplink_mode_;
         }
 
-        // -------------------------------------------------------------
-        // 4. PUBLICAÇÃO
-        // -------------------------------------------------------------
         pub_final_command_->publish(std::move(final_msg));
 
-        // Metrics
         publish_metrics(msg->id, start_time, msg->header.stamp);
 
     }

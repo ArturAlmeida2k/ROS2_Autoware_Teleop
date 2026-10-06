@@ -12,6 +12,7 @@
 #include <QTimer>
 #include "video_diag.hpp"
 
+// Mostra uma camara recebida por RTP/H264 e emite as latencias medidas via SEI.
 class CameraGLWidget : public QOpenGLWidget {
     Q_OBJECT
 public:
@@ -52,17 +53,14 @@ private:
     uint64_t pending_id_ = 0;
     uint64_t pending_ts_ = 0;
 
-    // Gestão do GStreamer
     GstElement* pipeline_ = nullptr;
     void start_pipeline(int port);
     void stop_pipeline();
 
-    // Diagnóstico: tempos por etapa no RS (queue/decode/convert) e pacotes RTP
-    // perdidos/atrasados, escritos no terminal a cada 10 s.
+    // tempos por etapa e perdas RTP, escritos a cada 10 s
     VideoDiag diag_;
     QTimer   *diag_timer_ = nullptr;
 
-    // Callbacks estáticas do GStreamer
     static GstPadProbeReturn pad_probe_callback(GstPad *pad, GstPadProbeInfo *info, gpointer user_data);
     static GstFlowReturn on_new_sample(GstElement *sink, gpointer user_data);
 

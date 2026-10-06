@@ -37,14 +37,11 @@ target_link_libraries(
   ${GSTREAMER_LIBRARIES}
 )
 
-# --- Instalação de Executáveis C++ ---
-
 install(TARGETS
   video_encoder
   DESTINATION lib/${PROJECT_NAME}
 )
 
-# --- Instalação de Scripts Python ---
 install(PROGRAMS
   src/input_teleop_decoder.py
   DESTINATION lib/${PROJECT_NAME}
