@@ -9,6 +9,8 @@
 #include <queue>
 #include <gst/gst.h>
 #include <gst/app/gstappsink.h>
+#include <QTimer>
+#include "video_diag.hpp"
 
 class CameraGLWidget : public QOpenGLWidget {
     Q_OBJECT
@@ -55,10 +57,10 @@ private:
     void start_pipeline(int port);
     void stop_pipeline();
 
-    // Diagnóstico: estatísticas do rtpjitterbuffer (pacotes RTP perdidos/atrasados)
-    guint jb_stats_src_ = 0;
-    guint64 jb_last_lost_ = 0, jb_last_late_ = 0;
-    static gboolean log_jitterbuffer_stats(gpointer user_data);
+    // Diagnóstico: tempos por etapa no RS (queue/decode/convert) e pacotes RTP
+    // perdidos/atrasados, escritos no terminal a cada 10 s.
+    VideoDiag diag_;
+    QTimer   *diag_timer_ = nullptr;
 
     // Callbacks estáticas do GStreamer
     static GstPadProbeReturn pad_probe_callback(GstPad *pad, GstPadProbeInfo *info, gpointer user_data);

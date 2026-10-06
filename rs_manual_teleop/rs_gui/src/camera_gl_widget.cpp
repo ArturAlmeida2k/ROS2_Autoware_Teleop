@@ -4,6 +4,7 @@
 #include <QPainter>
 #include <QFont>
 #include <chrono>
+#include <cstdio>
 #include <cstring>
 
 static const char *VERT_SRC = R"(#version 330 core
@@ -187,8 +188,8 @@ void CameraGLWidget::start_pipeline(int port)
         "h264parse name=parser ! "
         "video/x-h264,stream-format=byte-stream,alignment=au ! "
         "queue max-size-buffers=5 max-size-bytes=0 max-size-time=0 ! "
-        "avdec_h264 max-threads=4 ! "
-        "videoconvert n-threads=4 ! "
+        "avdec_h264 name=dec max-threads=4 ! "
+        "videoconvert name=conv n-threads=4 ! "
         "video/x-raw,format=RGB ! "
         "appsink name=mysink sync=false max-buffers=2 emit-signals=true";
 
@@ -212,49 +213,22 @@ void CameraGLWidget::start_pipeline(int port)
     g_signal_connect(appsink, "new-sample", G_CALLBACK(on_new_sample), this);
     gst_object_unref(appsink);
 
+    diag_.attach(pipeline_);
     gst_element_set_state(pipeline_, GST_STATE_PLAYING);
 
-    jb_stats_src_ = g_timeout_add_seconds(10, &CameraGLWidget::log_jitterbuffer_stats, this);
-}
-
-// Diagnóstico: a cada 10 s, se houver pacotes RTP novos perdidos ou atrasados,
-// escreve uma linha com os totais. As métricas por frame (ids) não veem isto,
-// porque um frame com pacotes em falta continua a chegar (corrompido).
-gboolean CameraGLWidget::log_jitterbuffer_stats(gpointer user_data)
-{
-    auto *w = static_cast<CameraGLWidget*>(user_data);
-    if (!w->pipeline_) return G_SOURCE_REMOVE;
-
-    GstElement *jb = gst_bin_get_by_name(GST_BIN(w->pipeline_), "jb");
-    if (!jb) return G_SOURCE_CONTINUE;
-
-    GstStructure *st = nullptr;
-    g_object_get(jb, "stats", &st, nullptr);
-    gst_object_unref(jb);
-    if (!st) return G_SOURCE_CONTINUE;
-
-    guint64 pushed = 0, lost = 0, late = 0, dup = 0;
-    gst_structure_get_uint64(st, "num-pushed", &pushed);
-    gst_structure_get_uint64(st, "num-lost", &lost);
-    gst_structure_get_uint64(st, "num-late", &late);
-    gst_structure_get_uint64(st, "num-duplicates", &dup);
-    gst_structure_free(st);
-
-    if (lost != w->jb_last_lost_ || late != w->jb_last_late_) {
-        qInfo().noquote() << QString("[%1] RTP jitterbuffer: pushed=%2 lost=%3 late=%4 dup=%5")
-                             .arg(w->label_).arg(pushed).arg(lost).arg(late).arg(dup);
-        w->jb_last_lost_ = lost;
-        w->jb_last_late_ = late;
+    if (!diag_timer_) {
+        diag_timer_ = new QTimer(this);
+        connect(diag_timer_, &QTimer::timeout, this, [this]() {
+            std::fprintf(stderr, "[%s] RS video: %s\n",
+                         label_.toStdString().c_str(), diag_.summary().c_str());
+        });
     }
-    return G_SOURCE_CONTINUE;
+    diag_timer_->start(10000);
 }
 
 void CameraGLWidget::stop_pipeline()
 {
-    if (jb_stats_src_) {
-        g_source_remove(jb_stats_src_);
-        jb_stats_src_ = 0;
-    }
+    if (diag_timer_) diag_timer_->stop();
     if (pipeline_) {
         gst_element_set_state(pipeline_, GST_STATE_NULL);
         gst_object_unref(pipeline_);
