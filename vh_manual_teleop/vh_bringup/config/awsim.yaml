@@ -3,5 +3,6 @@
     num_cameras: 1
     bitrate: 8000
     intra_refresh: true
+    framerate: 6
     camera_topics:
       - /sensing/camera/traffic_light/image_raw

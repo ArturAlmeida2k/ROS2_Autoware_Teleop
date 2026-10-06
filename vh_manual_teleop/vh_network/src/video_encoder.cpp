@@ -78,6 +78,11 @@ public:
         // o x264 renova a imagem por colunas ao longo desses frames. Os frames
         // ficam com tamanho mais uniforme e os picos dos keyframes desaparecem.
         declare_parameter<bool>("intra_refresh", false);
+        // Frame rate declarado ao x264. O controlo de taxa divide o bitrate por
+        // este valor para decidir o tamanho de cada frame, por isso tem de bater
+        // com a taxa real do tópico da câmara (AWSIM ~5.4 Hz). Com 30 declarado
+        // e ~5.4 reais, o débito efetivo fica em ~1/5 do bitrate configurado.
+        declare_parameter<int>("framerate", 30);
         declare_parameter<std::vector<std::string>>("camera_topics",
             std::vector<std::string>{
                 "/sensing/camera/CAM_FRONT/image_raw",
@@ -88,6 +93,7 @@ public:
         ip_address_       = get_parameter("ip_address").as_string();
         bitrate_          = get_parameter("bitrate").as_int();
         intra_refresh_    = get_parameter("intra_refresh").as_bool();
+        framerate_        = std::max(1, static_cast<int>(get_parameter("framerate").as_int()));
         const int port    = get_parameter("port").as_int();
         const auto topics = get_parameter("camera_topics").as_string_array();
         const int n = std::clamp(static_cast<int>(get_parameter("num_cameras").as_int()),
@@ -120,8 +126,8 @@ public:
             RCLCPP_INFO(get_logger(), "%s -> %s:%d", ctx->topic.c_str(), ip_address_.c_str(), ctx->port);
             streams_.push_back(std::move(ctx));
         }
-        RCLCPP_INFO(get_logger(), "Encoder iniciado: %d câmara(s), %d kbit/s, intra-refresh %s.",
-                    n, bitrate_, intra_refresh_ ? "on" : "off");
+        RCLCPP_INFO(get_logger(), "Encoder iniciado: %d câmara(s), %d kbit/s, %d fps, intra-refresh %s.",
+                    n, bitrate_, framerate_, intra_refresh_ ? "on" : "off");
     }
 
     ~VideoEncoderTX() override {
@@ -155,6 +161,7 @@ private:
     std::string ip_address_;
     int bitrate_ = 5000;
     bool intra_refresh_ = false;
+    int framerate_ = 30;
     std::vector<std::unique_ptr<StreamCtx>> streams_;
     rclcpp::Publisher<Metrics>::SharedPtr pub_preprocess_, pub_x264_, pub_total_;
     rclcpp::Subscription<Int8>::SharedPtr sub_mode_;
@@ -239,7 +246,8 @@ private:
         const std::string pipeline_str =
             "appsrc name=mysrc is-live=true do-timestamp=true format=time "
             "caps=\"video/x-raw,format=I420,width=" + std::to_string(OUT_W) +
-            ",height=" + std::to_string(OUT_H) + ",framerate=30/1\" ! "
+            ",height=" + std::to_string(OUT_H) +
+            ",framerate=" + std::to_string(framerate_) + "/1\" ! "
             "queue leaky=downstream max-size-buffers=1 max-size-bytes=0 max-size-time=0 ! "
             "x264enc name=enc tune=zerolatency speed-preset=ultrafast sliced-threads=true threads=4 "
             "key-int-max=15 bitrate=" + std::to_string(bitrate_) +
