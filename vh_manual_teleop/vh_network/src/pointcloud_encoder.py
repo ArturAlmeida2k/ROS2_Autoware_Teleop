@@ -13,8 +13,6 @@ from sensor_msgs.msg import PointCloud2
 from std_msgs.msg import Int8
 from teleop_msgs.msg import CommandEnums
 
-MAX_RATE_HZ = 5.0
-
 FRAME_MAGIC = b'PCF1'
 HEADER = struct.Struct('>4sIQI')     # magic, length, ingress_ts_ns, seq_id
 
@@ -27,9 +25,6 @@ class PointCloudEncoder(Node):
         self.declare_parameter('port', 5011)
         self.target = (self.get_parameter('ip_address').value,
                        self.get_parameter('port').value)
-
-        self.min_period_ns= int(1e9 / MAX_RATE_HZ) if MAX_RATE_HZ > 0 else 0
-        self._last_accept_ns = 0.0
 
         self._active = False
         self._seq = 0
@@ -62,10 +57,9 @@ class PointCloudEncoder(Node):
         if not self._active:
             return
 
+        # Sem limite de taxa: cada nuvem é enviada assim que chega. Se o TCP
+        # não acompanhar, a fila de tamanho 1 descarta a mais antiga.
         now_ns = self.get_clock().now().nanoseconds
-        if self.min_period_ns and (now_ns - self._last_accept_ns) < self.min_period_ns:
-                return
-        self._last_accept_ns = now_ns
 
         self._seq = (self._seq + 1) & 0xFFFFFFFF
         seq_id = self._seq

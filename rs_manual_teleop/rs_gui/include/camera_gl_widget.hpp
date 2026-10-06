@@ -55,6 +55,11 @@ private:
     void start_pipeline(int port);
     void stop_pipeline();
 
+    // Diagnóstico: estatísticas do rtpjitterbuffer (pacotes RTP perdidos/atrasados)
+    guint jb_stats_src_ = 0;
+    guint64 jb_last_lost_ = 0, jb_last_late_ = 0;
+    static gboolean log_jitterbuffer_stats(gpointer user_data);
+
     // Callbacks estáticas do GStreamer
     static GstPadProbeReturn pad_probe_callback(GstPad *pad, GstPadProbeInfo *info, gpointer user_data);
     static GstFlowReturn on_new_sample(GstElement *sink, gpointer user_data);
