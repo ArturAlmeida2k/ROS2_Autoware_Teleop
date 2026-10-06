@@ -9,6 +9,7 @@
 #include "teleop_msgs/msg/command_enums.hpp"
 #include "teleop_msgs/msg/node_metrics.hpp"
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cstring>
@@ -19,29 +20,27 @@
 #include <string>
 #include <vector>
 
-using Image = sensor_msgs::msg::Image;
-using Int8 = std_msgs::msg::Int8;
+using Image    = sensor_msgs::msg::Image;
+using Int8     = std_msgs::msg::Int8;
 using CmdEnums = teleop_msgs::msg::CommandEnums;
-using Metrics = teleop_msgs::msg::NodeMetrics;
+using Metrics  = teleop_msgs::msg::NodeMetrics;
 
-class VideoEncoderTX;
+static constexpr int OUT_W = 1280;
+static constexpr int OUT_H = 720;
 
 static inline uint64_t now_ns() {
     return std::chrono::duration_cast<std::chrono::nanoseconds>(
         std::chrono::system_clock::now().time_since_epoch()).count();
 }
 
-// Instantes (relógio do VH, ns) por onde um frame passa dentro do encoder.
-// 0 = etapa que não existe no modo de pré-processamento em uso.
+class VideoEncoderTX;
+
+// Instantes (relógio do VH, ns) de um frame dentro do encoder.
 struct FrameTimes {
-    uint64_t id      = 0;
-    uint64_t rx      = 0;  // entrada no callback ROS
-    uint64_t mat     = 0;  // imagem disponível em cv::Mat (cv_bridge) — é o TS do SEI
-    uint64_t pre     = 0;  // pré-processamento feito, buffer pronto para o appsrc
-    uint64_t src     = 0;  // appsrc entrega o buffer à pipeline
-    uint64_t conv    = 0;  // saída do videoconvert   (só modo gstreamer)
-    uint64_t scale   = 0;  // saída do videoscale     (só modo gstreamer)
-    uint64_t enc_in  = 0;  // entrada no x264enc (depois da queue)
+    uint64_t id = 0;
+    uint64_t rx = 0;       // entrada no callback ROS (TS do SEI)
+    uint64_t pre = 0;      // redimensionado e convertido para I420
+    uint64_t enc_in = 0;   // entrada no x264enc
     uint64_t enc_out = 0;  // saída do x264enc
 };
 
@@ -53,30 +52,19 @@ struct StreamCtx {
     bool instrumented = false;   // só a câmara frontal leva SEI e métricas
 
     rclcpp::Subscription<Image>::SharedPtr sub;
-
     GstElement *pipeline = nullptr;
     GstElement *appsrc   = nullptr;
-    guint bus_watch_id   = 0;
     bool initialized     = false;
-    int out_w = 1280, out_h = 720;
-
-    // Seguimento de cada frame ao longo da pipeline:
-    //  - pending:   entregues ao appsrc, ainda sem PTS (FIFO: o appsrc não
-    //               reordena nem descarta);
-    //  - by_pts:    do appsrc até à entrada do x264enc, com o PTS como chave.
-    //               O PTS atravessa videoconvert/videoscale/queue inalterado,
-    //               e assim os frames que a queue leaky descarta não
-    //               desalinham os restantes;
-    //  - in_enc / after_enc: depois do encoder o PTS muda (o GstVideoEncoder
-    //               soma-lhe um desvio de 1000 h), por isso segue-se a ordem.
-    //               O x264 em zerolatency produz exatamente um frame por
-    //               cada frame de entrada, pela mesma ordem.
-    std::mutex times_mutex;
-    std::deque<FrameTimes> pending;
-    std::map<GstClockTime, FrameTimes> by_pts;
-    std::deque<FrameTimes> in_enc;
-    std::deque<FrameTimes> after_enc;
     uint64_t frame_counter = 1;
+
+    // Seguimento de cada frame: até ao encoder pelo PTS (que a queue leaky
+    // não desalinha quando descarta frames); depois do encoder pela ordem,
+    // porque o GstVideoEncoder altera o PTS e o x264 em zerolatency produz
+    // exatamente um frame por cada frame de entrada, pela mesma ordem.
+    std::mutex mtx;
+    std::deque<FrameTimes> pending;               // entregues ao appsrc, sem PTS
+    std::map<GstClockTime, FrameTimes> by_pts;    // appsrc -> entrada do encoder
+    std::deque<FrameTimes> in_enc, after_enc;     // dentro / depois do encoder
 };
 
 class VideoEncoderTX : public rclcpp::Node {
@@ -91,96 +79,48 @@ public:
                 "/sensing/camera/CAM_FRONT/image_raw",
                 "/sensing/camera/CAM_FRONT_LEFT/image_raw",
                 "/sensing/camera/CAM_BACK/image_raw",
-                "/sensing/camera/CAM_FRONT_RIGHT/image_raw"
-            });
-        // "opencv":    redimensiona e converte para I420 em OpenCV, diretamente
-        //              para o buffer do GStreamer (rápido, multi-thread/SIMD).
-        // "gstreamer": pipeline antiga (videoconvert + videoscale), para comparar.
-        declare_parameter<std::string>("preprocess", "opencv");
-        declare_parameter<int>("convert_threads", 4);   // videoconvert, modo gstreamer
-        declare_parameter<int>("out_width", 1280);
-        declare_parameter<int>("out_height", 720);
-        declare_parameter<bool>("stage_metrics", true);
+                "/sensing/camera/CAM_FRONT_RIGHT/image_raw"});
 
         ip_address_       = get_parameter("ip_address").as_string();
         bitrate_          = get_parameter("bitrate").as_int();
-        base_port_        = get_parameter("port").as_int();
-        preprocess_       = get_parameter("preprocess").as_string();
-        convert_threads_  = get_parameter("convert_threads").as_int();
-        out_w_            = get_parameter("out_width").as_int();
-        out_h_            = get_parameter("out_height").as_int();
-        stage_metrics_    = get_parameter("stage_metrics").as_bool();
+        const int port    = get_parameter("port").as_int();
         const auto topics = get_parameter("camera_topics").as_string_array();
-        int num_cameras   = get_parameter("num_cameras").as_int();
-
-        if (preprocess_ != "opencv" && preprocess_ != "gstreamer") {
-            RCLCPP_WARN(get_logger(), "preprocess='%s' desconhecido — a usar 'opencv'.",
-                        preprocess_.c_str());
-            preprocess_ = "opencv";
-        }
-        // I420 exige dimensões pares.
-        out_w_ &= ~1;
-        out_h_ &= ~1;
-
-        if (num_cameras < 1) num_cameras = 1;
-        if (num_cameras > static_cast<int>(topics.size())) {
-            RCLCPP_WARN(get_logger(),
-                        "num_cameras=%d excede os %zu tópicos configurados; a usar %zu.",
-                        num_cameras, topics.size(), topics.size());
-            num_cameras = static_cast<int>(topics.size());
-        }
+        const int n = std::clamp(static_cast<int>(get_parameter("num_cameras").as_int()),
+                                 1, static_cast<int>(topics.size()));
 
         gst_init(nullptr, nullptr);
 
-        if (stage_metrics_) {
-            rclcpp::QoS mq(10);
-            mq.best_effort();
-            mq.durability_volatile();
-            for (const char *s : {"ros_to_mat", "preprocess", "handoff", "convert", "scale",
-                                  "queue", "x264", "parse", "total"}) {
-                stage_pubs_[s] = create_publisher<Metrics>(
-                    std::string("/metrics/video_encoder/") + s, mq);
-            }
-        }
+        rclcpp::QoS mq(10);
+        mq.best_effort().durability_volatile();
+        pub_preprocess_ = create_publisher<Metrics>("/metrics/video_encoder/preprocess", mq);
+        pub_x264_       = create_publisher<Metrics>("/metrics/video_encoder/x264", mq);
+        pub_total_      = create_publisher<Metrics>("/metrics/video_encoder/total", mq);
 
-        rclcpp::QoS qos(1);
-        qos.best_effort();
-        qos.keep_last(1);
-
-        sub_mode_ = create_subscription<Int8>(
-            "/teleop/uplink_mode", 10,
+        sub_mode_ = create_subscription<Int8>("/teleop/uplink_mode", 10,
             [this](const Int8::SharedPtr msg) {
                 active_.store(msg->data == CmdEnums::UPLINK_VIDEO, std::memory_order_relaxed);
             });
 
-        for (int i = 0; i < num_cameras; ++i) {
-            auto ctx   = std::make_unique<StreamCtx>();
-            ctx->node  = this;
+        rclcpp::QoS qos(1);
+        qos.best_effort().keep_last(1);
+        for (int i = 0; i < n; ++i) {
+            auto ctx = std::make_unique<StreamCtx>();
+            ctx->node = this;
             ctx->topic = topics[i];
-            ctx->port  = base_port_ + i;
+            ctx->port = port + i;
             ctx->instrumented = (i == 0);
-            ctx->out_w = out_w_;
-            ctx->out_h = out_h_;
-
             StreamCtx *raw = ctx.get();
-            ctx->sub = create_subscription<Image>(
-                ctx->topic, qos,
+            ctx->sub = create_subscription<Image>(ctx->topic, qos,
                 [this, raw](const Image::SharedPtr msg) { image_callback(msg, raw); });
-
-            RCLCPP_INFO(get_logger(), "%s -> %s:%d",
-                        ctx->topic.c_str(), ip_address_.c_str(), ctx->port);
-
+            RCLCPP_INFO(get_logger(), "%s -> %s:%d", ctx->topic.c_str(), ip_address_.c_str(), ctx->port);
             streams_.push_back(std::move(ctx));
         }
-
-        RCLCPP_INFO(get_logger(), "Encoder iniciado: %d câmara(s), %d kbit/s, %dx%d, pré-processamento=%s.",
-                    num_cameras, bitrate_, out_w_, out_h_, preprocess_.c_str());
+        RCLCPP_INFO(get_logger(), "Encoder iniciado: %d câmara(s), %d kbit/s.", n, bitrate_);
     }
 
     ~VideoEncoderTX() override {
         for (auto &ctx : streams_) {
-            if (ctx->bus_watch_id > 0) g_source_remove(ctx->bus_watch_id);
-            if (ctx->appsrc)   gst_object_unref(ctx->appsrc);
+            if (ctx->appsrc) gst_object_unref(ctx->appsrc);
             if (ctx->pipeline) {
                 gst_element_set_state(ctx->pipeline, GST_STATE_NULL);
                 gst_object_unref(ctx->pipeline);
@@ -188,11 +128,9 @@ public:
         }
     }
 
-    // Publica a duração de cada etapa de um frame (só câmara frontal).
-    void publish_stages(const FrameTimes &f, uint64_t out) {
-        if (!stage_metrics_) return;
-        auto pub = [&](const char *name, uint64_t a, uint64_t b) {
-            if (a == 0 || b == 0 || b < a) return;
+    void publish_metrics(const FrameTimes &f, uint64_t out) {
+        auto pub = [&](const rclcpp::Publisher<Metrics>::SharedPtr &p, uint64_t a, uint64_t b) {
+            if (a == 0 || b < a) return;
             auto m = std::make_unique<Metrics>();
             m->id = static_cast<uint32_t>(f.id);
             m->tx.sec = static_cast<int32_t>(a / 1000000000ULL);
@@ -200,35 +138,18 @@ public:
             m->rx.sec = static_cast<int32_t>(b / 1000000000ULL);
             m->rx.nanosec = static_cast<uint32_t>(b % 1000000000ULL);
             m->latency_ms = (b - a) / 1e6;
-            stage_pubs_.at(name)->publish(std::move(m));
+            p->publish(std::move(m));
         };
-        const bool gst = (f.conv != 0);
-        pub("ros_to_mat", f.rx,  f.mat);
-        pub("preprocess", f.mat, f.pre);
-        pub("handoff",    f.pre, f.src);
-        if (gst) {
-            pub("convert", f.src,  f.conv);
-            pub("scale",   f.conv, f.scale);
-            pub("queue",   f.scale, f.enc_in);
-        } else {
-            pub("queue",   f.src, f.enc_in);
-        }
-        pub("x264",  f.enc_in,  f.enc_out);
-        pub("parse", f.enc_out, out);
-        pub("total", f.rx,      out);
+        pub(pub_preprocess_, f.rx, f.pre);
+        pub(pub_x264_, f.enc_in, f.enc_out);
+        pub(pub_total_, f.rx, out);
     }
 
 private:
     std::string ip_address_;
     int bitrate_ = 5000;
-    int base_port_ = 5007;
-    std::string preprocess_ = "opencv";
-    int convert_threads_ = 4;
-    int out_w_ = 1280, out_h_ = 720;
-    bool stage_metrics_ = true;
     std::vector<std::unique_ptr<StreamCtx>> streams_;
-    std::map<std::string, rclcpp::Publisher<Metrics>::SharedPtr> stage_pubs_;
-
+    rclcpp::Publisher<Metrics>::SharedPtr pub_preprocess_, pub_x264_, pub_total_;
     rclcpp::Subscription<Int8>::SharedPtr sub_mode_;
     std::atomic<bool> active_{true};
 
@@ -240,76 +161,49 @@ private:
         ft.rx = now_ns();
 
         try {
-            GstBuffer *buffer = nullptr;
+            // Usa a imagem do ROS sem cópia quando o formato é conhecido.
+            int code = -1;
+            const std::string &enc = msg->encoding;
+            if      (enc == sensor_msgs::image_encodings::BGR8)  code = cv::COLOR_BGR2YUV_I420;
+            else if (enc == sensor_msgs::image_encodings::RGB8)  code = cv::COLOR_RGB2YUV_I420;
+            else if (enc == sensor_msgs::image_encodings::BGRA8) code = cv::COLOR_BGRA2YUV_I420;
+            else if (enc == sensor_msgs::image_encodings::RGBA8) code = cv::COLOR_RGBA2YUV_I420;
 
-            if (preprocess_ == "gstreamer") {
-                // --- Caminho antigo: cópia BGR à resolução original ---
-                cv_bridge::CvImagePtr cv_ptr =
-                    cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::BGR8);
-                const cv::Mat &frame = cv_ptr->image;
-                if (frame.empty()) return;
-                ft.mat = now_ns();
-
-                if (!ctx->initialized) {
-                    init_pipeline(ctx, frame.cols, frame.rows);
-                    if (!ctx->initialized) return;
-                }
-
-                const gsize size = frame.total() * frame.elemSize();
-                buffer = gst_buffer_new_allocate(nullptr, size, nullptr);
-                GstMapInfo map;
-                gst_buffer_map(buffer, &map, GST_MAP_WRITE);
-                std::memcpy(map.data, frame.data, size);
-                gst_buffer_unmap(buffer, &map);
+            cv_bridge::CvImageConstPtr cv_ptr;
+            if (code >= 0) {
+                cv_ptr = cv_bridge::toCvShare(msg);
             } else {
-                // --- Caminho novo: sem cópia à entrada; redimensiona e converte
-                //     para I420 em OpenCV, escrevendo diretamente no buffer ---
-                int code = -1;
-                const std::string &enc = msg->encoding;
-                if      (enc == sensor_msgs::image_encodings::BGR8)  code = cv::COLOR_BGR2YUV_I420;
-                else if (enc == sensor_msgs::image_encodings::RGB8)  code = cv::COLOR_RGB2YUV_I420;
-                else if (enc == sensor_msgs::image_encodings::BGRA8) code = cv::COLOR_BGRA2YUV_I420;
-                else if (enc == sensor_msgs::image_encodings::RGBA8) code = cv::COLOR_RGBA2YUV_I420;
+                cv_ptr = cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::BGR8);
+                code = cv::COLOR_BGR2YUV_I420;
+            }
+            const cv::Mat &src = cv_ptr->image;
+            if (src.empty()) return;
 
-                cv_bridge::CvImageConstPtr cv_ptr;
-                if (code >= 0) {
-                    cv_ptr = cv_bridge::toCvShare(msg);   // sem cópia
-                } else {
-                    cv_ptr = cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::BGR8);
-                    code = cv::COLOR_BGR2YUV_I420;
-                }
-                const cv::Mat &src = cv_ptr->image;
-                if (src.empty()) return;
-                ft.mat = now_ns();
-
-                if (!ctx->initialized) {
-                    init_pipeline(ctx, src.cols, src.rows);
-                    if (!ctx->initialized) return;
-                }
-
-                cv::Mat scaled;
-                if (src.cols != ctx->out_w || src.rows != ctx->out_h) {
-                    cv::resize(src, scaled, cv::Size(ctx->out_w, ctx->out_h), 0, 0, cv::INTER_LINEAR);
-                } else {
-                    scaled = src;
-                }
-
-                const gsize size = static_cast<gsize>(ctx->out_w) * ctx->out_h * 3 / 2;
-                buffer = gst_buffer_new_allocate(nullptr, size, nullptr);
-                GstMapInfo map;
-                gst_buffer_map(buffer, &map, GST_MAP_WRITE);
-                cv::Mat yuv(ctx->out_h * 3 / 2, ctx->out_w, CV_8UC1, map.data);
-                cv::cvtColor(scaled, yuv, code);     // escreve no próprio buffer
-                gst_buffer_unmap(buffer, &map);
+            if (!ctx->initialized) {
+                init_pipeline(ctx, src.cols, src.rows);
+                if (!ctx->initialized) return;
+                ft.rx = now_ns();   // não contar o arranque da pipeline no 1.º frame
             }
 
-            ft.pre = now_ns();
-            ft.id  = ctx->frame_counter++;
+            // Redimensiona e converte para I420 diretamente no buffer do GStreamer.
+            cv::Mat scaled = src;
+            if (src.cols != OUT_W || src.rows != OUT_H)
+                cv::resize(src, scaled, cv::Size(OUT_W, OUT_H), 0, 0, cv::INTER_LINEAR);
 
-            // Registar ANTES do push: a thread do appsrc pode empurrar o buffer
+            GstBuffer *buffer = gst_buffer_new_allocate(nullptr, OUT_W * OUT_H * 3 / 2, nullptr);
+            GstMapInfo map;
+            gst_buffer_map(buffer, &map, GST_MAP_WRITE);
+            cv::Mat yuv(OUT_H * 3 / 2, OUT_W, CV_8UC1, map.data);
+            cv::cvtColor(scaled, yuv, code);
+            gst_buffer_unmap(buffer, &map);
+
+            ft.pre = now_ns();
+            ft.id = ctx->frame_counter++;
+
+            // Registar antes do push: a thread do appsrc pode empurrar o buffer
             // para a pipeline antes de o push-buffer retornar.
-            {
-                std::lock_guard<std::mutex> lock(ctx->times_mutex);
+            if (ctx->instrumented) {
+                std::lock_guard<std::mutex> lock(ctx->mtx);
                 ctx->pending.push_back(ft);
             }
 
@@ -318,45 +212,27 @@ private:
             gst_buffer_unref(buffer);
 
             if (ret != GST_FLOW_OK) {
-                std::lock_guard<std::mutex> lock(ctx->times_mutex);
-                if (!ctx->pending.empty() && ctx->pending.back().id == ft.id)
-                    ctx->pending.pop_back();
+                if (ctx->instrumented) {
+                    std::lock_guard<std::mutex> lock(ctx->mtx);
+                    if (!ctx->pending.empty() && ctx->pending.back().id == ft.id)
+                        ctx->pending.pop_back();
+                }
                 RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 1000,
-                                     "GStreamer rejeitou o buffer em %s (erro %d)",
-                                     ctx->topic.c_str(), ret);
+                                     "GStreamer rejeitou o buffer em %s (erro %d)", ctx->topic.c_str(), ret);
             }
-
-        } catch (cv_bridge::Exception &e) {
+        } catch (const cv_bridge::Exception &e) {
             RCLCPP_ERROR(get_logger(), "cv_bridge (%s): %s", ctx->topic.c_str(), e.what());
-        } catch (cv::Exception &e) {
+        } catch (const cv::Exception &e) {
             RCLCPP_ERROR(get_logger(), "OpenCV (%s): %s", ctx->topic.c_str(), e.what());
         }
     }
 
     // -----------------------------------------------------------------
     void init_pipeline(StreamCtx *ctx, int width, int height) {
-        const std::string fps = ",framerate=30/1";
-        const std::string out_caps =
-            "video/x-raw,format=I420,width=" + std::to_string(ctx->out_w) +
-            ",height=" + std::to_string(ctx->out_h);
-
-        std::string head;
-        if (preprocess_ == "gstreamer") {
-            const std::string caps =
-                "video/x-raw,format=BGR,width=" + std::to_string(width) +
-                ",height=" + std::to_string(height) + fps;
-            head =
-                "appsrc name=mysrc is-live=true do-timestamp=true format=time caps=\"" + caps + "\" ! "
-                "videoconvert name=conv n-threads=" + std::to_string(convert_threads_) + " ! "
-                "videoscale name=scale ! " + out_caps + " ! ";
-        } else {
-            // O buffer já chega em I420 à resolução de saída.
-            head =
-                "appsrc name=mysrc is-live=true do-timestamp=true format=time caps=\"" +
-                out_caps + fps + "\" ! ";
-        }
-
-        const std::string pipeline_str = head +
+        const std::string pipeline_str =
+            "appsrc name=mysrc is-live=true do-timestamp=true format=time "
+            "caps=\"video/x-raw,format=I420,width=" + std::to_string(OUT_W) +
+            ",height=" + std::to_string(OUT_H) + ",framerate=30/1\" ! "
             "queue leaky=downstream max-size-buffers=1 max-size-bytes=0 max-size-time=0 ! "
             "x264enc name=enc tune=zerolatency speed-preset=ultrafast sliced-threads=true threads=4 "
             "key-int-max=15 bitrate=" + std::to_string(bitrate_) + " ! "
@@ -369,100 +245,68 @@ private:
         GError *error = nullptr;
         ctx->pipeline = gst_parse_launch(pipeline_str.c_str(), &error);
         if (error) {
-            RCLCPP_ERROR(get_logger(), "Erro ao criar pipeline (porta %d): %s",
-                         ctx->port, error->message);
+            RCLCPP_ERROR(get_logger(), "Erro ao criar pipeline (porta %d): %s", ctx->port, error->message);
             g_error_free(error);
             return;
         }
-
         ctx->appsrc = gst_bin_get_by_name(GST_BIN(ctx->pipeline), "mysrc");
 
         if (ctx->instrumented) {
-            add_probe(ctx, "mysrc",  "src",  probe_src);
-            if (preprocess_ == "gstreamer") {
-                add_probe(ctx, "conv",  "src", probe_conv);
-                add_probe(ctx, "scale", "src", probe_scale);
-            }
+            add_probe(ctx, "mysrc",  "src",  probe_appsrc);
             add_probe(ctx, "enc",    "sink", probe_enc_in);
             add_probe(ctx, "enc",    "src",  probe_enc_out);
-            add_probe(ctx, "parser", "src",  probe_parser_out);   // SEI + métricas
+            add_probe(ctx, "parser", "src",  probe_parser_out);
         }
 
-        GstBus *bus = gst_pipeline_get_bus(GST_PIPELINE(ctx->pipeline));
-        ctx->bus_watch_id = gst_bus_add_watch(bus, (GstBusFunc)bus_callback, ctx);
-        gst_object_unref(bus);
-
-        if (gst_element_set_state(ctx->pipeline, GST_STATE_PLAYING) ==
-            GST_STATE_CHANGE_FAILURE) {
-            RCLCPP_ERROR(get_logger(), "A pipeline da porta %d recusou-se a iniciar.",
-                         ctx->port);
+        if (gst_element_set_state(ctx->pipeline, GST_STATE_PLAYING) == GST_STATE_CHANGE_FAILURE) {
+            RCLCPP_ERROR(get_logger(), "A pipeline da porta %d recusou-se a iniciar.", ctx->port);
             return;
         }
-
         RCLCPP_INFO(get_logger(), "Pipeline ativa: %s %dx%d -> %dx%d -> %s:%d",
-                    ctx->topic.c_str(), width, height, ctx->out_w, ctx->out_h,
-                    ip_address_.c_str(), ctx->port);
+                    ctx->topic.c_str(), width, height, OUT_W, OUT_H, ip_address_.c_str(), ctx->port);
         ctx->initialized = true;
     }
 
-    static void add_probe(StreamCtx *ctx, const char *elem, const char *pad,
-                          GstPadProbeCallback cb) {
+    static void add_probe(StreamCtx *ctx, const char *elem, const char *pad, GstPadProbeCallback cb) {
         GstElement *e = gst_bin_get_by_name(GST_BIN(ctx->pipeline), elem);
-        if (!e) return;
         GstPad *p = gst_element_get_static_pad(e, pad);
-        if (p) {
-            gst_pad_add_probe(p, GST_PAD_PROBE_TYPE_BUFFER, cb, ctx, nullptr);
-            gst_object_unref(p);
-        }
+        gst_pad_add_probe(p, GST_PAD_PROBE_TYPE_BUFFER, cb, ctx, nullptr);
+        gst_object_unref(p);
         gst_object_unref(e);
     }
 
     // -----------------------------------------------------------------
-    // Probes de tempo. Todas usam o PTS do buffer como chave do frame.
-    // -----------------------------------------------------------------
-    static GstPadProbeReturn probe_src(GstPad *, GstPadProbeInfo *info, gpointer ud) {
+    // appsrc entrega o buffer: associa o registo ao PTS.
+    static GstPadProbeReturn probe_appsrc(GstPad *, GstPadProbeInfo *info, gpointer ud) {
         auto *ctx = static_cast<StreamCtx *>(ud);
         const GstClockTime pts = GST_BUFFER_PTS(GST_PAD_PROBE_INFO_BUFFER(info));
-        const uint64_t t = now_ns();
-        std::lock_guard<std::mutex> lock(ctx->times_mutex);
+        std::lock_guard<std::mutex> lock(ctx->mtx);
         if (ctx->pending.empty()) return GST_PAD_PROBE_OK;
-        FrameTimes ft = ctx->pending.front();
+        ctx->by_pts[pts] = ctx->pending.front();
         ctx->pending.pop_front();
-        ft.src = t;
-        ctx->by_pts[pts] = ft;
-        // Frames descartados pela queue leaky nunca chegam ao fim: limpar.
+        // Frames descartados pela queue leaky nunca chegam ao encoder.
         while (ctx->by_pts.size() > 16) ctx->by_pts.erase(ctx->by_pts.begin());
         return GST_PAD_PROBE_OK;
     }
 
-    static void stamp(StreamCtx *ctx, GstPadProbeInfo *info, uint64_t FrameTimes::*field) {
-        const GstClockTime pts = GST_BUFFER_PTS(GST_PAD_PROBE_INFO_BUFFER(info));
-        const uint64_t t = now_ns();
-        std::lock_guard<std::mutex> lock(ctx->times_mutex);
-        auto it = ctx->by_pts.find(pts);
-        if (it != ctx->by_pts.end()) it->second.*field = t;
-    }
-    static GstPadProbeReturn probe_conv(GstPad *, GstPadProbeInfo *i, gpointer ud) {
-        stamp(static_cast<StreamCtx *>(ud), i, &FrameTimes::conv);    return GST_PAD_PROBE_OK; }
-    static GstPadProbeReturn probe_scale(GstPad *, GstPadProbeInfo *i, gpointer ud) {
-        stamp(static_cast<StreamCtx *>(ud), i, &FrameTimes::scale);   return GST_PAD_PROBE_OK; }
     static GstPadProbeReturn probe_enc_in(GstPad *, GstPadProbeInfo *info, gpointer ud) {
         auto *ctx = static_cast<StreamCtx *>(ud);
         const GstClockTime pts = GST_BUFFER_PTS(GST_PAD_PROBE_INFO_BUFFER(info));
         const uint64_t t = now_ns();
-        std::lock_guard<std::mutex> lock(ctx->times_mutex);
-        FrameTimes ft;                       // frame sem registo: entra vazio
-        auto it = ctx->by_pts.find(pts);     // para manter a ordem alinhada
+        std::lock_guard<std::mutex> lock(ctx->mtx);
+        FrameTimes ft;                        // sem registo: entra vazio para manter a ordem
+        auto it = ctx->by_pts.find(pts);
         if (it != ctx->by_pts.end()) { ft = it->second; ctx->by_pts.erase(it); }
         ft.enc_in = t;
         ctx->in_enc.push_back(ft);
         while (ctx->in_enc.size() > 8) ctx->in_enc.pop_front();
         return GST_PAD_PROBE_OK;
     }
+
     static GstPadProbeReturn probe_enc_out(GstPad *, GstPadProbeInfo *, gpointer ud) {
         auto *ctx = static_cast<StreamCtx *>(ud);
         const uint64_t t = now_ns();
-        std::lock_guard<std::mutex> lock(ctx->times_mutex);
+        std::lock_guard<std::mutex> lock(ctx->mtx);
         if (ctx->in_enc.empty()) return GST_PAD_PROBE_OK;
         FrameTimes ft = ctx->in_enc.front();
         ctx->in_enc.pop_front();
@@ -472,77 +316,40 @@ private:
         return GST_PAD_PROBE_OK;
     }
 
-    // -----------------------------------------------------------------
-    static gboolean bus_callback(GstBus * /*bus*/, GstMessage *msg, gpointer user_data) {
-        auto *ctx = static_cast<StreamCtx *>(user_data);
-        GError *err = nullptr;
-        gchar *debug = nullptr;
-
-        switch (GST_MESSAGE_TYPE(msg)) {
-            case GST_MESSAGE_ERROR:
-                gst_message_parse_error(msg, &err, &debug);
-                RCLCPP_ERROR(ctx->node->get_logger(), "GStreamer (porta %d): %s (%s)",
-                             ctx->port, err->message, debug ? debug : "n/a");
-                g_error_free(err);
-                g_free(debug);
-                break;
-            case GST_MESSAGE_WARNING:
-                gst_message_parse_warning(msg, &err, &debug);
-                RCLCPP_WARN(ctx->node->get_logger(), "GStreamer (porta %d): %s (%s)",
-                            ctx->port, err->message, debug ? debug : "n/a");
-                g_error_free(err);
-                g_free(debug);
-                break;
-            default:
-                break;
-        }
-        return TRUE;
-    }
-
-    // -----------------------------------------------------------------
-    // Saída do h264parse: insere o SEI com ID, timestamp de captura (TS) e
-    // timestamp de saída do encoder (TS2), e publica as etapas do frame.
-    // -----------------------------------------------------------------
-    static GstPadProbeReturn probe_parser_out(GstPad * /*pad*/, GstPadProbeInfo *info,
-                                              gpointer user_data) {
-        auto *ctx = static_cast<StreamCtx *>(user_data);
+    // Saída do h264parse: insere o SEI com ID, TS (chegada da imagem) e
+    // TS2 (saída do encoder), e publica as métricas do frame.
+    static GstPadProbeReturn probe_parser_out(GstPad *, GstPadProbeInfo *info, gpointer ud) {
+        auto *ctx = static_cast<StreamCtx *>(ud);
         GstBuffer *buffer = GST_PAD_PROBE_INFO_BUFFER(info);
-        const uint64_t encode_ts_ns = now_ns();
+        const uint64_t ts2 = now_ns();
 
         FrameTimes ft;
         {
-            std::lock_guard<std::mutex> lock(ctx->times_mutex);
+            std::lock_guard<std::mutex> lock(ctx->mtx);
             if (ctx->after_enc.empty()) return GST_PAD_PROBE_OK;
             ft = ctx->after_enc.front();
             ctx->after_enc.pop_front();
         }
-        if (ft.id == 0) return GST_PAD_PROBE_OK;   // frame sem registo
-
-        std::vector<uint8_t> sei;
-        sei.push_back(0x00); sei.push_back(0x00); sei.push_back(0x00); sei.push_back(0x01);
-        sei.push_back(0x06);   // nal_unit_type = SEI
-        sei.push_back(0x05);   // payload_type  = user_data_unregistered
+        if (ft.id == 0) return GST_PAD_PROBE_OK;
 
         const std::string payload =
-            "ID:" + std::to_string(ft.id) +
-            "|TS:" + std::to_string(ft.mat) +
-            "|TS2:" + std::to_string(encode_ts_ns) + static_cast<char>(0x80);
-
-        size_t remaining = 16 + payload.length();
-        while (remaining >= 255) { sei.push_back(0xFF); remaining -= 255; }
-        sei.push_back(static_cast<uint8_t>(remaining));
-
+            "ID:" + std::to_string(ft.id) + "|TS:" + std::to_string(ft.rx) +
+            "|TS2:" + std::to_string(ts2) + static_cast<char>(0x80);
         const uint8_t uuid[16] = {0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88,
                                   0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF, 0x11};
+
+        std::vector<uint8_t> sei = {0x00, 0x00, 0x00, 0x01,
+                                    0x06,    // nal_unit_type = SEI
+                                    0x05};   // payload_type  = user_data_unregistered
+        size_t remaining = 16 + payload.size();
+        while (remaining >= 255) { sei.push_back(0xFF); remaining -= 255; }
+        sei.push_back(static_cast<uint8_t>(remaining));
         sei.insert(sei.end(), uuid, uuid + 16);
         sei.insert(sei.end(), payload.begin(), payload.end());
 
-        GstMapInfo old_map;
+        GstMapInfo old_map, new_map;
         gst_buffer_map(buffer, &old_map, GST_MAP_READ);
-
-        GstBuffer *new_buf =
-            gst_buffer_new_allocate(nullptr, sei.size() + old_map.size, nullptr);
-        GstMapInfo new_map;
+        GstBuffer *new_buf = gst_buffer_new_allocate(nullptr, sei.size() + old_map.size, nullptr);
         gst_buffer_map(new_buf, &new_map, GST_MAP_WRITE);
         std::memcpy(new_map.data, sei.data(), sei.size());
         std::memcpy(new_map.data + sei.size(), old_map.data, old_map.size);
@@ -553,7 +360,7 @@ private:
         GST_PAD_PROBE_INFO_DATA(info) = new_buf;
         gst_buffer_unref(buffer);
 
-        ctx->node->publish_stages(ft, encode_ts_ns);
+        ctx->node->publish_metrics(ft, ts2);
         return GST_PAD_PROBE_OK;
     }
 };

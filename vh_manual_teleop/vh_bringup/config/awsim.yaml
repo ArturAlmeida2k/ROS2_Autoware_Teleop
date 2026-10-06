@@ -2,7 +2,5 @@
   ros__parameters:
     num_cameras: 1
     bitrate: 8000
-    preprocess: opencv
-    convert_threads: 4
     camera_topics:
       - /sensing/camera/traffic_light/image_raw

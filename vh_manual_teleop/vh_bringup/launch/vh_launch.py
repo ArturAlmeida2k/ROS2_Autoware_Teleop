@@ -138,15 +138,8 @@ def generate_launch_description():
             '/metrics/control',
             '/metrics/e2e_command_latency',
             '/metrics/telemetry_aggregator',
-            # Etapas do encoder de vídeo (câmara frontal), relógio do VH
-            '/metrics/video_encoder/ros_to_mat',
             '/metrics/video_encoder/preprocess',
-            '/metrics/video_encoder/handoff',
-            '/metrics/video_encoder/convert',
-            '/metrics/video_encoder/scale',
-            '/metrics/video_encoder/queue',
             '/metrics/video_encoder/x264',
-            '/metrics/video_encoder/parse',
             '/metrics/video_encoder/total',
             '--output', bag_commands_path
         ],
