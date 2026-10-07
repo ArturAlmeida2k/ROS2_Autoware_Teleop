@@ -140,6 +140,8 @@ def generate_launch_description():
             '/metrics/video_encoder/preprocess',
             '/metrics/video_encoder/x264',
             '/metrics/video_encoder/total',
+            '/teleop/telemetry',
+            '/teleop/safety_state',
             '--output', bag_commands_path
         ],
         output='screen'
