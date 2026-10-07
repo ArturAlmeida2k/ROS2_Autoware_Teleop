@@ -166,6 +166,7 @@ def generate_launch_description():
             '/metrics/front_camera_encode',
             '/metrics/network/pointcloud',
             '/metrics/e2e_pointcloud_latency',
+            '/metrics/pointcloud_size',
             '/metrics/pointcloud_gui',
             '--output', bag_metrics_path
         ],

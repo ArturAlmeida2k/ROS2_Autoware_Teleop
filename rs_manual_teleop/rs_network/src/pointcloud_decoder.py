@@ -10,6 +10,7 @@ from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
 from rclpy.serialization import deserialize_message
 from rclpy.time import Time
 from sensor_msgs.msg import PointCloud2
+from std_msgs.msg import UInt32
 
 from teleop_msgs.msg import NetworkMetrics, NodeMetrics
 
@@ -43,6 +44,9 @@ class PointCloudDecoder(Node):
         self.pub_network = self.create_publisher(NetworkMetrics, '/metrics/network/pointcloud', metrics_qos)
 
         self.pub_e2e = self.create_publisher(NodeMetrics, '/metrics/e2e_pointcloud_latency', metrics_qos)
+
+        # tamanho de cada nuvem recebida, em bytes (mensagem serializada)
+        self.pub_size = self.create_publisher(UInt32, '/metrics/pointcloud_size', metrics_qos)
 
         self._expected_id = None
         self._running = True
@@ -110,6 +114,7 @@ class PointCloudDecoder(Node):
             msg.header.frame_id = f"{msg.header.frame_id}#{seq_id}"
 
             self.pub_pointcloud.publish(msg)
+            self.pub_size.publish(UInt32(data=length))
             self._publish_metrics(seq_id, sensor_stamp, ingress_ns, rx_time)
 
     def _publish_metrics(self, seq_id, sensor_stamp, ingress_ns, rx_time):
