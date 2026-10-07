@@ -22,6 +22,13 @@ class CommandGate : public rclcpp::Node
 public:
     CommandGate() : Node("command_gate")
     {
+        MAX_VLC_ = static_cast<float>(this->declare_parameter<double>("max_vlc", 10.0));
+        if (MAX_VLC_ <= 0.0f) {
+            RCLCPP_WARN(this->get_logger(), "Invalid max_vlc (%.2f), using 10 km/h.", MAX_VLC_);
+            MAX_VLC_ = 10.0f;
+        }
+        RCLCPP_INFO(this->get_logger(), "Max velocity: %.1f km/h", MAX_VLC_);
+
         pub_final_command_ = this->create_publisher<TeleopCommand>("/teleop/command", 10);
 
         // métricas em best effort
@@ -66,7 +73,7 @@ public:
     }
 
 private:
-    float MAX_VLC_ = 10.0f; // km/h
+    float MAX_VLC_ = 10.0f; // km/h, parâmetro max_vlc
 
     // estado lido da telemetria
     int current_mode_ = 0;

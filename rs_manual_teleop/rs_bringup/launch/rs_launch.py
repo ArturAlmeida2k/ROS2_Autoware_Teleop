@@ -4,6 +4,7 @@ from launch.actions import DeclareLaunchArgument, ExecuteProcess
 from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
 from datetime import datetime
 
 # Lança a estação remota: joystick, mapeamento do controlador, rede, GUI e bag de métricas.
@@ -51,6 +52,13 @@ def generate_launch_description():
         description="TCP port for pointcloud_decoder"
     )
     pointcloud_port = LaunchConfiguration('pointcloud_port')
+
+    max_vlc_arg = DeclareLaunchArgument(
+        'max_vlc',
+        default_value='30.0',
+        description="Max velocity in km/h at full throttle"
+    )
+    max_vlc = LaunchConfiguration('max_vlc')
 
     # joy limitado a 60 Hz pelo throttle
     joy_node = Node(
@@ -101,7 +109,8 @@ def generate_launch_description():
         package="rs_interface",
         executable='command_gate',
         name='command_gate',
-        output='screen'
+        output='screen',
+        parameters=[{'max_vlc': ParameterValue(max_vlc, value_type=float)}]
     )
 
     input_teleop_encoder_node = Node(
@@ -170,6 +179,7 @@ def generate_launch_description():
         input_port_arg,
         telemetry_port_arg,
         pointcloud_port_arg,
+        max_vlc_arg,
         joy_node,
         throttle_node,
         rs50_teleop_node,
