@@ -8,32 +8,21 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(sensor_msgs REQUIRED)
-find_package(cv_bridge REQUIRED)
 find_package(OpenCV REQUIRED)
 
-find_package(PkgConfig REQUIRED)
-pkg_check_modules(GSTREAMER REQUIRED gstreamer-1.0 gstreamer-app-1.0)
+add_executable(webcam_publisher src/webcam_publisher_node.cpp)
 
-add_executable(camera_streamer_node src/camera_streamer_node.cpp)
+target_include_directories(webcam_publisher PUBLIC ${OpenCV_INCLUDE_DIRS})
 
-target_include_directories(camera_streamer_node PUBLIC
-  ${OpenCV_INCLUDE_DIRS}
-  ${GSTREAMER_INCLUDE_DIRS}
-)
-
-ament_target_dependencies(camera_streamer_node
+ament_target_dependencies(webcam_publisher
   rclcpp
   sensor_msgs
-  cv_bridge
 )
 
-target_link_libraries(camera_streamer_node
-  ${OpenCV_LIBRARIES}
-  ${GSTREAMER_LIBRARIES}
-)
+target_link_libraries(webcam_publisher ${OpenCV_LIBRARIES})
 
 install(TARGETS
-  camera_streamer_node
+  webcam_publisher
   DESTINATION lib/${PROJECT_NAME}
 )
 

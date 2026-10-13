@@ -7,7 +7,6 @@
 #include <gst/app/gstappsrc.h>
 
 #include "teleop_msgs/msg/command_enums.hpp"
-#include "teleop_msgs/msg/node_metrics.hpp"
 
 #include <algorithm>
 #include <atomic>
@@ -25,7 +24,6 @@
 using Image    = sensor_msgs::msg::Image;
 using Int8     = std_msgs::msg::Int8;
 using CmdEnums = teleop_msgs::msg::CommandEnums;
-using Metrics  = teleop_msgs::msg::NodeMetrics;
 
 static constexpr int OUT_W = 1280;
 static constexpr int OUT_H = 720;
@@ -35,23 +33,17 @@ static inline uint64_t now_ns() {
         std::chrono::system_clock::now().time_since_epoch()).count();
 }
 
-class VideoEncoderTX;
-
-// tempos (ns, relógio do VH) de cada frame no encoder
+// id do frame e chegada da imagem ao nó (TS do SEI, relógio do VH)
 struct FrameTimes {
     uint64_t id = 0;
-    uint64_t rx = 0;       // entrada no callback ROS (TS do SEI)
-    uint64_t pre = 0;      // redimensionado e convertido para I420
-    uint64_t enc_in = 0;   // entrada no x264enc
-    uint64_t enc_out = 0;  // saída do x264enc
+    uint64_t rx = 0;
 };
 
 // uma pipeline por câmara
 struct StreamCtx {
-    VideoEncoderTX *node = nullptr;
     std::string topic;
     int port = 0;
-    bool instrumented = false;   // só a câmara frontal leva SEI e métricas
+    bool instrumented = false;   // só a câmara frontal leva SEI
 
     rclcpp::Subscription<Image>::SharedPtr sub;
     GstElement *pipeline = nullptr;
@@ -63,7 +55,7 @@ struct StreamCtx {
     std::mutex mtx;
     std::deque<FrameTimes> pending;               // ainda sem PTS
     std::map<GstClockTime, FrameTimes> by_pts;
-    std::deque<FrameTimes> in_enc, after_enc;
+    std::deque<FrameTimes> in_enc;
 };
 
 class VideoEncoderTX : public rclcpp::Node {
@@ -94,12 +86,6 @@ public:
 
         gst_init(nullptr, nullptr);
 
-        rclcpp::QoS mq(10);
-        mq.best_effort().durability_volatile();
-        pub_preprocess_ = create_publisher<Metrics>("/metrics/video_encoder/preprocess", mq);
-        pub_x264_       = create_publisher<Metrics>("/metrics/video_encoder/x264", mq);
-        pub_total_      = create_publisher<Metrics>("/metrics/video_encoder/total", mq);
-
         sub_mode_ = create_subscription<Int8>("/teleop/uplink_mode", 10,
             [this](const Int8::SharedPtr msg) {
                 active_.store(msg->data == CmdEnums::UPLINK_VIDEO, std::memory_order_relaxed);
@@ -109,7 +95,6 @@ public:
         qos.best_effort().keep_last(1);
         for (int i = 0; i < n; ++i) {
             auto ctx = std::make_unique<StreamCtx>();
-            ctx->node = this;
             ctx->topic = topics[i];
             ctx->port = port + i;
             ctx->instrumented = (i == 0);
@@ -132,30 +117,12 @@ public:
         }
     }
 
-    void publish_metrics(const FrameTimes &f, uint64_t out) {
-        auto pub = [&](const rclcpp::Publisher<Metrics>::SharedPtr &p, uint64_t a, uint64_t b) {
-            if (a == 0 || b < a) return;
-            auto m = std::make_unique<Metrics>();
-            m->id = static_cast<uint32_t>(f.id);
-            m->tx.sec = static_cast<int32_t>(a / 1000000000ULL);
-            m->tx.nanosec = static_cast<uint32_t>(a % 1000000000ULL);
-            m->rx.sec = static_cast<int32_t>(b / 1000000000ULL);
-            m->rx.nanosec = static_cast<uint32_t>(b % 1000000000ULL);
-            m->latency_ms = (b - a) / 1e6;
-            p->publish(std::move(m));
-        };
-        pub(pub_preprocess_, f.rx, f.pre);
-        pub(pub_x264_, f.enc_in, f.enc_out);
-        pub(pub_total_, f.rx, out);
-    }
-
 private:
     std::string ip_address_;
     int bitrate_ = 5000;
     bool intra_refresh_ = false;
     int framerate_ = 30;
     std::vector<std::unique_ptr<StreamCtx>> streams_;
-    rclcpp::Publisher<Metrics>::SharedPtr pub_preprocess_, pub_x264_, pub_total_;
     rclcpp::Subscription<Int8>::SharedPtr sub_mode_;
     std::atomic<bool> active_{true};
 
@@ -202,7 +169,6 @@ private:
             cv::cvtColor(scaled, yuv, code);
             gst_buffer_unmap(buffer, &map);
 
-            ft.pre = now_ns();
             ft.id = ctx->frame_counter++;
 
             // registar antes do push, o appsrc pode usar o buffer antes de retornar
@@ -259,7 +225,6 @@ private:
         if (ctx->instrumented) {
             add_probe(ctx, "mysrc",  "src",  probe_appsrc);
             add_probe(ctx, "enc",    "sink", probe_enc_in);
-            add_probe(ctx, "enc",    "src",  probe_enc_out);
             add_probe(ctx, "parser", "src",  probe_parser_out);
         }
 
@@ -293,30 +258,16 @@ private:
         return GST_PAD_PROBE_OK;
     }
 
+    // frames que entram no x264, pela ordem; cada um sai como um AU no parser
     static GstPadProbeReturn probe_enc_in(GstPad *, GstPadProbeInfo *info, gpointer ud) {
         auto *ctx = static_cast<StreamCtx *>(ud);
         const GstClockTime pts = GST_BUFFER_PTS(GST_PAD_PROBE_INFO_BUFFER(info));
-        const uint64_t t = now_ns();
         std::lock_guard<std::mutex> lock(ctx->mtx);
         FrameTimes ft;                        // vazio se não houver registo, para manter a ordem
         auto it = ctx->by_pts.find(pts);
         if (it != ctx->by_pts.end()) { ft = it->second; ctx->by_pts.erase(it); }
-        ft.enc_in = t;
         ctx->in_enc.push_back(ft);
         while (ctx->in_enc.size() > 8) ctx->in_enc.pop_front();
-        return GST_PAD_PROBE_OK;
-    }
-
-    static GstPadProbeReturn probe_enc_out(GstPad *, GstPadProbeInfo *, gpointer ud) {
-        auto *ctx = static_cast<StreamCtx *>(ud);
-        const uint64_t t = now_ns();
-        std::lock_guard<std::mutex> lock(ctx->mtx);
-        if (ctx->in_enc.empty()) return GST_PAD_PROBE_OK;
-        FrameTimes ft = ctx->in_enc.front();
-        ctx->in_enc.pop_front();
-        ft.enc_out = t;
-        ctx->after_enc.push_back(ft);
-        while (ctx->after_enc.size() > 8) ctx->after_enc.pop_front();
         return GST_PAD_PROBE_OK;
     }
 
@@ -342,9 +293,9 @@ private:
         FrameTimes ft;
         {
             std::lock_guard<std::mutex> lock(ctx->mtx);
-            if (ctx->after_enc.empty()) return GST_PAD_PROBE_OK;
-            ft = ctx->after_enc.front();
-            ctx->after_enc.pop_front();
+            if (ctx->in_enc.empty()) return GST_PAD_PROBE_OK;
+            ft = ctx->in_enc.front();
+            ctx->in_enc.pop_front();
         }
         if (ft.id == 0) return GST_PAD_PROBE_OK;
 
@@ -378,8 +329,6 @@ private:
         gst_buffer_copy_into(new_buf, buffer, GST_BUFFER_COPY_METADATA, 0, -1);
         GST_PAD_PROBE_INFO_DATA(info) = new_buf;
         gst_buffer_unref(buffer);
-
-        ctx->node->publish_metrics(ft, ts2);
         return GST_PAD_PROBE_OK;
     }
 };
