@@ -160,7 +160,6 @@ def generate_launch_description():
             '/metrics/telemetry_gui',
             '/metrics/e2e_telemetry_latency',
             '/metrics/full_latency',
-            '/metrics/command_loop',
             '/metrics/front_camera',
             '/metrics/front_camera_network',
             '/metrics/front_camera_decode',

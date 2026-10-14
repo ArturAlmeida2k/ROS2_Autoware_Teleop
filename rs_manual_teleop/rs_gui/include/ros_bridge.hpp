@@ -34,8 +34,7 @@ public:
     // chamar no inicio do slot, para a proxima chegada voltar a emitir
     void clearTelemetryPending() { telemetry_update_pending_.store(false, std::memory_order_release); }
 
-    double publishTelemetryGuiMetrics(uint32_t id, const builtin_interfaces::msg::Time &origin_stamp, double e2e_command,
-                                      const builtin_interfaces::msg::Time &command_origin_stamp, int64_t rx_time_ns, int64_t display_time_ns);
+    double publishTelemetryGuiMetrics(uint32_t id, const builtin_interfaces::msg::Time &origin_stamp, double e2e_command, int64_t rx_time_ns, int64_t display_time_ns);
     void publishFrontCameraMetrics(uint32_t frame_id, double latency_ms);
     void publishFrontCameraNetwork(uint32_t frame_id, double latency_ms);
     void publishFrontCameraDecode(uint32_t frame_id, double latency_ms);
@@ -55,8 +54,7 @@ private:
     rclcpp::Publisher<Metrics>::SharedPtr pub_telemetry_decoder_;
     rclcpp::Publisher<Metrics>::SharedPtr pub_telemetry_gui_;
     rclcpp::Publisher<Metrics>::SharedPtr pub_e2e_telemetry_;
-    rclcpp::Publisher<Metrics>::SharedPtr pub_full_latency_;
-    rclcpp::Publisher<Metrics>::SharedPtr pub_command_loop_;    
+    rclcpp::Publisher<Metrics>::SharedPtr pub_full_latency_;    
     rclcpp::Publisher<Metrics>::SharedPtr pub_front_camera_;
     rclcpp::Publisher<Metrics>::SharedPtr pub_front_camera_network_;
     rclcpp::Publisher<Metrics>::SharedPtr pub_front_camera_decode_;

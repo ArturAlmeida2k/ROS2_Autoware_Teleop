@@ -129,7 +129,7 @@ void MainWindow::onTelemetryUpdated()
 
     const int64_t display_time_ns = bridge_->nowNanoseconds();
     const double full_ms = bridge_->publishTelemetryGuiMetrics(
-        msg.id, msg.origin_stamp, msg.e2e_command_ms, msg.command_origin_stamp, rx_time_ns, display_time_ns);
+        msg.id, msg.origin_stamp, msg.e2e_command_ms, rx_time_ns, display_time_ns);
     panel_->setLoopLatency(full_ms);
 }
 
