@@ -76,6 +76,7 @@ public:
             "/metrics/e2e_command_latency", 10,
             [this](const Metrics::SharedPtr msg){
                 state_.e2e_command_ms = msg->latency_ms;
+                state_.command_origin_stamp = msg->tx;
             });
 
         sub_network_state_ = create_subscription<Int8>(

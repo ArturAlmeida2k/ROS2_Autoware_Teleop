@@ -12,6 +12,7 @@ RosBridge::RosBridge(QObject* parent)
     pub_telemetry_gui_     = this->create_publisher<Metrics>("/metrics/telemetry_gui", metrics_qos);
     pub_e2e_telemetry_     = this->create_publisher<Metrics>("/metrics/e2e_telemetry_latency", metrics_qos);
     pub_full_latency_      = this->create_publisher<Metrics>("/metrics/full_latency", metrics_qos);
+    pub_command_loop_      = this->create_publisher<Metrics>("/metrics/command_loop", metrics_qos);
     pub_front_camera_      = this->create_publisher<Metrics>("/metrics/front_camera", metrics_qos);
     pub_front_camera_network_ = this->create_publisher<Metrics>("/metrics/front_camera_network", metrics_qos);
     pub_front_camera_decode_  = this->create_publisher<Metrics>("/metrics/front_camera_decode", metrics_qos);
@@ -76,7 +77,8 @@ void RosBridge::publish_metric(const rclcpp::Publisher<Metrics>::SharedPtr& pub,
     pub->publish(std::move(msg));
 }
 
-double RosBridge::publishTelemetryGuiMetrics(uint32_t id, const builtin_interfaces::msg::Time &origin_stamp, double e2e_command_ms, int64_t rx_time_ns, int64_t display_time_ns)
+double RosBridge::publishTelemetryGuiMetrics(uint32_t id, const builtin_interfaces::msg::Time &origin_stamp, double e2e_command_ms,
+                                             const builtin_interfaces::msg::Time &command_origin_stamp, int64_t rx_time_ns, int64_t display_time_ns)
 {
     rclcpp::Time rx_time(rx_time_ns, RCL_ROS_TIME);
     rclcpp::Time display_time(display_time_ns, RCL_ROS_TIME);
@@ -99,7 +101,20 @@ double RosBridge::publishTelemetryGuiMetrics(uint32_t id, const builtin_interfac
     msg_full->latency_ms = full_latency_ms;
 
     pub_full_latency_->publish(std::move(msg_full));
-    return full_latency_ms;
+
+    // loop medido só no relógio do RS: desde que o último comando aplicado saiu do comando até
+    // a telemetria que o reflete ser mostrada. Se os comandos param, este valor continua a crescer.
+    const rclcpp::Time cmd_origin(command_origin_stamp, RCL_ROS_TIME);
+    if (cmd_origin.nanoseconds() == 0) return full_latency_ms;   // ainda sem comandos
+
+    const double loop_ms = (display_time - cmd_origin).seconds() * 1000.0;
+    auto msg_loop = std::make_unique<Metrics>();
+    msg_loop->id = id;
+    msg_loop->tx = command_origin_stamp;
+    msg_loop->rx = display_time;
+    msg_loop->latency_ms = loop_ms;
+    pub_command_loop_->publish(std::move(msg_loop));
+    return loop_ms;
 }
 
 void RosBridge::publishFrontCameraMetrics(uint32_t frame_id, double latency_ms)
