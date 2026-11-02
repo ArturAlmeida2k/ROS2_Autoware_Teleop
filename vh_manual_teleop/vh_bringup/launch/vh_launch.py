@@ -3,8 +3,10 @@ from datetime import datetime
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, ExecuteProcess
+from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration, PythonExpression, PathJoinSubstitution
 from launch_ros.actions import Node
+from launch_ros.substitutions import FindPackageShare
 
 # Lança os nós do lado do veículo (rede, telemetria, controlo) e grava as métricas num bag.
 
@@ -13,8 +15,17 @@ def generate_launch_description():
 
     sim_arg = DeclareLaunchArgument(
         'sim', default_value='awsim',
-        description="Config profile: 'awsim' or 'carla'")
+        description="Config profile: 'awsim', 'carla', 'webcam' or 'vehicle'")
     sim = LaunchConfiguration('sim')
+
+    # autoware: comandos e telemetria pelo Autoware (control + telemetry_node)
+    # vehicle:  comandos e telemetria diretamente nos tópicos do carro (vehicle_control + vehicle_telemetry)
+    target_arg = DeclareLaunchArgument(
+        'target', default_value='autoware',
+        description="'autoware' or 'vehicle'")
+    target = LaunchConfiguration('target')
+    use_autoware = PythonExpression(["'", target, "' == 'autoware'"])
+    use_vehicle  = PythonExpression(["'", target, "' == 'vehicle'"])
 
     config_file = PathJoinSubstitution([
         get_package_share_directory('vh_bringup'), 'config',
@@ -96,7 +107,8 @@ def generate_launch_description():
         package='vh_telemetry',
         executable='telemetry_node',
         name='telemetry_node',
-        output='screen'
+        output='screen',
+        condition=IfCondition(use_autoware)
     )
 
     # vh_teleop_to_autoware
@@ -104,7 +116,27 @@ def generate_launch_description():
         package='vh_teleop_to_autoware',
         executable='control',
         name='control',
-        output='screen'
+        output='screen',
+        condition=IfCondition(use_autoware)
+    )
+
+    # vh_teleop_to_vehicle (sem Autoware)
+    vehicle_control_node = Node(
+        package='vh_teleop_to_vehicle',
+        executable='vehicle_control',
+        name='vehicle_control',
+        output='screen',
+        parameters=[PathJoinSubstitution([
+            FindPackageShare('vh_teleop_to_vehicle'), 'config', 'vehicle_control.yaml'])],
+        condition=IfCondition(use_vehicle)
+    )
+
+    vehicle_telemetry_node = Node(
+        package='vh_teleop_to_vehicle',
+        executable='vehicle_telemetry',
+        name='telemetry_node',
+        output='screen',
+        condition=IfCondition(use_vehicle)
     )
 
     safety_gate_node = Node(
@@ -146,6 +178,7 @@ def generate_launch_description():
 
     return LaunchDescription([
         sim_arg,
+        target_arg,
         ip_address_arg,
         input_port_arg,
         telemetry_port_arg,
@@ -157,6 +190,8 @@ def generate_launch_description():
         pointcloud_encoder_node,
         telemetry_node,
         control_node,
+        vehicle_control_node,
+        vehicle_telemetry_node,
         safety_gate_node,
         topic_monitor_node,
         rosbag_metrics_node,

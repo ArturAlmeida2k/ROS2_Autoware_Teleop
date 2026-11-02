@@ -4,6 +4,7 @@
 #include <memory>
 #include <chrono> 
 #include <algorithm>
+#include <cmath>
 
 #include "teleop_msgs/msg/teleop_command.hpp"
 #include "teleop_msgs/msg/telemetry_state.hpp" 
@@ -159,7 +160,7 @@ private:
         bool current_engage_button = msg->engage_command;
 
         if (current_engage_button && !last_received_engage_button_) {
-            if (current_velocity_ < 0.1f) {
+            if (std::abs(current_velocity_) < 0.1f) {
                 target_engage_state_ = !target_engage_state_;
                 RCLCPP_INFO(this->get_logger(), "Engage toggled, target state: %s", target_engage_state_ ? "TRUE" : "FALSE");
             } else {
@@ -182,7 +183,7 @@ private:
             bool gear_button_edge = (requested_gear != CmdEnums::GEAR_NONE && requested_gear != last_requested_gear_);
             
             if (gear_button_edge) {
-                if (current_velocity_ < 0.1f) {
+                if (std::abs(current_velocity_) < 0.1f) {
                     if (current_gear_ == CmdEnums::GEAR_PARK) {
                         if (requested_gear == CmdEnums::GEAR_PARK) target_gear_ = CmdEnums::GEAR_DRIVE;
                     } else {

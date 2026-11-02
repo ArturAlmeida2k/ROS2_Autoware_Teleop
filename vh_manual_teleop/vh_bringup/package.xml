@@ -9,9 +9,10 @@
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 
-  <depend>vh_network</depend>
-  <depend>vh_telemetry</depend>
-  <depend>vh_teleop_to_autoware</depend>
+  <exec_depend>vh_network</exec_depend>
+  <exec_depend>vh_telemetry</exec_depend>
+  <exec_depend>vh_teleop_to_autoware</exec_depend>
+  <exec_depend>vh_teleop_to_vehicle</exec_depend>
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>
