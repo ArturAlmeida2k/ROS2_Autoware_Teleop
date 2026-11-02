@@ -16,9 +16,17 @@ ament_target_dependencies(vehicle_control rclcpp std_msgs teleop_msgs)
 add_executable(vehicle_telemetry src/vehicle_telemetry.cpp)
 ament_target_dependencies(vehicle_telemetry rclcpp std_msgs teleop_msgs)
 
+add_executable(safety_gate src/teleop_safety_gate.cpp)
+ament_target_dependencies(safety_gate rclcpp std_msgs teleop_msgs)
+
+add_executable(topic_monitor src/teleop_topic_monitor.cpp)
+ament_target_dependencies(topic_monitor rclcpp std_msgs teleop_msgs)
+
 install(TARGETS
   vehicle_control
   vehicle_telemetry
+  safety_gate
+  topic_monitor
   DESTINATION lib/${PROJECT_NAME}
 )
 

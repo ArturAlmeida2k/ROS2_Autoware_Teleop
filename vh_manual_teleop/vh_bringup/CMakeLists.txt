@@ -9,8 +9,7 @@ endif()
 
 # find dependencies
 find_package(ament_cmake REQUIRED)
-# só tem launch e config: os outros pacotes são dependências de execução (package.xml),
-# para poder compilar sem o Autoware quando se usa target:=vehicle
+# só tem launch e config, os nós vêm do vh_network e do vh_teleop_to_vehicle
 
 
 install(DIRECTORY
