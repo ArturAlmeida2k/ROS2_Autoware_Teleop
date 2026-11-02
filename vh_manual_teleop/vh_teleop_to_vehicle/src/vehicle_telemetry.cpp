@@ -66,7 +66,7 @@ public:
                 }
             });
 
-        // modo publicado pelo vehicle_interface
+        // modo publicado pelo vehicle_control
         sub_mode_ = create_subscription<UInt8>(
             "/teleop/vehicle_mode", rclcpp::QoS(1).reliable().transient_local(),
             [this](const UInt8::SharedPtr msg) {
