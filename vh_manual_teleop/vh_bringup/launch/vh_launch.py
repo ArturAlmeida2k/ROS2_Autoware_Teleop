@@ -33,7 +33,7 @@ def generate_launch_description():
     camera_port = LaunchConfiguration('camera_port')
 
     camera_config = PathJoinSubstitution([FindPackageShare('vh_bringup'), 'config', 'vehicle.yaml'])
-    control_config = PathJoinSubstitution([FindPackageShare('vh_teleop_to_vehicle'), 'config', 'vehicle_control.yaml'])
+    vehicle_config = PathJoinSubstitution([FindPackageShare('vh_teleop_to_vehicle'), 'config', 'vehicle_params.yaml'])
 
     # rede
     input_teleop_decoder_node = Node(
@@ -57,10 +57,14 @@ def generate_launch_description():
         package='vh_teleop_to_vehicle', executable='safety_gate', name='safety_gate',
         output='screen')
 
-    # carro
-    vehicle_control_node = Node(
-        package='vh_teleop_to_vehicle', executable='vehicle_control', name='vehicle_control',
-        output='screen', parameters=[control_config])
+    # comandos: control (reage a cada comando) -> vehicle_interface (ritmo fixo) -> carro
+    control_node = Node(
+        package='vh_teleop_to_vehicle', executable='control', name='control',
+        output='screen', parameters=[vehicle_config])
+
+    vehicle_interface_node = Node(
+        package='vh_teleop_to_vehicle', executable='vehicle_interface', name='vehicle_interface',
+        output='screen', parameters=[vehicle_config])
 
     vehicle_telemetry_node = Node(
         package='vh_teleop_to_vehicle', executable='vehicle_telemetry', name='telemetry_node',
@@ -97,7 +101,8 @@ def generate_launch_description():
         video_encoder_node,
         topic_monitor_node,
         safety_gate_node,
-        vehicle_control_node,
+        control_node,
+        vehicle_interface_node,
         vehicle_telemetry_node,
         rosbag_metrics_node,
     ])
