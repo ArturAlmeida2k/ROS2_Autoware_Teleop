@@ -14,11 +14,6 @@ using Float32        = std_msgs::msg::Float32;
 using VehicleCommand = teleop_msgs::msg::VehicleCommand;
 using CmdEnums       = teleop_msgs::msg::CommandEnums;
 
-// Nó entre o control e o carro. Envia ao carro o último comando do control a ritmo fixo
-// e aplica as proteções que não podem depender da chegada de comandos:
-//   - limites da interface do carro (aceleração de -2 a 1 m/s2, binário de -2 a 2 Nm)
-//   - travagem se o control deixar de enviar comandos
-//   - não envia nada se o condutor de segurança carregar no travão
 class VehicleInterfaceNode : public rclcpp::Node
 {
 public:
@@ -42,13 +37,14 @@ public:
             "/vehicle/brake_pressed", 10,
             [this](const Float32::SharedPtr msg) { brake_pressed_ = msg->data > 0.5f; });
 
-        auto wheel_cb = [this](int i) {
-            return [this, i](const Float32::SharedPtr msg) { wheel_kmh_[i] = msg->data; };
-        };
-        sub_wheel_[0] = create_subscription<Float32>("/vehicle/wheel_speed_fl", 10, wheel_cb(0));
-        sub_wheel_[1] = create_subscription<Float32>("/vehicle/wheel_speed_fr", 10, wheel_cb(1));
-        sub_wheel_[2] = create_subscription<Float32>("/vehicle/wheel_speed_rl", 10, wheel_cb(2));
-        sub_wheel_[3] = create_subscription<Float32>("/vehicle/wheel_speed_rr", 10, wheel_cb(3));
+        sub_wheel_[0] = create_subscription<Float32>("/vehicle/wheel_speed_fl", 10,
+            [this](const Float32::SharedPtr msg) { wheel_kmh_[0] = msg->data; });
+        sub_wheel_[1] = create_subscription<Float32>("/vehicle/wheel_speed_fr", 10,
+            [this](const Float32::SharedPtr msg) { wheel_kmh_[1] = msg->data; });
+        sub_wheel_[2] = create_subscription<Float32>("/vehicle/wheel_speed_rl", 10,
+            [this](const Float32::SharedPtr msg) { wheel_kmh_[2] = msg->data; });
+        sub_wheel_[3] = create_subscription<Float32>("/vehicle/wheel_speed_rr", 10,
+            [this](const Float32::SharedPtr msg) { wheel_kmh_[3] = msg->data; });
 
         pub_accel_  = create_publisher<Float32>("/control/desired_acceleration", 1);
         pub_torque_ = create_publisher<Float32>("/control/desired_steering_torque", 1);
@@ -66,6 +62,7 @@ private:
 
     std::optional<VehicleCommand> last_cmd_;
     std::optional<rclcpp::Time> last_cmd_time_;
+
     bool brake_pressed_ = false;
     float wheel_kmh_[4] = {0.0f, 0.0f, 0.0f, 0.0f};
 

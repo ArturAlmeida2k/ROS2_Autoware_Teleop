@@ -21,16 +21,6 @@ using VehicleCommand = teleop_msgs::msg::VehicleCommand;
 using Metrics        = teleop_msgs::msg::NodeMetrics;
 using CmdEnums       = teleop_msgs::msg::CommandEnums;
 
-// Equivalente ao nó control da versão com Autoware: converte cada /teleop/safe_command
-// num /teleop/vehicle_command (aceleração e binário no volante) e gere os modos.
-// Reage a cada comando, sem timer. O ritmo fixo e as proteções ficam no vehicle_interface.
-//
-// Modos:
-//   LOCAL  -> o condutor de segurança tem o carro, não se envia nada ao carro.
-//             É o estado inicial e o estado depois de o condutor carregar no travão.
-//   REMOTE -> o operador conduz.
-//   STOP   -> o operador desligou o engage, o carro é travado e mantido parado
-//             até novo engage ou travão.
 class ControlNode : public rclcpp::Node
 {
 public:
@@ -128,9 +118,7 @@ private:
         if (mode == mode_) return;
         mode_ = mode;
         publish_mode();
-        RCLCPP_INFO(get_logger(), "Mode -> %s (%s)",
-            mode == CmdEnums::OPERATION_MODE_REMOTE ? "REMOTE" :
-            mode == CmdEnums::OPERATION_MODE_LOCAL  ? "LOCAL"  : "STOP", reason);
+        RCLCPP_INFO(get_logger(), "Mode -> %s (%s)", mode == CmdEnums::OPERATION_MODE_REMOTE ? "REMOTE" : mode == CmdEnums::OPERATION_MODE_LOCAL  ? "LOCAL"  : "STOP", reason);
     }
 
     void publish_mode()
@@ -152,7 +140,6 @@ private:
     }
 
     // ângulo do volante e a sua velocidade, calculada com o tempo das mensagens do carro
-    // (não depende do ritmo a que chegam os comandos)
     void steering_callback(const Float32::SharedPtr msg)
     {
         const rclcpp::Time t = now();
@@ -170,26 +157,23 @@ private:
     // o condutor de segurança carregou no travão: devolve-lhe o carro
     void brake_pressed_callback(const Float32::SharedPtr msg)
     {
-        brake_pressed_ = msg->data > 0.5f;
+        brake_pressed_ = msg->data > 0.1f;
         if (brake_pressed_ && mode_ != CmdEnums::OPERATION_MODE_LOCAL) {
             set_mode(CmdEnums::OPERATION_MODE_LOCAL, "driver pressed the brake");
             publish_vehicle_command(0.0, 0.0);
         }
     }
 
-    // aceleração com o controlador P da versão com Autoware
     double compute_acceleration(const TeleopCommand &cmd) const
     {
         double target = cmd.target_velocity;
 
-        // não há tópico para mudar a mudança: só acelera se a mudança do carro
-        // coincidir com a pedida, senão apenas trava
-        const bool gear_ok =
-            (cmd.gear == CmdEnums::GEAR_DRIVE   && vehicle_gear_ == 3) ||
-            (cmd.gear == CmdEnums::GEAR_REVERSE && vehicle_gear_ == 1);
+        const bool gear_ok = (cmd.gear == CmdEnums::GEAR_DRIVE && vehicle_gear_ == 3) || (cmd.gear == CmdEnums::GEAR_REVERSE && vehicle_gear_ == 1);
+
         if (!gear_ok && target > 0.0) target = 0.0;
 
         const double error = target - speed_mps();
+        
         if (target <= 0.01 && cmd.brake_factor > 0.01f) {
             const double kp = base_kp_ + (brake_kp_max_ - base_kp_) * cmd.brake_factor;
             return std::clamp(kp * error, -max_decel_, 0.0);
@@ -197,7 +181,6 @@ private:
         return std::clamp(base_kp_ * error, -max_decel_, max_accel_);
     }
 
-    // binário no volante: PD sobre o ângulo do volante
     double compute_torque(const TeleopCommand &cmd) const
     {
         if (!steering_wheel_deg_) return 0.0;
