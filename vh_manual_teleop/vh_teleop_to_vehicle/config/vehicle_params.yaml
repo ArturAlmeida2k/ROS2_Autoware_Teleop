@@ -12,13 +12,12 @@ control:
     brake_kp_max: 5.0
     max_accel: 1.0
     max_decel: 2.0
-    stop_decel: 2.0               # travagem no modo STOP
 
 vehicle_interface:
   ros__parameters:
     max_accel: 1.0                # limite da interface: +1 m/s2
     max_decel: 2.0                # limite da interface: -2 m/s2
     max_steering_torque: 2.0      # limite da interface (pode ir a 3 Nm, por testar)
-    stop_decel: 2.0               # travagem quando o control deixa de enviar
+    stop_decel: 2.0               # travagem no modo STOP e quando o control deixa de enviar
     command_timeout: 0.5          # s sem comandos -> trava
     rate: 100.0                   # Hz

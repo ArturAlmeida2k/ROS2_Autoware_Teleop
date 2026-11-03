@@ -17,14 +17,14 @@ safety_gate -> control -> vehicle_interface -> car
 ```
 
 - `control` has the driving logic, like the Autoware version. It reacts to each
-  `/teleop/safe_command`, manages the modes, computes the acceleration (P controller on the speed)
-  and the steering wheel torque (PD controller on the steering wheel angle), and publishes
-  `/teleop/vehicle_command` and the latency metrics.
-- `vehicle_interface` sits between `control` and the car and runs at a fixed rate (100 Hz). It sends
-  the last command to `/control/desired_acceleration` (-2 to 1 m/s2) and
-  `/control/desired_steering_torque` (-2 to 2 Nm), clamps them to the car limits, brakes if
-  `control` stops sending, sends nothing while the brake pedal is pressed, and publishes
-  `/control/indicated_speed` (km/h).
+  `/teleop/safe_command` and, while the car is in REMOTE, computes the acceleration (P controller
+  on the speed) and the steering wheel torque (PD controller on the steering wheel angle). It
+  publishes `/teleop/vehicle_command`, with the engage request, and the latency metrics.
+- `vehicle_interface` takes the role Autoware had. It owns the modes and publishes
+  `/teleop/vehicle_mode`, and runs at a fixed rate (100 Hz) between `control` and the car: it
+  sends the last command to `/control/desired_acceleration` (-2 to 1 m/s2) and
+  `/control/desired_steering_torque` (-2 to 2 Nm), clamps them to the car limits, holds the car
+  braked in STOP, brakes if `control` stops sending, and publishes `/control/indicated_speed` (km/h).
 - `vehicle_telemetry` builds `/teleop/telemetry` from `/vehicle/wheel_speed_*`, `/vehicle/gear`,
   `/vehicle/blinkers` and `/vehicle/direction`.
 

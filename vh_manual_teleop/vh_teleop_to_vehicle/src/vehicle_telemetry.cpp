@@ -29,13 +29,14 @@ public:
         state_.gear        = CmdEnums::GEAR_NONE;
         state_.turn_signal = CmdEnums::TURN_OFF;
 
-        auto wheel_cb = [this](int i) {
-            return [this, i](const Float32::SharedPtr msg) { wheel_kmh_[i] = msg->data; };
-        };
-        sub_wheel_[0] = create_subscription<Float32>("/vehicle/wheel_speed_fl", 10, wheel_cb(0));
-        sub_wheel_[1] = create_subscription<Float32>("/vehicle/wheel_speed_fr", 10, wheel_cb(1));
-        sub_wheel_[2] = create_subscription<Float32>("/vehicle/wheel_speed_rl", 10, wheel_cb(2));
-        sub_wheel_[3] = create_subscription<Float32>("/vehicle/wheel_speed_rr", 10, wheel_cb(3));
+        sub_wheel_[0] = create_subscription<Float32>("/vehicle/wheel_speed_fl", 10,
+            [this](const Float32::SharedPtr msg) { wheel_kmh_[0] = msg->data; });
+        sub_wheel_[1] = create_subscription<Float32>("/vehicle/wheel_speed_fr", 10,
+            [this](const Float32::SharedPtr msg) { wheel_kmh_[1] = msg->data; });
+        sub_wheel_[2] = create_subscription<Float32>("/vehicle/wheel_speed_rl", 10,
+            [this](const Float32::SharedPtr msg) { wheel_kmh_[2] = msg->data; });
+        sub_wheel_[3] = create_subscription<Float32>("/vehicle/wheel_speed_rr", 10,
+            [this](const Float32::SharedPtr msg) { wheel_kmh_[3] = msg->data; });
 
         // 1 = frente, -1 = marcha-atrás
         sub_direction_ = create_subscription<Float32>(
@@ -66,7 +67,7 @@ public:
                 }
             });
 
-        // modo publicado pelo control
+        // modo publicado pelo vehicle_interface
         sub_mode_ = create_subscription<UInt8>(
             "/teleop/vehicle_mode", rclcpp::QoS(1).reliable().transient_local(),
             [this](const UInt8::SharedPtr msg) {

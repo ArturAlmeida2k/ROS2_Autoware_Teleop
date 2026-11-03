@@ -2,4 +2,4 @@
 std_msgs/Header header
 float32 acceleration     # m/s2, positivo acelera, negativo trava
 float32 steering_torque  # Nm no volante
-uint8   mode             # CommandEnums OPERATION_MODE_* (LOCAL = não enviar nada ao carro)
+bool    engage           # pedido do operador (o vehicle_interface decide o modo)

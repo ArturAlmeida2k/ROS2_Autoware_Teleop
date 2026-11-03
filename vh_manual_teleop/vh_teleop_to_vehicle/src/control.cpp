@@ -36,20 +36,20 @@ public:
         brake_kp_max_        = declare_parameter<double>("brake_kp_max", 5.0);
         max_accel_           = declare_parameter<double>("max_accel", 1.0);
         max_decel_           = declare_parameter<double>("max_decel", 2.0);
-        stop_decel_          = declare_parameter<double>("stop_decel", 2.0);
 
         sub_safe_command_ = create_subscription<TeleopCommand>(
             "/teleop/safe_command", 10,
             std::bind(&ControlNode::safe_command_callback, this, std::placeholders::_1));
 
         // estado do carro
-        auto wheel_cb = [this](int i) {
-            return [this, i](const Float32::SharedPtr msg) { wheel_kmh_[i] = msg->data; };
-        };
-        sub_wheel_[0] = create_subscription<Float32>("/vehicle/wheel_speed_fl", 10, wheel_cb(0));
-        sub_wheel_[1] = create_subscription<Float32>("/vehicle/wheel_speed_fr", 10, wheel_cb(1));
-        sub_wheel_[2] = create_subscription<Float32>("/vehicle/wheel_speed_rl", 10, wheel_cb(2));
-        sub_wheel_[3] = create_subscription<Float32>("/vehicle/wheel_speed_rr", 10, wheel_cb(3));
+        sub_wheel_[0] = create_subscription<Float32>("/vehicle/wheel_speed_fl", 10,
+            [this](const Float32::SharedPtr msg) { wheel_kmh_[0] = msg->data; });
+        sub_wheel_[1] = create_subscription<Float32>("/vehicle/wheel_speed_fr", 10,
+            [this](const Float32::SharedPtr msg) { wheel_kmh_[1] = msg->data; });
+        sub_wheel_[2] = create_subscription<Float32>("/vehicle/wheel_speed_rl", 10,
+            [this](const Float32::SharedPtr msg) { wheel_kmh_[2] = msg->data; });
+        sub_wheel_[3] = create_subscription<Float32>("/vehicle/wheel_speed_rr", 10,
+            [this](const Float32::SharedPtr msg) { wheel_kmh_[3] = msg->data; });
 
         sub_steering_ = create_subscription<Float32>(
             "/vehicle/steering_angle", 10,
@@ -59,14 +59,12 @@ public:
             "/vehicle/gear", 10,
             [this](const Int8::SharedPtr msg) { vehicle_gear_ = msg->data; });
 
-        sub_brake_ = create_subscription<Float32>(
-            "/vehicle/brake_pressed", 10,
-            std::bind(&ControlNode::brake_pressed_callback, this, std::placeholders::_1));
+        // modo decidido pelo vehicle_interface (como o /system/operation_mode/state do Autoware)
+        sub_mode_ = create_subscription<UInt8>(
+            "/teleop/vehicle_mode", rclcpp::QoS(1).reliable().transient_local(),
+            [this](const UInt8::SharedPtr msg) { current_mode_ = msg->data; });
 
         pub_vehicle_cmd_ = create_publisher<VehicleCommand>("/teleop/vehicle_command", 10);
-
-        // modo para o vehicle_telemetry (substitui o /system/operation_mode/state do Autoware)
-        pub_mode_ = create_publisher<UInt8>("/teleop/vehicle_mode", rclcpp::QoS(1).reliable().transient_local());
 
         rclcpp::QoS metrics_qos(10);
         metrics_qos.best_effort();
@@ -75,15 +73,14 @@ public:
         pub_metrics_safety_gate_ = create_publisher<Metrics>("/metrics/safety_gate", metrics_qos);
         pub_metrics_control_     = create_publisher<Metrics>("/metrics/control", metrics_qos);
 
-        publish_mode();
-        RCLCPP_INFO(get_logger(), "Control node started (direct vehicle interface, mode LOCAL).");
+        RCLCPP_INFO(get_logger(), "Control node started (direct vehicle interface).");
     }
 
 private:
     // ---- parâmetros
     double steering_ratio_, steering_sign_, max_wheel_angle_deg_;
     double steer_kp_, steer_kd_;
-    double base_kp_, brake_kp_max_, max_accel_, max_decel_, stop_decel_;
+    double base_kp_, brake_kp_max_, max_accel_, max_decel_;
 
     // ---- estado do carro
     float wheel_kmh_[4] = {0.0f, 0.0f, 0.0f, 0.0f};
@@ -91,19 +88,16 @@ private:
     double steering_rate_dps_ = 0.0;
     std::optional<rclcpp::Time> prev_steering_time_;
     int8_t vehicle_gear_ = -1;          // 0=P, 1=R, 2=N, 3=D
-    bool brake_pressed_ = false;
 
-    bool last_engage_cmd_ = false;
-    uint8_t mode_ = CmdEnums::OPERATION_MODE_LOCAL;
+    uint8_t current_mode_ = CmdEnums::OPERATION_MODE_LOCAL;
 
     rclcpp::Subscription<TeleopCommand>::SharedPtr sub_safe_command_;
     rclcpp::Subscription<Float32>::SharedPtr       sub_wheel_[4];
     rclcpp::Subscription<Float32>::SharedPtr       sub_steering_;
     rclcpp::Subscription<Int8>::SharedPtr          sub_gear_;
-    rclcpp::Subscription<Float32>::SharedPtr       sub_brake_;
+    rclcpp::Subscription<UInt8>::SharedPtr         sub_mode_;
 
     rclcpp::Publisher<VehicleCommand>::SharedPtr pub_vehicle_cmd_;
-    rclcpp::Publisher<UInt8>::SharedPtr          pub_mode_;
     rclcpp::Publisher<Metrics>::SharedPtr pub_metrics_end_to_end_, pub_metrics_safety_gate_, pub_metrics_control_;
 
     double speed_mps() const
@@ -111,21 +105,6 @@ private:
         double sum = 0.0;
         for (float w : wheel_kmh_) sum += std::abs(w);
         return (sum / 4.0) / 3.6;
-    }
-
-    void set_mode(uint8_t mode, const char *reason)
-    {
-        if (mode == mode_) return;
-        mode_ = mode;
-        publish_mode();
-        RCLCPP_INFO(get_logger(), "Mode -> %s (%s)", mode == CmdEnums::OPERATION_MODE_REMOTE ? "REMOTE" : mode == CmdEnums::OPERATION_MODE_LOCAL  ? "LOCAL"  : "STOP", reason);
-    }
-
-    void publish_mode()
-    {
-        UInt8 msg;
-        msg.data = mode_;
-        pub_mode_->publish(msg);
     }
 
     void publish_metric(const rclcpp::Publisher<Metrics>::SharedPtr &pub, uint32_t id,
@@ -154,16 +133,6 @@ private:
         prev_steering_time_ = t;
     }
 
-    // o condutor de segurança carregou no travão: devolve-lhe o carro
-    void brake_pressed_callback(const Float32::SharedPtr msg)
-    {
-        brake_pressed_ = msg->data > 0.1f;
-        if (brake_pressed_ && mode_ != CmdEnums::OPERATION_MODE_LOCAL) {
-            set_mode(CmdEnums::OPERATION_MODE_LOCAL, "driver pressed the brake");
-            publish_vehicle_command(0.0, 0.0);
-        }
-    }
-
     double compute_acceleration(const TeleopCommand &cmd) const
     {
         double target = cmd.target_velocity;
@@ -178,7 +147,7 @@ private:
             const double kp = base_kp_ + (brake_kp_max_ - base_kp_) * cmd.brake_factor;
             return std::clamp(kp * error, -max_decel_, 0.0);
         }
-        return std::clamp(base_kp_ * error, -max_decel_, max_accel_);
+        return std::clamp(base_kp_ * error, -max_accel_, max_accel_);
     }
 
     double compute_torque(const TeleopCommand &cmd) const
@@ -191,14 +160,14 @@ private:
         return steer_kp_ * (target_deg - *steering_wheel_deg_) - steer_kd_ * steering_rate_dps_;
     }
 
-    void publish_vehicle_command(double accel, double torque)
+    void publish_vehicle_command(double accel, double torque, bool engage)
     {
         auto out = std::make_unique<VehicleCommand>();
         out->header.stamp    = now();
         out->header.frame_id = "control";
         out->acceleration    = static_cast<float>(accel);
         out->steering_torque = static_cast<float>(torque);
-        out->mode            = mode_;
+        out->engage          = engage;
         pub_vehicle_cmd_->publish(std::move(out));
     }
 
@@ -206,33 +175,12 @@ private:
     {
         auto start_time = now();
 
-        // o engage só atua quando muda
-        const bool engage = msg->engage_command;
-        if (engage != last_engage_cmd_) {
-            if (engage) {
-                if (brake_pressed_) {
-                    RCLCPP_WARN(get_logger(), "Engage refused: brake pedal is pressed.");
-                } else {
-                    set_mode(CmdEnums::OPERATION_MODE_REMOTE, "engage requested");
-                }
-            } else if (mode_ == CmdEnums::OPERATION_MODE_REMOTE) {
-                set_mode(CmdEnums::OPERATION_MODE_STOP, "disengage requested");
-            }
-            last_engage_cmd_ = engage;
-        }
-
-        switch (mode_) {
-            case CmdEnums::OPERATION_MODE_REMOTE:
-                publish_vehicle_command(compute_acceleration(*msg), compute_torque(*msg));
-                break;
-            case CmdEnums::OPERATION_MODE_STOP:
-                // mantém o carro travado e o volante livre
-                publish_vehicle_command(-stop_decel_, 0.0);
-                break;
-            default:
-                // LOCAL: o vehicle_interface não envia nada ao carro
-                publish_vehicle_command(0.0, 0.0);
-                break;
+        // envia sempre, para o pedido de engage chegar ao vehicle_interface,
+        // mas só calcula aceleração e binário em REMOTE (como o control da versão com Autoware)
+        if (current_mode_ == CmdEnums::OPERATION_MODE_REMOTE) {
+            publish_vehicle_command(compute_acceleration(*msg), compute_torque(*msg), msg->engage_command);
+        } else {
+            publish_vehicle_command(0.0, 0.0, msg->engage_command);
         }
 
         auto end_time = now();
