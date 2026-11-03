@@ -32,7 +32,9 @@ Modes: LOCAL at start-up (nothing is sent to the car), REMOTE after engage, STOP
 (the car is held braked). Pressing the brake pedal in the car always returns to LOCAL.
 The engage only acts when it changes, so after the driver takes over the operator has to
 disengage and engage again. The car interface has no gear or turn signal commands, so these
-are not sent. Throttle is only applied when the car gear matches the requested gear.
+are not sent. The gear is chosen by the driver in the car, and the station can no longer change
+it (the gear buttons were removed from the controller nodes and the Command Gate). The gear is
+still shown in the interface, from the telemetry.
 
 Cameras are set in `vh_bringup/config/vehicle.yaml`. Parameters in
 `vh_teleop_to_vehicle/config/vehicle_params.yaml` (steering ratio, steering sign and gains) are

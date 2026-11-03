@@ -5,7 +5,6 @@
 
 #include "rclcpp/rclcpp.hpp"
 #include "std_msgs/msg/float32.hpp"
-#include "std_msgs/msg/int8.hpp"
 #include "std_msgs/msg/u_int8.hpp"
 
 #include "teleop_msgs/msg/teleop_command.hpp"
@@ -14,7 +13,6 @@
 #include "teleop_msgs/msg/command_enums.hpp"
 
 using Float32        = std_msgs::msg::Float32;
-using Int8           = std_msgs::msg::Int8;
 using UInt8          = std_msgs::msg::UInt8;
 using TeleopCommand  = teleop_msgs::msg::TeleopCommand;
 using VehicleCommand = teleop_msgs::msg::VehicleCommand;
@@ -55,10 +53,6 @@ public:
             "/vehicle/steering_angle", 10,
             std::bind(&ControlNode::steering_callback, this, std::placeholders::_1));
 
-        sub_gear_ = create_subscription<Int8>(
-            "/vehicle/gear", 10,
-            [this](const Int8::SharedPtr msg) { vehicle_gear_ = msg->data; });
-
         // modo decidido pelo vehicle_interface (como o /system/operation_mode/state do Autoware)
         sub_mode_ = create_subscription<UInt8>(
             "/teleop/vehicle_mode", rclcpp::QoS(1).reliable().transient_local(),
@@ -87,14 +81,12 @@ private:
     std::optional<float> steering_wheel_deg_;
     double steering_rate_dps_ = 0.0;
     std::optional<rclcpp::Time> prev_steering_time_;
-    int8_t vehicle_gear_ = -1;          // 0=P, 1=R, 2=N, 3=D
 
     uint8_t current_mode_ = CmdEnums::OPERATION_MODE_LOCAL;
 
     rclcpp::Subscription<TeleopCommand>::SharedPtr sub_safe_command_;
     rclcpp::Subscription<Float32>::SharedPtr       sub_wheel_[4];
     rclcpp::Subscription<Float32>::SharedPtr       sub_steering_;
-    rclcpp::Subscription<Int8>::SharedPtr          sub_gear_;
     rclcpp::Subscription<UInt8>::SharedPtr         sub_mode_;
 
     rclcpp::Publisher<VehicleCommand>::SharedPtr pub_vehicle_cmd_;
@@ -135,11 +127,7 @@ private:
 
     double compute_acceleration(const TeleopCommand &cmd) const
     {
-        double target = cmd.target_velocity;
-
-        const bool gear_ok = (cmd.gear == CmdEnums::GEAR_DRIVE && vehicle_gear_ == 3) || (cmd.gear == CmdEnums::GEAR_REVERSE && vehicle_gear_ == 1);
-
-        if (!gear_ok && target > 0.0) target = 0.0;
+        const double target = cmd.target_velocity;
 
         const double error = target - speed_mps();
         
