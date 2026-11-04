@@ -17,8 +17,10 @@ using VehicleCommand = teleop_msgs::msg::VehicleCommand;
 using CmdEnums       = teleop_msgs::msg::CommandEnums;
 
 // Modos (faz o papel do Autoware):
-//   LOCAL  -> o condutor de segurança tem o carro, não se envia nada ao carro.
-//             É o estado inicial e o estado depois de o condutor carregar no travão.
+//   LOCAL  -> o condutor de segurança tem o carro. É o estado inicial e o estado depois
+//             de o condutor carregar no travão. Continua a enviar travagem e binário 0:
+//             o carro ignora-os enquanto está em modo normal, e quando o condutor volta a
+//             ativar o controlo por PC o carro fica parado em vez de usar o último comando.
 //   REMOTE -> o operador conduz.
 //   STOP   -> o operador desligou o engage, o carro é travado e mantido parado.
 class VehicleInterfaceNode : public rclcpp::Node
@@ -62,7 +64,7 @@ public:
             std::bind(&VehicleInterfaceNode::loop, this));
 
         publish_mode();
-        RCLCPP_INFO(get_logger(), "Vehicle interface started at %.0f Hz (mode LOCAL).", rate_hz);
+        RCLCPP_INFO(get_logger(), "Vehicle interface started at %.0f Hz (mode LOCAL, holding the car braked).", rate_hz);
     }
 
 private:
@@ -157,15 +159,12 @@ private:
             }
 
             case CmdEnums::OPERATION_MODE_STOP:
+            case CmdEnums::OPERATION_MODE_LOCAL:
+            default:
                 // mantém o carro travado e o volante livre
                 accel.data  = static_cast<float>(-stop_decel_);
                 torque.data = 0.0f;
                 break;
-
-            case CmdEnums::OPERATION_MODE_LOCAL:
-            default:
-                // o condutor manda, não envia nada ao carro
-                return;
         }
 
         pub_accel_->publish(accel);

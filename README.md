@@ -28,8 +28,10 @@ safety_gate -> control -> vehicle_interface -> car
 - `vehicle_telemetry` builds `/teleop/telemetry` from `/vehicle/wheel_speed_*`, `/vehicle/gear`,
   `/vehicle/blinkers` and `/vehicle/direction`.
 
-Modes: LOCAL at start-up (nothing is sent to the car), REMOTE after engage, STOP after disengage
-(the car is held braked). Pressing the brake pedal in the car always returns to LOCAL.
+Modes: LOCAL at start-up and after the driver presses the brake pedal, REMOTE after engage, STOP
+after disengage. Outside REMOTE the car is always sent a braking command and zero steering torque.
+The car ignores them while the driver has it, and when the driver activates PC control again the
+car stays stopped instead of using the last command, so the operator can engage.
 The engage only acts when it changes, so after the driver takes over the operator has to
 disengage and engage again. The car interface has no gear or turn signal commands, so these
 are not sent. The gear is chosen by the driver in the car, and the station can no longer change
