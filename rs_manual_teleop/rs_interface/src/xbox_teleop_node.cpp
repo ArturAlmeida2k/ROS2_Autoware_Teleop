@@ -35,8 +35,12 @@ private:
     const int AXIS_BRAKE     = 2;  // LT, travão
     const int AXIS_THROTTLE  = 5;  // RT, acelerador
     const int AXIS_DPAD_X    = 6;  // D-Pad horizontal
+    const int AXIS_DPAD_Y    = 7;  // D-Pad vertical
 
     // botões
+    const int BUTTON_A       = 0;  // Drive
+    const int BUTTON_B       = 1;  // Reverse
+    const int BUTTON_X       = 2;  // modificador de mudanças (faz de embraiagem)
     const int BUTTON_Y       = 3;  // Hazard
     const int BUTTON_LB      = 4;  // Pisca esquerdo
     const int BUTTON_RB      = 5;  // Pisca direito
@@ -86,6 +90,26 @@ private:
         float steering_input        = msg->axes[AXIS_STEERING];
         float target_steering_angle = steering_input * MAX_STEERING_RAD;
 
+        // mudanças só com X premido
+        bool gear_modifier  = msg->buttons[BUTTON_X];
+        bool drive_button   = msg->buttons[BUTTON_A];
+        bool reverse_button = msg->buttons[BUTTON_B];
+        int  dpad_y         = static_cast<int>(msg->axes[AXIS_DPAD_Y]);
+
+        int new_gear = CmdEnums::GEAR_NONE;
+
+        if (gear_modifier) {
+            if (dpad_y == 1) {
+                new_gear = CmdEnums::GEAR_DRIVE;
+            } else if (dpad_y == -1) {
+                new_gear = CmdEnums::GEAR_PARK;
+            } else if (drive_button) {
+                new_gear = CmdEnums::GEAR_DRIVE;
+            } else if (reverse_button) {
+                new_gear = CmdEnums::GEAR_REVERSE;
+            }
+        }
+
         bool turn_right    = msg->buttons[BUTTON_RB];
         bool turn_left     = msg->buttons[BUTTON_LB];
         bool hazard_signal = msg->buttons[BUTTON_Y];
@@ -112,7 +136,7 @@ private:
         teleop_msg->target_steering_angle = target_steering_angle;
         teleop_msg->engage_command = change_engage_state;
         teleop_msg->uplink_mode = uplink_mode;
-        teleop_msg->gear = CmdEnums::GEAR_NONE; // a mudança não é controlada à distância
+        teleop_msg->gear = new_gear;
         teleop_msg->turn_signal = turn_signal;
 
         pub_raw_command_->publish(std::move(teleop_msg));

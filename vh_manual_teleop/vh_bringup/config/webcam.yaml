@@ -1,0 +1,8 @@
+/**:
+  ros__parameters:
+    num_cameras: 1
+    bitrate: 8000
+    intra_refresh: true
+    framerate: 30
+    camera_topics:
+      - /webcam/image_raw

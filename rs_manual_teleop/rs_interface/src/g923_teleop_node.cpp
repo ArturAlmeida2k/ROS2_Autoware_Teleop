@@ -31,6 +31,7 @@ private:
 
     // eixos entre -1.0 e 1.0
     const int AXIS_STEERING = 0;   // volante: 0 ao centro, -1 direita, 1 esquerda
+    const int AXIS_CLUTCH = 1;     // embraiagem, -1 em repouso
     const int AXIS_THROTTLE = 2;   // acelerador, -1 em repouso
     const int AXIS_BRAKE = 3;      // travão, -1 em repouso
     
@@ -41,6 +42,10 @@ private:
     const int BUTTON_HAZARD_SIGNAL = 23; // botão Enter
     const int BUTTON_UPLINK_MODE = 8; // alterna vídeo / pointcloud
 
+    const int GEAR_DRIVE = 4; // patilha direita
+    const int GEAR_REVERSE = 5; // patilha esquerda
+    const int GEAR_PARKED_AXIS = 5; // eixo do D-pad (cima/baixo)
+    
     const float MAX_STEERING_RAD = 0.5f; // ~28.6 graus
 
     u_int16_t seq_num_ = 1;
@@ -86,6 +91,36 @@ private:
         float steering_input = msg->axes[AXIS_STEERING];
         float target_steering_angle = steering_input * MAX_STEERING_RAD;
 
+        bool drive_button = msg->buttons[GEAR_DRIVE];
+        bool reverse_button = msg->buttons[GEAR_REVERSE];
+        int parking_axes = msg->axes[GEAR_PARKED_AXIS];
+        float clutch = msg->axes[AXIS_CLUTCH];
+
+        double normalized_clutch = (clutch + 1.0) / 2.0;
+
+        int new_gear = CmdEnums::GEAR_NONE;
+
+        // mudanças só com a embraiagem quase a fundo
+        if (normalized_clutch >= 0.9){
+            // D-pad cima: sai de Parking para Drive
+            if (parking_axes == 1) {
+                new_gear = CmdEnums::GEAR_DRIVE;
+            }
+            // D-pad baixo: Parking
+            else if (parking_axes == -1) {
+                new_gear = CmdEnums::GEAR_PARK;
+            }
+            // patilhas: Drive / Reverse
+           
+            else if (drive_button) {
+                    new_gear = CmdEnums::GEAR_DRIVE;
+            }
+            
+            else if (reverse_button) {
+                    new_gear = CmdEnums::GEAR_REVERSE;
+            }
+        }
+
         bool turn_right = msg->buttons[BUTTON_TURN_SIGNAL_RIGHT];
         bool turn_left = msg->buttons[BUTTON_TURN_SIGNAL_LEFT];
         bool hazard_signal = msg->buttons[BUTTON_HAZARD_SIGNAL];
@@ -115,7 +150,7 @@ private:
         teleop_msg->target_steering_angle = target_steering_angle;
         teleop_msg->engage_command = change_engage_state;
         teleop_msg->uplink_mode = uplink_mode;
-        teleop_msg->gear = CmdEnums::GEAR_NONE; // a mudança não é controlada à distância
+        teleop_msg->gear = new_gear;
         teleop_msg->turn_signal = turn_signal;
 
         pub_raw_command_->publish(std::move(teleop_msg));

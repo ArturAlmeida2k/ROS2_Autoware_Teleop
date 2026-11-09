@@ -1,9 +1,9 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>vh_teleop_to_vehicle</name>
+  <name>vh_teleop_to_autoware</name>
   <version>0.0.0</version>
-  <description>Bridge between the teleoperation framework and the vehicle topics, without Autoware</description>
+  <description>TODO: Package description</description>
   <maintainer email="arturalmeida2000@hotmail.com">artur</maintainer>
   <license>TODO: License declaration</license>
 
@@ -11,6 +11,11 @@
 
   <depend>rclcpp</depend>
   <depend>std_msgs</depend>
+  <depend>tier4_external_api_msgs</depend>
+  <depend>tier4_control_msgs</depend>
+  <depend>autoware_control_msgs</depend>
+  <depend>autoware_vehicle_msgs</depend>
+  <depend>autoware_adapi_v1_msgs</depend>
   <depend>teleop_msgs</depend>
 
   <export>

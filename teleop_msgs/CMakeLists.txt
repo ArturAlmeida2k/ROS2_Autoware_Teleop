@@ -11,7 +11,6 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/NetworkMetrics.msg"
   "msg/NodeMetrics.msg"
   "msg/CommandEnums.msg"
-  "msg/VehicleCommand.msg"
   DEPENDENCIES std_msgs
 )
 
