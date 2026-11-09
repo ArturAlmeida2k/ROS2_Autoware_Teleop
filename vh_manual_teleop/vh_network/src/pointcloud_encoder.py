@@ -24,8 +24,10 @@ class PointCloudEncoder(Node):
 
         self.declare_parameter('ip_address', '10.0.0.2')
         self.declare_parameter('port', 5011)
+        self.declare_parameter('pointcloud_topic', '/perception/obstacle_segmentation/pointcloud')
         self.target = (self.get_parameter('ip_address').value,
                        self.get_parameter('port').value)
+        pointcloud_topic = self.get_parameter('pointcloud_topic').value
 
         self._active = False
         self._seq = 0
@@ -39,7 +41,7 @@ class PointCloudEncoder(Node):
                          history=HistoryPolicy.KEEP_LAST,
                          durability=DurabilityPolicy.VOLATILE)
 
-        self.create_subscription(PointCloud2, '/perception/obstacle_segmentation/pointcloud', self.on_pointcloud, qos)
+        self.create_subscription(PointCloud2, pointcloud_topic, self.on_pointcloud, qos)
 
         self.create_subscription(Int8, '/teleop/uplink_mode', self.on_mode, 10)
 

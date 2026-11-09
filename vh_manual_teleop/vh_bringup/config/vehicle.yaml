@@ -11,3 +11,4 @@
       - /camera_2/image_raw
       - /camera_4/image_raw
       - /camera_3/image_raw
+    pointcloud_topic: /perception/obstacle_segmentation/pointcloud
