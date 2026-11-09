@@ -4,6 +4,7 @@
 #include <memory>
 #include <chrono> 
 #include <algorithm>
+#include <cmath>
 
 #include "teleop_msgs/msg/teleop_command.hpp"
 #include "teleop_msgs/msg/telemetry_state.hpp" 
@@ -50,7 +51,6 @@ public:
                 // primeira telemetria (ou reconexão): alinha o estado pretendido com o carro
                 if (!is_telemetry_valid_) {
                     target_engage_state_ = (msg->mode == CmdEnums::OPERATION_MODE_REMOTE);
-                    target_gear_ = msg->gear;
                     target_turn_signal_ = msg->turn_signal; 
 
                     is_telemetry_valid_ = true;
@@ -62,7 +62,6 @@ public:
                 current_engage_status_ = msg->engaged;
                 current_velocity_ = msg->velocity_kmh;
                 current_turn_signal_ = msg->turn_signal;
-                current_gear_ = msg->gear;
             });
 
         // se passarem 3 s sem telemetria, suspende os comandos
@@ -80,7 +79,6 @@ private:
     bool current_engage_status_ = false;
     float current_velocity_ = 0.0f;
     int current_turn_signal_ = 0;
-    int current_gear_ = 0;
 
     // estado pretendido (toggles dos botões)
     bool is_telemetry_valid_ = false;
@@ -88,8 +86,6 @@ private:
     bool last_received_engage_button_ = false;
     bool last_received_uplink_button_ = false;
 
-    int target_gear_ = CmdEnums::GEAR_PARK;
-    int last_requested_gear_ = CmdEnums::GEAR_NONE;
     int target_turn_signal_ = CmdEnums::TURN_OFF; 
     int last_received_turn_button_ = 0;
     int current_uplink_mode_ = CmdEnums::UPLINK_VIDEO;
@@ -109,12 +105,9 @@ private:
 
             current_mode_ = 0; 
             current_velocity_ = 0.0f;
-            current_gear_ = 0;
 
             target_engage_state_ = false;
             last_received_engage_button_ = false; 
-            target_gear_ = CmdEnums::GEAR_PARK;
-            last_requested_gear_ = CmdEnums::GEAR_NONE;
             target_turn_signal_ = CmdEnums::TURN_OFF;
             last_received_turn_button_ = 0;
             last_received_uplink_button_ = false;
@@ -159,7 +152,7 @@ private:
         bool current_engage_button = msg->engage_command;
 
         if (current_engage_button && !last_received_engage_button_) {
-            if (current_velocity_ < 0.1f) {
+            if (std::abs(current_velocity_) < 0.1f) {
                 target_engage_state_ = !target_engage_state_;
                 RCLCPP_INFO(this->get_logger(), "Engage toggled, target state: %s", target_engage_state_ ? "TRUE" : "FALSE");
             } else {
@@ -178,25 +171,8 @@ private:
             final_msg->brake_factor = msg->brake_factor;
             final_msg->target_steering_angle = msg->target_steering_angle;
 
-            int requested_gear = msg->gear;
-            bool gear_button_edge = (requested_gear != CmdEnums::GEAR_NONE && requested_gear != last_requested_gear_);
-            
-            if (gear_button_edge) {
-                if (current_velocity_ < 0.1f) {
-                    if (current_gear_ == CmdEnums::GEAR_PARK) {
-                        if (requested_gear == CmdEnums::GEAR_PARK) target_gear_ = CmdEnums::GEAR_DRIVE;
-                    } else {
-                        target_gear_ = requested_gear;
-                    }
-                    last_requested_gear_ = requested_gear;  
-                } else {
-                    RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
-                        "Gear change blocked, vehicle moving (%.1f km/h)", current_velocity_);
-                }
-            } else if (requested_gear == CmdEnums::GEAR_NONE) {
-                last_requested_gear_ = CmdEnums::GEAR_NONE;
-            }
-            final_msg->gear = target_gear_;
+            // a mudança não é controlada à distância (o carro não tem tópico para isso)
+            final_msg->gear = CmdEnums::GEAR_NONE;
 
             int current_button = msg->turn_signal;
 
@@ -232,8 +208,7 @@ private:
             final_msg->brake_factor = 0.0f;
             final_msg->target_steering_angle = 0.0f;
             
-            target_gear_ = CmdEnums::GEAR_PARK;
-            final_msg->gear = target_gear_;
+            final_msg->gear = CmdEnums::GEAR_NONE;
             
             target_turn_signal_ = CmdEnums::TURN_OFF;
             final_msg->turn_signal = target_turn_signal_;

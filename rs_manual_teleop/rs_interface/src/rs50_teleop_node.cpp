@@ -41,10 +41,6 @@ private:
     const int BUTTON_TURN_SIGNAL_LEFT = 11; // L3
     const int BUTTON_HAZARD_SIGNAL = 27; // botão Enter
 
-    const int GEAR_REVERSE = 5; // patilha esquerda
-    const int GEAR_DRIVE = 4; // patilha direita
-    const int PARKING = 2; // círculo
-
     const int UPLINK_MODE = 0; // X, alterna vídeo / pointcloud
 
     const float MAX_STEERING_RAD = 0.5f; // ~28.6 graus
@@ -92,22 +88,6 @@ private:
         float steering_input = msg->axes[AXIS_STEERING];
         float target_steering_angle = steering_input * MAX_STEERING_RAD;
 
-        bool drive = msg->buttons[GEAR_DRIVE];
-        bool reverse = msg->buttons[GEAR_REVERSE];
-        bool park = msg->buttons[PARKING];
-
-        int new_gear = CmdEnums::GEAR_NONE;
-
-        if (park) {
-            new_gear = CmdEnums::GEAR_PARK;
-        }           
-        else if (drive) {
-            new_gear = CmdEnums::GEAR_DRIVE;
-        }
-        else if (reverse) {
-            new_gear = CmdEnums::GEAR_REVERSE;
-        }
-
         bool turn_right = msg->buttons[BUTTON_TURN_SIGNAL_RIGHT];
         bool turn_left = msg->buttons[BUTTON_TURN_SIGNAL_LEFT];
         bool hazard_signal = msg->buttons[BUTTON_HAZARD_SIGNAL];
@@ -137,7 +117,7 @@ private:
         teleop_msg->target_steering_angle = target_steering_angle;
         teleop_msg->engage_command = change_engage_state;
         teleop_msg->uplink_mode = uplink_mode;
-        teleop_msg->gear = new_gear;
+        teleop_msg->gear = CmdEnums::GEAR_NONE; // a mudança não é controlada à distância
         teleop_msg->turn_signal = turn_signal;
 
 

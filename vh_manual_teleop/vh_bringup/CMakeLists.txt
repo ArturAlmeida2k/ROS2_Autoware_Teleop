@@ -9,9 +9,7 @@ endif()
 
 # find dependencies
 find_package(ament_cmake REQUIRED)
-find_package(vh_network REQUIRED)
-find_package(vh_telemetry REQUIRED)
-find_package(vh_teleop_to_autoware REQUIRED)
+# só tem launch e config, os nós vêm do vh_network e do vh_teleop_to_vehicle
 
 
 install(DIRECTORY

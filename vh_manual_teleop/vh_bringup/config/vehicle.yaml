@@ -1,0 +1,14 @@
+# Câmaras do carro: 1=Front, 2=FL, 3=FR, 4=Rear, 5=RL, 6=RR
+# Ordem da GUI: frente, esquerda, trás, direita (igual ao carla.yaml)
+/**:
+  ros__parameters:
+    num_cameras: 1
+    bitrate: 8000
+    intra_refresh: true
+    framerate: 30
+    camera_topics:
+      - /camera_1/image_raw
+      - /camera_2/image_raw
+      - /camera_4/image_raw
+      - /camera_3/image_raw
+    pointcloud_topic: /perception/obstacle_segmentation/pointcloud
